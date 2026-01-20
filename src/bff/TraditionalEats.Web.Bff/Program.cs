@@ -10,11 +10,29 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add CORS for Blazor WebAssembly
+// Allow connections from localhost and any IP address (for mobile browser access)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:5300", "http://localhost:5301", "http://127.0.0.1:5300", "http://127.0.0.1:5301")
+        policy.WithOrigins(
+                "http://localhost:5300", 
+                "http://localhost:5301", 
+                "http://127.0.0.1:5300", 
+                "http://127.0.0.1:5301")
+              .SetIsOriginAllowed(origin =>
+              {
+                  // Allow any origin that matches the pattern (for IP access from mobile)
+                  // This allows http://192.168.x.x:5300, http://10.x.x.x:5300, etc.
+                  var uri = new Uri(origin);
+                  return uri.Scheme == "http" && 
+                         (uri.Host == "localhost" || 
+                          uri.Host == "127.0.0.1" || 
+                          uri.Host.StartsWith("192.168.") ||
+                          uri.Host.StartsWith("10.") ||
+                          uri.Host.StartsWith("172.")) &&
+                         (uri.Port == 5300 || uri.Port == 5301);
+              })
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();

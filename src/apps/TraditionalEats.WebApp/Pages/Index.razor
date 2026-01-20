@@ -55,11 +55,13 @@
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="flex-wrap: wrap; width: 100%;" Class="categories-stack">
                 @foreach (var category in displayedCategories)
                 {
-                    <RadzenCard Style="cursor: pointer;" Class="category-card" Click="@(() => NavigateToCategory(category))">
-                        <RadzenStack Gap="0.5rem" Style="align-items: center; text-align: center;">
-                            <RadzenIcon Icon="@category.Icon" Style="font-size: 48px; color: var(--rz-primary);" />
-                            <RadzenText TextStyle="TextStyle.Body1">@category.Name</RadzenText>
-                        </RadzenStack>
+                    <RadzenCard Style="cursor: pointer;" Class="category-card">
+                        <div @onclick="@(() => NavigateToCategory(category))" style="width: 100%; height: 100%;">
+                            <RadzenStack Gap="0.5rem" Style="align-items: center; text-align: center;">
+                                <RadzenIcon Icon="@category.Icon" Style="font-size: 48px; color: var(--rz-primary);" />
+                                <RadzenText TextStyle="TextStyle.Body1">@category.Name</RadzenText>
+                            </RadzenStack>
+                        </div>
                     </RadzenCard>
                 }
             </RadzenStack>

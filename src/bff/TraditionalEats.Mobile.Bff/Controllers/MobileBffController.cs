@@ -124,6 +124,53 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpGet("restaurants/{restaurantId}/menu")]
+    public async Task<IActionResult> GetRestaurantMenu(Guid restaurantId, [FromQuery] Guid? categoryId = null)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            var queryString = categoryId.HasValue ? $"?categoryId={categoryId.Value}" : "";
+            var response = await client.GetAsync($"/api/catalog/restaurants/{restaurantId}/menu-items{queryString}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching restaurant menu");
+            return StatusCode(500, new { error = "Failed to fetch restaurant menu" });
+        }
+    }
+
+    [HttpGet("categories")]
+    public async Task<IActionResult> GetCategories()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            var response = await client.GetAsync("/api/catalog/categories");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching categories");
+            return StatusCode(500, new { error = "Failed to fetch categories" });
+        }
+    }
+
     [HttpGet("health")]
     public IActionResult Health()
     {

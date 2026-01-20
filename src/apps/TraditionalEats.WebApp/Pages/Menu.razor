@@ -1,0 +1,186 @@
+@page "/restaurants/{restaurantId:guid}/menu"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Menu - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">Menu</RadzenText>
+    </RadzenStack>
+
+    @if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (menuItems.Any())
+    {
+        @if (categories.Any())
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap; margin-bottom: 1rem;">
+                <RadzenButton Text="All" 
+                              Variant="@(selectedCategoryId == null ? Variant.Filled : Variant.Flat)"
+                              Click="@(() => FilterByCategory(null))"
+                              Size="ButtonSize.Small" />
+                @foreach (var category in categories)
+                {
+                    <RadzenButton Text="@category.Name" 
+                                  Variant="@(selectedCategoryId == category.CategoryId ? Variant.Filled : Variant.Flat)"
+                                  Click="@(() => FilterByCategory(category.CategoryId))"
+                                  Size="ButtonSize.Small" />
+                }
+            </RadzenStack>
+        }
+
+        @foreach (var categoryGroup in menuItemsByCategory)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H3">@categoryGroup.Key</RadzenText>
+                    <RadzenStack Gap="1rem">
+                        @foreach (var item in categoryGroup)
+                        {
+                            <RadzenCard Style="cursor: pointer;" Click="@(() => ViewItemDetails(item))">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Start">
+                                    <RadzenIcon Icon="restaurant_menu" Style="font-size: 48px; color: var(--rz-primary);" />
+                                    <RadzenStack Gap="0.5rem" Style="flex: 1;">
+                                        <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: bold;">@item.Name</RadzenText>
+                                        @if (!string.IsNullOrEmpty(item.Description))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">@item.Description</RadzenText>
+                                        }
+                                        @if (item.DietaryTags.Any())
+                                        {
+                                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
+                                                @foreach (var tag in item.DietaryTags)
+                                                {
+                                                    <RadzenBadge Text="@tag" Size="BadgeSize.Small" Style="background-color: #e3f2fd; color: #1976d2;" />
+                                                }
+                                            </RadzenStack>
+                                        }
+                                        <RadzenText TextStyle="TextStyle.H4" Style="color: var(--rz-primary);">$@item.Price.ToString("F2")</RadzenText>
+                                    </RadzenStack>
+                                    @if (item.IsAvailable)
+                                    {
+                                        <RadzenButton Text="Add" Icon="add_shopping_cart" Click="@(() => AddToCart(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenBadge Text="Unavailable" Style="background-color: #ffebee; color: #c62828;" />
+                                    }
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+        }
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenText>No menu items found.</RadzenText>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter] public Guid RestaurantId { get; set; }
+
+    private bool loading = true;
+    private List<MenuItemDto> menuItems = new();
+    private List<CategoryDto> categories = new();
+    private Guid? selectedCategoryId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMenu();
+        await LoadCategories();
+    }
+
+    private async Task LoadMenu()
+    {
+        try
+        {
+            loading = true;
+            var queryString = selectedCategoryId.HasValue ? $"?categoryId={selectedCategoryId.Value}" : "";
+            var response = await Http.GetFromJsonAsync<List<MenuItemDto>>($"WebBff/restaurants/{RestaurantId}/menu{queryString}");
+            menuItems = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading menu: {ex.Message}");
+            menuItems = new();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadCategories()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<List<CategoryDto>>("WebBff/categories");
+            categories = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading categories: {ex.Message}");
+            categories = new();
+        }
+    }
+
+    private async Task FilterByCategory(Guid? categoryId)
+    {
+        selectedCategoryId = categoryId;
+        await LoadMenu();
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/restaurants");
+    }
+
+    private void ViewItemDetails(MenuItemDto item)
+    {
+        // TODO: Navigate to item details page
+    }
+
+    private void AddToCart(MenuItemDto item)
+    {
+        // TODO: Implement cart functionality
+        Console.WriteLine($"Adding {item.Name} to cart");
+    }
+
+    private IEnumerable<IGrouping<string, MenuItemDto>> menuItemsByCategory =>
+        menuItems
+            .GroupBy(m => m.CategoryName ?? "Other")
+            .OrderBy(g => g.Key);
+
+    public class MenuItemDto
+    {
+        public Guid MenuItemId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public Guid CategoryId { get; set; }
+        public string? CategoryName { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public decimal Price { get; set; }
+        public string? ImageUrl { get; set; }
+        public bool IsAvailable { get; set; }
+        public List<string> DietaryTags { get; set; } = new();
+    }
+
+    public class CategoryDto
+    {
+        public Guid CategoryId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+}

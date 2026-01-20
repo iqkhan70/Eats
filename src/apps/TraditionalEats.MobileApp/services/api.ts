@@ -1,14 +1,14 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import appConfig from '../config/app.config';
+import { APP_CONFIG } from '../config/app.config';
 
 class ApiClient {
   private client: AxiosInstance;
 
   constructor() {
     this.client = axios.create({
-      baseURL: appConfig.api.baseUrl,
-      timeout: appConfig.api.timeout,
+      baseURL: APP_CONFIG.API_BASE_URL,
+      timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -39,7 +39,7 @@ class ApiClient {
             code: error.code,
             baseURL: this.client.defaults.baseURL,
             url: error.config?.url,
-            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${appConfig.api.baseUrl}. For phone testing, update config/app.config.ts with your computer's IP address.`
+            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/app.config.ts with your computer's IP address.`
           });
         } else if (error.response) {
           console.error('❌ API Error:', {

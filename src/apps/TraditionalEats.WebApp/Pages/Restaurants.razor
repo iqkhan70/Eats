@@ -2,6 +2,7 @@
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
+@implements IDisposable
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 
@@ -64,12 +65,25 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadRestaurants();
+        NavigationManager.LocationChanged += OnLocationChanged;
     }
 
     protected override async Task OnParametersSetAsync()
     {
         // Reload when query parameters change
         await LoadRestaurants();
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        // Reload when navigation occurs (e.g., category click)
+        await LoadRestaurants();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 
     private async Task LoadRestaurants()
