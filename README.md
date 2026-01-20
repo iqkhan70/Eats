@@ -1,4 +1,4 @@
-# TraditionEats - Traditional Food Delivery Platform
+# TraditionalEats - Traditional Food Delivery Platform
 
 A robust, Uber Eats-style food delivery platform built with microservices architecture, designed for scale, reliability, and seamless UX across desktop and mobile.
 
@@ -41,20 +41,20 @@ A robust, Uber Eats-style food delivery platform built with microservices archit
 ## Project Structure
 
 ```
-TraditionEats/
+TraditionalEats/
 ├── src/
 │   ├── services/          # 12 microservices
 │   ├── bff/              # Backend-for-Frontend services
-│   │   ├── TraditionEats.Web.Bff/
-│   │   └── TraditionEats.Mobile.Bff/
+│   │   ├── TraditionalEats.Web.Bff/
+│   │   └── TraditionalEats.Mobile.Bff/
 │   ├── gateway/          # API Gateway (YARP)
-│   │   └── TraditionEats.ApiGateway/
+│   │   └── TraditionalEats.ApiGateway/
 │   ├── apps/             # Client applications
-│   │   ├── TraditionEats.WebApp/      # Blazor WebAssembly
-│   │   └── TraditionEats.MobileApp/    # React Native (Expo)
+│   │   ├── TraditionalEats.WebApp/      # Blazor WebAssembly
+│   │   └── TraditionalEats.MobileApp/    # React Native (Expo)
 │   └── shared/            # Shared libraries
-│       ├── TraditionEats.BuildingBlocks/
-│       └── TraditionEats.Contracts/
+│       ├── TraditionalEats.BuildingBlocks/
+│       └── TraditionalEats.Contracts/
 ├── deploy/               # Docker Compose configuration
 └── README.md
 ```
@@ -92,47 +92,47 @@ Run migrations for each service:
 
 ```bash
 # Identity Service
-cd src/services/TraditionEats.IdentityService
+cd src/services/TraditionalEats.IdentityService
 dotnet ef database update
 
 # Customer Service
-cd ../TraditionEats.CustomerService
+cd ../TraditionalEats.CustomerService
 dotnet ef database update
 
 # Order Service
-cd ../TraditionEats.OrderService
+cd ../TraditionalEats.OrderService
 dotnet ef database update
 
 # Catalog Service
-cd ../TraditionEats.CatalogService
+cd ../TraditionalEats.CatalogService
 dotnet ef database update
 
 # Payment Service
-cd ../TraditionEats.PaymentService
+cd ../TraditionalEats.PaymentService
 dotnet ef database update
 
 # Delivery Service
-cd ../TraditionEats.DeliveryService
+cd ../TraditionalEats.DeliveryService
 dotnet ef database update
 
 # Notification Service
-cd ../TraditionEats.NotificationService
+cd ../TraditionalEats.NotificationService
 dotnet ef database update
 
 # Restaurant Service
-cd ../TraditionEats.RestaurantService
+cd ../TraditionalEats.RestaurantService
 dotnet ef database update
 
 # Promotion Service
-cd ../TraditionEats.PromotionService
+cd ../TraditionalEats.PromotionService
 dotnet ef database update
 
 # Review Service
-cd ../TraditionEats.ReviewService
+cd ../TraditionalEats.ReviewService
 dotnet ef database update
 
 # Support Service
-cd ../TraditionEats.SupportService
+cd ../TraditionalEats.SupportService
 dotnet ef database update
 ```
 
@@ -144,11 +144,11 @@ Each service can be run from its directory:
 
 ```bash
 # Terminal 1 - Identity Service
-cd src/services/TraditionEats.IdentityService
+cd src/services/TraditionalEats.IdentityService
 dotnet run
 
 # Terminal 2 - Customer Service
-cd src/services/TraditionEats.CustomerService
+cd src/services/TraditionalEats.CustomerService
 dotnet run
 
 # ... and so on for each service
@@ -162,18 +162,18 @@ See `deploy/docker-compose.yml` for full orchestration.
 
 ```bash
 # Terminal - Web BFF
-cd src/bff/TraditionEats.Web.Bff
+cd src/bff/TraditionalEats.Web.Bff
 dotnet run
 
 # Terminal - Mobile BFF
-cd src/bff/TraditionEats.Mobile.Bff
+cd src/bff/TraditionalEats.Mobile.Bff
 dotnet run
 ```
 
 #### 5. Run API Gateway
 
 ```bash
-cd src/gateway/TraditionEats.ApiGateway
+cd src/gateway/TraditionalEats.ApiGateway
 dotnet run
 ```
 
@@ -182,7 +182,7 @@ The API Gateway will be available at `http://localhost:5200`
 #### 6. Run Web Application (Blazor)
 
 ```bash
-cd src/apps/TraditionEats.WebApp
+cd src/apps/TraditionalEats.WebApp
 dotnet run
 ```
 
@@ -191,7 +191,7 @@ The web app will be available at `http://localhost:5000` (or the configured port
 #### 7. Run Mobile Application (React Native)
 
 ```bash
-cd src/apps/TraditionEats.MobileApp
+cd src/apps/TraditionalEats.MobileApp
 npm install
 npm start
 ```
@@ -244,7 +244,7 @@ All services are accessible through the API Gateway at `http://localhost:5200`:
 
 ### Shared Configuration
 
-Common configuration is stored in `src/shared/TraditionEats.BuildingBlocks/Configuration/appsettings.Shared.json` and loaded by all services. Service-specific overrides are in each service's `appsettings.Development.json`.
+Common configuration is stored in `src/shared/TraditionalEats.BuildingBlocks/Configuration/appsettings.Shared.json` and loaded by all services. Service-specific overrides are in each service's `appsettings.Development.json`.
 
 ### Environment Variables
 

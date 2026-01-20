@@ -1,0 +1,50 @@
+/* Main layout styles */
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .desktop-nav {
+        display: none !important;
+    }
+    
+    .mobile-menu-btn {
+        display: block !important;
+    }
+    
+    /* Fix layout on mobile */
+    .rz-layout {
+        width: 100% !important;
+        max-width: 100vw !important;
+    }
+    
+    .rz-body {
+        width: 100% !important;
+        max-width: 100vw !important;
+        padding: 0 !important;
+    }
+    
+    .rz-content-container {
+        width: 100% !important;
+        max-width: 100vw !important;
+        padding: 0 !important;
+    }
+    
+    /* Fix header padding */
+    .rz-header {
+        padding: 0.5rem 0.75rem !important;
+    }
+    
+    .rz-header .rz-stack {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+@media (min-width: 769px) {
+    .mobile-menu-btn {
+        display: none !important;
+    }
+    
+    .desktop-nav {
+        display: flex !important;
+    }
+}

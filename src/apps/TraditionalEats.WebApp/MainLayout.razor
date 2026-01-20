@@ -1,0 +1,47 @@
+@inherits LayoutComponentBase
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+
+<RadzenLayout>
+    <RadzenHeader>
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Gap="0px" Style="width: 100%; padding: 0.75rem 1rem;">
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+                <RadzenIcon Icon="restaurant_menu" Style="font-size: 24px;" />
+                <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">TraditionalEats</RadzenText>
+            </RadzenStack>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Class="desktop-nav">
+                <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+            </RadzenStack>
+            <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small" Class="mobile-menu-btn" Style="display: none;" />
+        </RadzenStack>
+    </RadzenHeader>
+    <RadzenBody>
+        <RadzenContentContainer Name="main" Style="width: 100%; max-width: 100vw; padding: 0;">
+            @Body
+        </RadzenContentContainer>
+    </RadzenBody>
+    <RadzenSidebar @bind-Expanded="@sidebarExpanded">
+        <RadzenPanelMenu>
+            <RadzenPanelMenuItem Text="Home" Icon="home" Path="/" />
+            <RadzenPanelMenuItem Text="Restaurants" Icon="restaurant" Path="/restaurants" />
+            <RadzenPanelMenuItem Text="My Orders" Icon="receipt" Path="/orders" />
+            <RadzenPanelMenuItem Text="Profile" Icon="account_circle" Path="/profile" />
+        </RadzenPanelMenu>
+    </RadzenSidebar>
+</RadzenLayout>
+
+@code {
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+    
+    private bool sidebarExpanded = false;
+
+    private void ToggleSidebar()
+    {
+        sidebarExpanded = !sidebarExpanded;
+    }
+}

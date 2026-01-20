@@ -1,0 +1,34 @@
+{
+    "ConnectionStrings": {
+        "MySQL": "server=localhost;port=3306;user=root;password=YOUR_PASSWORD_HERE",
+        "Redis": "localhost:6379"
+    },
+    "Redis": {
+        "ConnectionString": "localhost:6379"
+    },
+    "Jwt": {
+        "Key": "YOUR_JWT_SECRET_KEY_HERE_AT_LEAST_32_CHARACTERS",
+        "Secret": "YOUR_JWT_SECRET_KEY_HERE_AT_LEAST_32_CHARACTERS",
+        "Issuer": "TraditionalEats",
+        "Audience": "TraditionalEats"
+    },
+    "RabbitMQ": {
+        "HostName": "localhost",
+        "Port": "5672",
+        "UserName": "guest",
+        "Password": "guest"
+    },
+    "PiiEncryption": {
+        "Key": "YOUR_PII_ENCRYPTION_KEY_HERE_32_CHARACTERS"
+    },
+    "Encryption": {
+        "MasterKey": "YOUR_MASTER_ENCRYPTION_KEY_HERE_32_CHARACTERS"
+    },
+    "Logging": {
+        "LogLevel": {
+            "Default": "Information",
+            "Microsoft.AspNetCore": "Warning"
+        }
+    },
+    "AllowedHosts": "*"
+}

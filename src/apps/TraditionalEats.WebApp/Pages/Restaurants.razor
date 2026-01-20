@@ -1,0 +1,118 @@
+@page "/restaurants"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Restaurants - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+    <RadzenText TextStyle="TextStyle.H1">Restaurants</RadzenText>
+    
+    @if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (restaurants.Any())
+    {
+        <RadzenDataGrid Data="@restaurants" TItem="RestaurantDto" AllowPaging="true" PageSize="12" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Advanced" Class="restaurants-grid">
+            <Columns>
+                <RadzenDataGridColumn TItem="RestaurantDto" Property="Name" Title="Restaurant" Width="200px">
+                    <Template Context="restaurant">
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+                            <RadzenIcon Icon="restaurant" Style="font-size: 40px; color: var(--rz-primary);" />
+                            <RadzenStack Gap="0.25rem">
+                                <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: bold;">@restaurant.Name</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">@restaurant.CuisineType</RadzenText>
+                            </RadzenStack>
+                        </RadzenStack>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="RestaurantDto" Property="Address" Title="Address" />
+                <RadzenDataGridColumn TItem="RestaurantDto" Property="Rating" Title="Rating" Width="100px">
+                    <Template Context="restaurant">
+                        @if (restaurant.Rating.HasValue)
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                <RadzenIcon Icon="star" Style="color: gold;" />
+                                <RadzenText>@restaurant.Rating.Value.ToString("F1")</RadzenText>
+                            </RadzenStack>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="RestaurantDto" Title="Actions" Sortable="false" Filterable="false" Width="150px">
+                    <Template Context="restaurant">
+                        <RadzenButton Text="View Menu" Icon="menu" Click="@(() => ViewMenu(restaurant.RestaurantId))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenText>No restaurants found.</RadzenText>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private bool loading = true;
+    private List<RestaurantDto> restaurants = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRestaurants();
+    }
+
+    private Task LoadRestaurants()
+    {
+        try
+        {
+            loading = true;
+            // TODO: Replace with actual API call
+            // var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("restaurant");
+            // restaurants = response ?? new();
+            
+            // Placeholder data
+            restaurants = new List<RestaurantDto>
+            {
+                new RestaurantDto
+                {
+                    RestaurantId = Guid.NewGuid(),
+                    Name = "Traditional Kitchen",
+                    CuisineType = "Traditional",
+                    Address = "123 Main St",
+                    Rating = 4.5m,
+                    ReviewCount = 120
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading restaurants: {ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    private void ViewMenu(Guid restaurantId)
+    {
+        NavigationManager.NavigateTo($"/restaurants/{restaurantId}/menu");
+    }
+
+    public class RestaurantDto
+    {
+        public Guid RestaurantId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? CuisineType { get; set; }
+        public string Address { get; set; } = string.Empty;
+        public decimal? Rating { get; set; }
+        public int? ReviewCount { get; set; }
+    }
+}

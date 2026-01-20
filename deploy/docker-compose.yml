@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   mysql:
@@ -6,7 +6,7 @@ services:
     container_name: tradition-eats-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: tradition_eats
+      MYSQL_DATABASE: traditional_eats
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
@@ -58,10 +58,10 @@ services:
   # identity-service:
   #   build:
   #     context: ..
-  #     dockerfile: src/services/TraditionEats.IdentityService/Dockerfile
+  #     dockerfile: src/services/TraditionalEats.IdentityService/Dockerfile
   #   environment:
   #     ASPNETCORE_ENVIRONMENT: "Production"
-  #     ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=tradition_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD:-rootpassword};"
+    #     ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=traditional_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD:-rootpassword};"
   #     Redis__ConnectionString: "redis:6379"
   #     RabbitMQ__HostName: "rabbitmq"
   #   depends_on:

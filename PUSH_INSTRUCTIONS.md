@@ -59,4 +59,4 @@ You can verify your commit was created:
 git log --oneline -1
 ```
 
-This should show: `6f39465 Initial commit: TraditionEats microservices platform`
+This should show: `6f39465 Initial commit: TraditionalEats microservices platform`

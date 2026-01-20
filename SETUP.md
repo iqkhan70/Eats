@@ -5,7 +5,7 @@
 **Important**: The following files contain sensitive information and are NOT committed to the repository:
 
 - All `appsettings.Development.json` files in each service
-- `src/shared/TraditionEats.BuildingBlocks/Configuration/appsettings.Shared.json`
+- `src/shared/TraditionalEats.BuildingBlocks/Configuration/appsettings.Shared.json`
 
 ## Initial Setup
 
@@ -13,26 +13,26 @@
 
 ```bash
 # For each service, copy the example file:
-cp src/services/TraditionEats.CatalogService/appsettings.Development.json.example \
-   src/services/TraditionEats.CatalogService/appsettings.Development.json
+cp src/services/TraditionalEats.CatalogService/appsettings.Development.json.example \
+   src/services/TraditionalEats.CatalogService/appsettings.Development.json
 
 # Repeat for all services:
-# - TraditionEats.IdentityService
-# - TraditionEats.CustomerService
-# - TraditionEats.OrderService
-# - TraditionEats.CatalogService
-# - TraditionEats.PaymentService
-# - TraditionEats.DeliveryService
-# - TraditionEats.NotificationService
-# - TraditionEats.RestaurantService
-# - TraditionEats.PromotionService
-# - TraditionEats.ReviewService
-# - TraditionEats.SupportService
-# - TraditionEats.AIService
+# - TraditionalEats.IdentityService
+# - TraditionalEats.CustomerService
+# - TraditionalEats.OrderService
+# - TraditionalEats.CatalogService
+# - TraditionalEats.PaymentService
+# - TraditionalEats.DeliveryService
+# - TraditionalEats.NotificationService
+# - TraditionalEats.RestaurantService
+# - TraditionalEats.PromotionService
+# - TraditionalEats.ReviewService
+# - TraditionalEats.SupportService
+# - TraditionalEats.AIService
 
 # For shared configuration:
-cp src/shared/TraditionEats.BuildingBlocks/Configuration/appsettings.Shared.json.example \
-   src/shared/TraditionEats.BuildingBlocks/Configuration/appsettings.Shared.json
+cp src/shared/TraditionalEats.BuildingBlocks/Configuration/appsettings.Shared.json.example \
+   src/shared/TraditionalEats.BuildingBlocks/Configuration/appsettings.Shared.json
 ```
 
 2. **Update the configuration files** with your actual:

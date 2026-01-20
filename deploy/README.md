@@ -59,8 +59,8 @@ Set environment variables for each service:
 ```yaml
 environment:
   ASPNETCORE_ENVIRONMENT: "Production"
-  ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=tradition_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
-  ConnectionStrings__CustomerDb: "server=mysql;port=3306;database=tradition_eats_customer;user=root;password=${MYSQL_ROOT_PASSWORD};"
+  ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=traditional_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
+  ConnectionStrings__CustomerDb: "server=mysql;port=3306;database=traditional_eats_customer;user=root;password=${MYSQL_ROOT_PASSWORD};"
   # ... etc for each service
   Redis__ConnectionString: "redis:6379"
   RabbitMQ__HostName: "rabbitmq"
@@ -72,14 +72,14 @@ environment:
 ```json
 {
   "ConnectionStrings": {
-    "IdentityDb": "server=localhost;port=3306;database=tradition_eats_identity;user=root;password=UthmanBasima70"
+    "IdentityDb": "server=localhost;port=3306;database=traditional_eats_identity;user=root;password=UthmanBasima70"
   }
 }
 ```
 
 ### Docker/Production
 ```bash
-ConnectionStrings__IdentityDb="server=mysql;port=3306;database=tradition_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
+ConnectionStrings__IdentityDb="server=mysql;port=3306;database=traditional_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
 ```
 
 ## Port Configuration

@@ -1,0 +1,12 @@
+{
+  "ConnectionStrings": {
+    "SupportDb": "server=localhost;port=3306;database=traditional_eats_support;user=root;password=YOUR_PASSWORD_HERE"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://localhost:5010"
+      }
+    }
+  }
+}

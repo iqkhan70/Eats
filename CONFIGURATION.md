@@ -6,7 +6,7 @@ To avoid duplicating configuration across all services, we use a **shared config
 
 ## How It Works
 
-1. **Shared Configuration**: `src/shared/TraditionEats.BuildingBlocks/Configuration/appsettings.Shared.json`
+1. **Shared Configuration**: `src/shared/TraditionalEats.BuildingBlocks/Configuration/appsettings.Shared.json`
    - Contains all common settings: Redis, JWT, RabbitMQ, Encryption, Logging
    - Single source of truth for infrastructure settings
    - Uses `localhost` for local development
@@ -76,7 +76,7 @@ To avoid duplicating configuration across all services, we use a **shared config
 ```json
 {
   "ConnectionStrings": {
-    "IdentityDb": "server=localhost;port=3306;database=tradition_eats_identity;user=root;password=UthmanBasima70"
+    "IdentityDb": "server=localhost;port=3306;database=traditional_eats_identity;user=root;password=UthmanBasima70"
   }
 }
 ```
@@ -84,7 +84,7 @@ To avoid duplicating configuration across all services, we use a **shared config
 ### Docker Environment Variable Override
 ```yaml
 environment:
-  ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=tradition_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
+  ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=traditional_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
 ```
 
 ## Updating Shared Settings
@@ -112,7 +112,7 @@ cd deploy
 docker-compose up -d mysql redis rabbitmq
 
 # Run services locally (they connect to localhost)
-cd src/services/TraditionEats.IdentityService
+cd src/services/TraditionalEats.IdentityService
 dotnet run
 ```
 
@@ -120,7 +120,7 @@ dotnet run
 ```bash
 # Set environment variables
 export ASPNETCORE_ENVIRONMENT=Production
-export ConnectionStrings__IdentityDb="server=mysql;port=3306;database=tradition_eats_identity;user=root;password=rootpassword;"
+export ConnectionStrings__IdentityDb="server=mysql;port=3306;database=traditional_eats_identity;user=root;password=rootpassword;"
 
 # Or use docker-compose with environment variables
 docker-compose up

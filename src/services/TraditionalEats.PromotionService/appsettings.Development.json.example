@@ -1,0 +1,12 @@
+{
+  "ConnectionStrings": {
+    "PromotionDb": "server=localhost;port=3306;database=traditional_eats_promotion;user=root;password=YOUR_PASSWORD_HERE"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://localhost:5008"
+      }
+    }
+  }
+}

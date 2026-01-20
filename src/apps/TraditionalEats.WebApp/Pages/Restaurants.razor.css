@@ -1,0 +1,44 @@
+/* Mobile responsive styles for Restaurants page */
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+    
+    .restaurants-grid {
+        font-size: 0.875rem;
+        width: 100% !important;
+        max-width: 100vw !important;
+    }
+    
+    .restaurants-grid .rz-datatable {
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: auto;
+        display: block;
+    }
+    
+    .restaurants-grid .rz-datatable-wrapper {
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: auto;
+    }
+    
+    /* Make columns more mobile-friendly */
+    .restaurants-grid .rz-datatable-col {
+        min-width: 120px;
+    }
+    
+    /* Fix text sizes */
+    .page-container .rz-text {
+        font-size: 0.875rem !important;
+    }
+    
+    .page-container .rz-text[style*="H1"] {
+        font-size: 1.5rem !important;
+    }
+}

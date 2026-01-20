@@ -1,0 +1,16 @@
+{
+  "ConnectionStrings": {
+    "PaymentDb": "server=localhost;port=3306;database=traditional_eats_payment;user=root;password=YOUR_PASSWORD_HERE"
+  },
+  "Stripe": {
+    "SecretKey": "sk_test_YOUR_STRIPE_SECRET_KEY_HERE",
+    "PublishableKey": "pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://localhost:5004"
+      }
+    }
+  }
+}
