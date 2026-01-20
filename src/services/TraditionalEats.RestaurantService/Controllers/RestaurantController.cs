@@ -56,6 +56,8 @@ public class RestaurantController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetRestaurants(
+        [FromQuery] string? location,
+        [FromQuery] string? cuisineType,
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
         [FromQuery] int skip = 0,
@@ -63,7 +65,7 @@ public class RestaurantController : ControllerBase
     {
         try
         {
-            var restaurants = await _restaurantService.GetRestaurantsAsync(latitude, longitude, skip, take);
+            var restaurants = await _restaurantService.GetRestaurantsAsync(location, cuisineType, latitude, longitude, skip, take);
             return Ok(restaurants);
         }
         catch (Exception ex)
@@ -178,6 +180,21 @@ public class RestaurantController : ControllerBase
         {
             _logger.LogError(ex, "Failed to check if restaurant is open");
             return StatusCode(500, new { message = "Failed to check if restaurant is open" });
+        }
+    }
+
+    [HttpGet("search-suggestions")]
+    public async Task<IActionResult> GetSearchSuggestions([FromQuery] string query, [FromQuery] int maxResults = 10)
+    {
+        try
+        {
+            var suggestions = await _restaurantService.GetSearchSuggestionsAsync(query, maxResults);
+            return Ok(suggestions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get search suggestions");
+            return StatusCode(500, new { message = "Failed to get search suggestions" });
         }
     }
 }

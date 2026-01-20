@@ -1,17 +1,14 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:5102/api' 
-  : 'https://api.traditionaleats.com/api';
+import appConfig from '../config/app.config';
 
 class ApiClient {
   private client: AxiosInstance;
 
   constructor() {
     this.client = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 10000,
+      baseURL: appConfig.api.baseUrl,
+      timeout: appConfig.api.timeout,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -35,6 +32,31 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
+        // Log detailed error information
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+          console.error('❌ Connection Error:', {
+            message: error.message,
+            code: error.code,
+            baseURL: this.client.defaults.baseURL,
+            url: error.config?.url,
+            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${appConfig.api.baseUrl}. For phone testing, update config/app.config.ts with your computer's IP address.`
+          });
+        } else if (error.response) {
+          console.error('❌ API Error:', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+            url: error.config?.url
+          });
+        } else if (error.request) {
+          console.error('❌ Network Error:', {
+            message: error.message,
+            baseURL: this.client.defaults.baseURL,
+            url: error.config?.url,
+            hint: 'No response received. Check network connection and BFF status.'
+          });
+        }
+
         if (error.response?.status === 401) {
           // Handle unauthorized - clear token and redirect to login
           await AsyncStorage.removeItem('auth_token');

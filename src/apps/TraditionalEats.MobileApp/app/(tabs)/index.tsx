@@ -1,14 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { api } from '../../services/api';
 
 export default function HomeScreen() {
   const router = useRouter();
   const searchInputRef = useRef<TextInput>(null);
   const [searchLocation, setSearchLocation] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const initialCategoryCount = 6;
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Focus the search input when component mounts
@@ -17,6 +22,68 @@ export default function HomeScreen() {
     }, 100);
     return () => clearTimeout(timer);
   }, []);
+
+  const loadSuggestions = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce API call
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const response = await api.get<string[]>('/MobileBff/search-suggestions', {
+          params: { query, maxResults: 10 },
+        });
+        setSuggestions(response.data);
+        setShowSuggestions(response.data.length > 0);
+      } catch (error: any) {
+        console.error('Error loading suggestions:', error);
+        if (error.response) {
+          // Server responded with error status
+          console.error('Response error:', error.response.status, error.response.data);
+        } else if (error.request) {
+          // Request was made but no response received
+          console.error('Network error - no response:', error.message);
+          console.error('Request URL:', error.config?.url);
+          console.error('Base URL:', error.config?.baseURL);
+        } else {
+          // Something else happened
+          console.error('Error setting up request:', error.message);
+        }
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSearchChange = (text: string) => {
+    setSearchLocation(text);
+    loadSuggestions(text);
+  };
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    // Cancel any pending blur timeout
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+    // Hide suggestions immediately
+    setShowSuggestions(false);
+    setSuggestions([]);
+    // Set the search location
+    setSearchLocation(suggestion);
+    // Blur the input to dismiss keyboard
+    searchInputRef.current?.blur();
+    // Automatically navigate to restaurants with the selected location
+    router.push(`/restaurants?location=${encodeURIComponent(suggestion)}`);
+  };
 
   const categories = [
     { id: 1, name: 'Traditional', icon: 'restaurant' },
@@ -36,28 +103,64 @@ export default function HomeScreen() {
     : categories.slice(0, initialCategoryCount);
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="always">
+        <View style={styles.header}>
         <Text style={styles.title}>Welcome to TraditionalEats</Text>
         <Text style={styles.subtitle}>Discover authentic traditional food</Text>
       </View>
 
-      <View style={styles.searchContainer}>
-        <Ionicons name="location" size={20} color="#666" style={styles.searchIcon} />
-        <TextInput
-          ref={searchInputRef}
-          style={styles.searchInput}
-          placeholder="Enter your location"
-          value={searchLocation}
-          onChangeText={setSearchLocation}
-          autoFocus={true}
-        />
-        <TouchableOpacity 
-          style={styles.searchButton}
-          onPress={() => router.push(`/restaurants?location=${encodeURIComponent(searchLocation)}`)}
-        >
-          <Ionicons name="search" size={20} color="#fff" />
-        </TouchableOpacity>
+      <View style={styles.searchWrapper}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="location" size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Enter your location"
+            value={searchLocation}
+            onChangeText={handleSearchChange}
+            onFocus={() => {
+              if (suggestions.length > 0) {
+                setShowSuggestions(true);
+              }
+            }}
+            onBlur={() => {
+              // Don't hide suggestions on blur - let user tap suggestion or outside
+              // This prevents the double-tap issue on physical devices
+            }}
+            autoFocus={true}
+          />
+          <TouchableOpacity 
+            style={styles.searchButton}
+            onPress={() => {
+              setShowSuggestions(false);
+              router.push(`/restaurants?location=${encodeURIComponent(searchLocation)}`);
+            }}
+          >
+            <Ionicons name="search" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        {showSuggestions && suggestions.length > 0 && (
+          <View style={styles.suggestionsContainer}>
+            {suggestions.map((item, index) => (
+              <TouchableOpacity
+                key={`${item}-${index}`}
+                style={styles.suggestionItem}
+                onPress={() => handleSuggestionSelect(item)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={16}
+                  color="#666"
+                  style={styles.suggestionIcon}
+                />
+                <Text style={styles.suggestionText}>{item}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
       </View>
 
       <View style={styles.section}>
@@ -112,7 +215,8 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={20} color="#666" />
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -120,6 +224,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     padding: 20,
@@ -137,15 +244,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  searchWrapper: {
+    margin: 16,
+    position: 'relative',
+    zIndex: 10,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
     paddingHorizontal: 12,
     backgroundColor: '#fff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    maxHeight: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  suggestionIcon: {
+    marginRight: 8,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
   },
   searchIcon: {
     marginRight: 8,

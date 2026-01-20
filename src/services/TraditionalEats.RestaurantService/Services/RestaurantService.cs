@@ -9,13 +9,14 @@ public interface IRestaurantService
 {
     Task<Guid> CreateRestaurantAsync(Guid ownerId, CreateRestaurantDto dto);
     Task<RestaurantDto?> GetRestaurantAsync(Guid restaurantId);
-    Task<List<RestaurantDto>> GetRestaurantsAsync(double? latitude, double? longitude, int skip = 0, int take = 20);
+    Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, int skip = 0, int take = 20);
     Task<bool> UpdateRestaurantAsync(Guid restaurantId, Guid ownerId, UpdateRestaurantDto dto);
     Task<Guid> AddDeliveryZoneAsync(Guid restaurantId, Guid ownerId, CreateDeliveryZoneDto dto);
     Task<List<DeliveryZoneDto>> GetDeliveryZonesAsync(Guid restaurantId);
     Task<bool> SetRestaurantHoursAsync(Guid restaurantId, Guid ownerId, List<RestaurantHoursDto> hours);
     Task<List<RestaurantHoursDto>> GetRestaurantHoursAsync(Guid restaurantId);
     Task<bool> IsRestaurantOpenAsync(Guid restaurantId);
+    Task<List<string>> GetSearchSuggestionsAsync(string query, int maxResults = 10);
 }
 
 public class RestaurantService : IRestaurantService
@@ -93,7 +94,7 @@ public class RestaurantService : IRestaurantService
         return dto;
     }
 
-    public async Task<List<RestaurantDto>> GetRestaurantsAsync(double? latitude, double? longitude, int skip = 0, int take = 20)
+    public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, int skip = 0, int take = 20)
     {
         var query = _context.Restaurants
             .Where(r => r.IsActive)
@@ -101,11 +102,28 @@ public class RestaurantService : IRestaurantService
             .Include(r => r.Hours)
             .AsQueryable();
 
+        // Filter by location (address contains location string)
+        if (!string.IsNullOrWhiteSpace(location))
+        {
+            query = query.Where(r => r.Address.Contains(location) || r.Name.Contains(location));
+        }
+
+        // Filter by cuisine type
+        if (!string.IsNullOrWhiteSpace(cuisineType))
+        {
+            query = query.Where(r => r.CuisineType != null && r.CuisineType.Contains(cuisineType));
+        }
+
         // If coordinates provided, order by distance (simple approximation)
         if (latitude.HasValue && longitude.HasValue)
         {
             query = query.OrderBy(r => 
                 Math.Abs(r.Latitude - latitude.Value) + Math.Abs(r.Longitude - longitude.Value));
+        }
+        else
+        {
+            // Default ordering by name
+            query = query.OrderBy(r => r.Name);
         }
 
         var restaurants = await query
@@ -273,6 +291,48 @@ public class RestaurantService : IRestaurantService
         }
 
         return currentTime >= hours.OpenTime && currentTime <= hours.CloseTime;
+    }
+
+    public async Task<List<string>> GetSearchSuggestionsAsync(string query, int maxResults = 10)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return new List<string>();
+        }
+
+        var searchTerm = query.ToLower().Trim();
+
+        // Get unique addresses and restaurant names that match the query
+        var addresses = await _context.Restaurants
+            .Where(r => r.IsActive && r.Address.ToLower().Contains(searchTerm))
+            .Select(r => r.Address)
+            .Distinct()
+            .Take(maxResults)
+            .ToListAsync();
+
+        var restaurantNames = await _context.Restaurants
+            .Where(r => r.IsActive && r.Name.ToLower().Contains(searchTerm))
+            .Select(r => r.Name)
+            .Distinct()
+            .Take(maxResults)
+            .ToListAsync();
+
+        // Combine and deduplicate, prioritizing addresses
+        var suggestions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        foreach (var address in addresses)
+        {
+            if (suggestions.Count >= maxResults) break;
+            suggestions.Add(address);
+        }
+
+        foreach (var name in restaurantNames)
+        {
+            if (suggestions.Count >= maxResults) break;
+            suggestions.Add(name);
+        }
+
+        return suggestions.Take(maxResults).ToList();
     }
 
     private RestaurantDto MapToDto(Restaurant restaurant)

@@ -70,11 +70,14 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created
+// Ensure database is created and seed data
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RestaurantDbContext>();
     db.Database.EnsureCreated();
+    
+    // Seed initial data
+    await SeedData.SeedAsync(db);
 }
 
 app.Run();

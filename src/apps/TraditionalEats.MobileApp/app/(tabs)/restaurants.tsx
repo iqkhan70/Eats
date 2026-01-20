@@ -2,14 +2,15 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState, useEffect } from 'react';
+import { api } from '../../services/api';
 
 interface Restaurant {
-  id: string;
+  restaurantId: string;
   name: string;
-  cuisineType: string;
+  cuisineType?: string;
   address: string;
-  rating: number;
-  reviewCount: number;
+  rating?: number;
+  reviewCount?: number;
   imageUrl?: string;
 }
 
@@ -21,35 +22,34 @@ export default function RestaurantsScreen() {
 
   useEffect(() => {
     loadRestaurants();
-  }, []);
+  }, [params.location, params.category]);
 
   const loadRestaurants = async () => {
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.get('/restaurant', { params });
-      // setRestaurants(response.data);
+      setLoading(true);
       
-      // Placeholder data
-      setRestaurants([
-        {
-          id: '1',
-          name: 'Traditional Kitchen',
-          cuisineType: 'Traditional',
-          address: '123 Main St',
-          rating: 4.5,
-          reviewCount: 120,
-        },
-        {
-          id: '2',
-          name: 'Heritage Bistro',
-          cuisineType: 'Traditional',
-          address: '456 Oak Ave',
-          rating: 4.8,
-          reviewCount: 89,
-        },
-      ]);
+      // Build query params
+      const queryParams: any = {};
+      if (params.location) queryParams.location = params.location;
+      if (params.category) queryParams.cuisineType = params.category;
+      
+      const response = await api.get<Restaurant[]>('/MobileBff/restaurants', { params: queryParams });
+      
+      // Map backend DTO to frontend format
+      const mappedRestaurants = response.data.map((r: any) => ({
+        restaurantId: r.restaurantId || r.id,
+        name: r.name,
+        cuisineType: r.cuisineType,
+        address: r.address,
+        rating: r.rating,
+        reviewCount: r.reviewCount,
+        imageUrl: r.imageUrl,
+      }));
+      
+      setRestaurants(mappedRestaurants);
     } catch (error) {
       console.error('Error loading restaurants:', error);
+      setRestaurants([]); // Set to empty on error
     } finally {
       setLoading(false);
     }
@@ -58,7 +58,7 @@ export default function RestaurantsScreen() {
   const renderRestaurant = ({ item }: { item: Restaurant }) => (
     <TouchableOpacity
       style={styles.restaurantCard}
-      onPress={() => router.push(`/restaurants/${item.id}/menu`)}
+      onPress={() => router.push(`/restaurants/${item.restaurantId}/menu`)}
     >
       {item.imageUrl ? (
         <Image source={{ uri: item.imageUrl }} style={styles.restaurantImage} />
@@ -94,7 +94,7 @@ export default function RestaurantsScreen() {
       <FlatList
         data={restaurants}
         renderItem={renderRestaurant}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.restaurantId}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.centerContainer}>
