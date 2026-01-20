@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: tradition-eats-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: tradition_eats
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradition-eats-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tradition-eats-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradition-eats-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: tradition-eats-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradition-eats-network
+
+  # Example: IdentityService in Docker
+  # Uncomment and configure as needed for containerized services
+  # identity-service:
+  #   build:
+  #     context: ..
+  #     dockerfile: src/services/TraditionEats.IdentityService/Dockerfile
+  #   environment:
+  #     ASPNETCORE_ENVIRONMENT: "Production"
+  #     ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=tradition_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD:-rootpassword};"
+  #     Redis__ConnectionString: "redis:6379"
+  #     RabbitMQ__HostName: "rabbitmq"
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   networks:
+  #     - tradition-eats-network
+
+networks:
+  tradition-eats-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:

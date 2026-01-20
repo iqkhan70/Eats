@@ -1,0 +1,9 @@
+{
+  "ApiBaseUrl": "http://localhost:5101/api/",
+  "Logging": {
+    "LogLevel": {
+      "Default": "Debug",
+      "Microsoft.AspNetCore": "Information"
+    }
+  }
+}

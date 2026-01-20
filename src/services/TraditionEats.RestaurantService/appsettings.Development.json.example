@@ -1,0 +1,12 @@
+{
+  "ConnectionStrings": {
+    "RestaurantDb": "server=localhost;port=3306;database=tradition_eats_restaurant;user=root;password=YOUR_PASSWORD_HERE"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://localhost:5007"
+      }
+    }
+  }
+}

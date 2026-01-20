@@ -1,0 +1,23 @@
+{
+  "Services": {
+    "IdentityService": "http://localhost:5000",
+    "CustomerService": "http://localhost:5001",
+    "OrderService": "http://localhost:5002",
+    "CatalogService": "http://localhost:5003",
+    "PaymentService": "http://localhost:5004",
+    "DeliveryService": "http://localhost:5005",
+    "NotificationService": "http://localhost:5006",
+    "RestaurantService": "http://localhost:5007",
+    "PromotionService": "http://localhost:5008",
+    "ReviewService": "http://localhost:5009",
+    "SupportService": "http://localhost:5010",
+    "AIService": "http://localhost:5011"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://localhost:5102"
+      }
+    }
+  }
+}

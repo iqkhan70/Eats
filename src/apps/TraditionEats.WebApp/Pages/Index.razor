@@ -1,0 +1,76 @@
+@page "/"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+
+<PageTitle>TraditionEats - Traditional Food Delivery</PageTitle>
+
+<RadzenStack Gap="2rem" Style="padding: 2rem;">
+    <RadzenText TextStyle="TextStyle.H1">Welcome to TraditionEats</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body1">
+        Discover authentic traditional food from local restaurants, delivered to your door.
+    </RadzenText>
+    
+    <RadzenCard Style="margin-top: 2rem;">
+        <RadzenStack Gap="1rem">
+            <RadzenText TextStyle="TextStyle.H3">Find Restaurants Near You</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.End">
+                <RadzenFormField Text="Location" class="w-100" Style="flex: 1;">
+                    <RadzenTextBox @bind-Value="@searchLocation" Placeholder="Enter your address or location" />
+                </RadzenFormField>
+                <RadzenButton Text="Search" Icon="search" Click="@SearchRestaurants" Variant="Variant.Flat" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+
+    <RadzenCard Style="margin-top: 2rem;">
+        <RadzenText TextStyle="TextStyle.H3">Popular Categories</RadzenText>
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="margin-top: 1rem; flex-wrap: wrap;">
+            @foreach (var category in categories)
+            {
+                <RadzenCard Style="min-width: 200px; cursor: pointer;" Click="@(() => NavigateToCategory(category))">
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenIcon Icon="@category.Icon" Style="font-size: 48px; color: var(--rz-primary);" />
+                        <RadzenText TextStyle="TextStyle.Body1">@category.Name</RadzenText>
+                    </RadzenStack>
+                </RadzenCard>
+            }
+        </RadzenStack>
+    </RadzenCard>
+</RadzenStack>
+
+@code {
+    private string searchLocation = string.Empty;
+
+    private List<CategoryItem> categories = new()
+    {
+        new CategoryItem { Name = "Traditional", Icon = "restaurant" },
+        new CategoryItem { Name = "Fast Food", Icon = "fastfood" },
+        new CategoryItem { Name = "Desserts", Icon = "cake" },
+        new CategoryItem { Name = "Beverages", Icon = "local_drink" }
+    };
+
+    private void SearchRestaurants()
+    {
+        if (!string.IsNullOrEmpty(searchLocation))
+        {
+            NavigationManager.NavigateTo($"/restaurants?location={Uri.EscapeDataString(searchLocation)}");
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/restaurants");
+        }
+    }
+
+    private void NavigateToCategory(CategoryItem category)
+    {
+        NavigationManager.NavigateTo($"/restaurants?category={Uri.EscapeDataString(category.Name)}");
+    }
+
+    private class CategoryItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+    }
+}
