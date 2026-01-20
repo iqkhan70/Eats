@@ -1,40 +1,59 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { authService, LoginCredentials } from '../services/auth';
+import { authService, RegisterCredentials } from '../services/auth';
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleRegister = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
     try {
       setLoading(true);
-      const credentials: LoginCredentials = { email, password };
-      await authService.login(credentials);
-      router.replace('/(tabs)');
+      const credentials: RegisterCredentials = {
+        email,
+        password,
+        phoneNumber: phoneNumber || undefined,
+      };
+      
+      await authService.register(credentials);
+      Alert.alert('Success', 'Registration successful! Please login.', [
+        { text: 'OK', onPress: () => router.replace('/login') }
+      ]);
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      Alert.alert('Registration Failed', error.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.title}>Sign In</Text>
+        <Text style={styles.title}>Create Account</Text>
       </View>
 
       <View style={styles.form}>
@@ -52,6 +71,18 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.inputContainer}>
+          <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Phone Number (Optional)"
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            keyboardType="phone-pad"
+            autoComplete="tel"
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
           <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
@@ -64,26 +95,40 @@ export default function LoginScreen() {
           />
         </View>
 
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+          />
+        </View>
+
         <TouchableOpacity
-          style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-          onPress={handleLogin}
+          style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+          onPress={handleRegister}
           disabled={loading}
         >
-          <Text style={styles.loginButtonText}>
-            {loading ? 'Signing In...' : 'Sign In'}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.registerButtonText}>Create Account</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.registerLink}
-          onPress={() => router.push('/register')}
+          style={styles.loginLink}
+          onPress={() => router.push('/login')}
         >
-          <Text style={styles.registerLinkText}>
-            Don't have an account? <Text style={styles.registerLinkBold}>Sign Up</Text>
+          <Text style={styles.loginLinkText}>
+            Already have an account? <Text style={styles.loginLinkBold}>Sign In</Text>
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -91,6 +136,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  contentContainer: {
+    flexGrow: 1,
   },
   header: {
     flexDirection: 'row',
@@ -128,30 +176,30 @@ const styles = StyleSheet.create({
     height: 48,
     fontSize: 16,
   },
-  loginButton: {
+  registerButton: {
     backgroundColor: '#6200ee',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8,
   },
-  loginButtonDisabled: {
+  registerButtonDisabled: {
     opacity: 0.6,
   },
-  loginButtonText: {
+  registerButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  registerLink: {
+  loginLink: {
     marginTop: 20,
     alignItems: 'center',
   },
-  registerLinkText: {
+  loginLinkText: {
     fontSize: 14,
     color: '#666',
   },
-  registerLinkBold: {
+  loginLinkBold: {
     fontWeight: '600',
     color: '#6200ee',
   },

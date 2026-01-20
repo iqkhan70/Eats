@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.AspNetCore.Components;
 using Radzen;
 using TraditionalEats.WebApp;
+using TraditionalEats.WebApp.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -14,27 +15,38 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<TooltipService>();
 builder.Services.AddScoped<ContextMenuService>();
 
+// Application services
+builder.Services.AddScoped<AuthService>();
+
 // HTTP Client for API calls
 // Automatically uses current host (works for both localhost and IP access)
 // For phone testing: Access the app via http://YOUR_IP:5300 and API will use the same host
 var configuredApiUrl = builder.Configuration["ApiBaseUrl"];
 const int apiPort = 5101; // Web BFF port
 
-builder.Services.AddScoped(sp => 
+// HTTP Client that automatically adds auth tokens
+builder.Services.AddScoped(sp =>
 {
     var navigationManager = sp.GetRequiredService<NavigationManager>();
+    var authService = sp.GetRequiredService<AuthService>();
     var baseUri = new Uri(navigationManager.BaseUri);
     
     // If a full URL is configured, use it
+    Uri apiBaseUri;
     if (!string.IsNullOrEmpty(configuredApiUrl) && configuredApiUrl.StartsWith("http"))
     {
-        return new HttpClient { BaseAddress = new Uri(configuredApiUrl) };
+        apiBaseUri = new Uri(configuredApiUrl);
+    }
+    else
+    {
+        // Otherwise, construct API URL from current host with API port
+        // This works for both localhost and IP access
+        apiBaseUri = new UriBuilder(baseUri.Scheme, baseUri.Host, apiPort, "/api/").Uri;
     }
     
-    // Otherwise, construct API URL from current host with API port
-    // This works for both localhost and IP access
-    var apiBaseUri = new UriBuilder(baseUri.Scheme, baseUri.Host, apiPort, "/api/").Uri;
-    return new HttpClient { BaseAddress = apiBaseUri };
+    // Create HttpClient with message handler that adds auth tokens
+    var handler = new AuthTokenHandler(authService);
+    return new HttpClient(handler) { BaseAddress = apiBaseUri };
 });
 
 // Add authentication if needed

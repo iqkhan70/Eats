@@ -2,6 +2,8 @@
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Services
+@inject AuthService AuthService
 
 <RadzenLayout>
     <RadzenHeader>
@@ -13,8 +15,17 @@
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Class="desktop-nav">
                 <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
                 <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                @if (isAuthenticated)
+                {
+                    <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    <RadzenButton Text="Logout" Icon="logout" Click="@HandleLogout" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                }
+                else
+                {
+                    <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    <RadzenButton Text="Register" Click="@(() => NavigationManager.NavigateTo("/register"))" Variant="Variant.Outlined" Size="ButtonSize.Small" />
+                }
             </RadzenStack>
             <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small" Class="mobile-menu-btn" Style="display: none;" />
         </RadzenStack>
@@ -39,6 +50,34 @@
     private NavigationManager NavigationManager { get; set; } = default!;
     
     private bool sidebarExpanded = false;
+    private bool isAuthenticated = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthStatus();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await CheckAuthStatus();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CheckAuthStatus()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.ClearTokensAsync();
+        isAuthenticated = false;
+        NavigationManager.NavigateTo("/");
+        StateHasChanged();
+    }
 
     private void ToggleSidebar()
     {

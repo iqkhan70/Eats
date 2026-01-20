@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TraditionalEats.BuildingBlocks.Redis;
@@ -24,6 +25,7 @@ public class AuthService : IAuthService
     private readonly IRedisService _redis;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthService> _logger;
+    private readonly IPasswordHasher<User> _passwordHasher;
 
     public AuthService(
         IdentityDbContext context,
@@ -35,19 +37,74 @@ public class AuthService : IAuthService
         _redis = redis;
         _configuration = configuration;
         _logger = logger;
+        _passwordHasher = new PasswordHasher<User>();
     }
 
     public async Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password, string? ipAddress)
     {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            await RecordLoginAttemptAsync(null, email, ipAddress, false, "Email or password is empty");
+            throw new UnauthorizedAccessException("Email and password are required");
+        }
+
+        // Case-insensitive email lookup
+        // Try direct lookup first (for users registered with lowercase email)
+        var normalizedEmail = email.ToLower().Trim();
         var user = await _context.Users
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Email == email);
-
-        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        
+        // If not found, try case-insensitive search (for backward compatibility)
+        if (user == null)
         {
-            await RecordLoginAttemptAsync(null, email, ipAddress, false, "Invalid credentials");
+            var allUsers = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .ToListAsync();
+            user = allUsers.FirstOrDefault(u => 
+                u.Email.ToLower() == normalizedEmail || 
+                u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (user == null)
+        {
+            await RecordLoginAttemptAsync(null, email, ipAddress, false, "User not found");
             throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        // Check if password hash exists
+        if (string.IsNullOrEmpty(user.PasswordHash))
+        {
+            await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password hash is empty");
+            throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        // Use ASP.NET Identity PasswordHasher (same as Mental Health app)
+        PasswordVerificationResult verificationResult;
+        try
+        {
+            verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception during password verification for user {UserId}", user.Id);
+            await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password verification exception");
+            throw new UnauthorizedAccessException("Invalid email or password");
+        }
+        
+        if (verificationResult == PasswordVerificationResult.Failed)
+        {
+            await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password verification failed");
+            throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        // If rehash is needed (e.g., password was hashed with older algorithm), update it
+        if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.PasswordHash = _passwordHasher.HashPassword(user, password);
+            await _context.SaveChangesAsync();
         }
 
         if (user.Status != "Active" || (user.LockedUntil.HasValue && user.LockedUntil > DateTime.UtcNow))
@@ -94,7 +151,8 @@ public class AuthService : IAuthService
 
     public async Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer")
     {
-        if (await _context.Users.AnyAsync(u => u.Email == email))
+        // Case-insensitive email check
+        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == email.ToLower()))
         {
             return false;
         }
@@ -102,12 +160,14 @@ public class AuthService : IAuthService
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Email = email,
+            Email = email.ToLower(), // Store email in lowercase for consistency
             PhoneNumber = phoneNumber,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Status = "Active",
             CreatedAt = DateTime.UtcNow
         };
+
+        // Use ASP.NET Identity PasswordHasher (same as Mental Health app)
+        user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
         _context.Users.Add(user);
 
@@ -154,8 +214,17 @@ public class AuthService : IAuthService
             claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
         }
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-            _configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret not configured")));
+        // Get JWT secret with fallback
+        var jwtSecret = _configuration["Jwt:Secret"] 
+            ?? _configuration["Jwt:Key"]
+            ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
+        
+        if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
+        {
+            jwtSecret = "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
+        }
+        
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(

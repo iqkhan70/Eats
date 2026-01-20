@@ -171,9 +171,119 @@ public class WebBffController : ControllerBase
         }
     }
 
+    [HttpPost("auth/register")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/register", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, errorContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during registration");
+            return StatusCode(500, new { error = "Failed to register" });
+        }
+    }
+
+    [HttpPost("auth/login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        try
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            {
+                return BadRequest(new { error = "Email and password are required" });
+            }
+
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/login", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, errorContent);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error during login. IdentityService may not be running or unreachable.");
+            return StatusCode(500, new { error = "Failed to connect to authentication service. Please ensure IdentityService is running." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during login");
+            return StatusCode(500, new { error = "Failed to login" });
+        }
+    }
+
+    [HttpPost("auth/refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/refresh", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, errorContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refreshing token");
+            return StatusCode(500, new { error = "Failed to refresh token" });
+        }
+    }
+
+    [HttpPost("auth/logout")]
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/logout", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, errorContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during logout");
+            return StatusCode(500, new { error = "Failed to logout" });
+        }
+    }
+
     [HttpGet("health")]
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "WebBff" });
     }
 }
+
+public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
+public record LoginRequest(string Email, string Password);
+public record RefreshTokenRequest(string RefreshToken);
