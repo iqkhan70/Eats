@@ -23,6 +23,14 @@ export default function RootLayout() {
           name="index" 
           options={{ title: 'TraditionalEats' }} 
         />
+        <Stack.Screen 
+          name="login" 
+          options={{ title: 'Sign In', presentation: 'modal' }} 
+        />
+        <Stack.Screen 
+          name="register" 
+          options={{ title: 'Sign Up', presentation: 'modal' }} 
+        />
       </Stack>
       <StatusBar style="light" />
     </>

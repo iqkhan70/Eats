@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { cartService, Cart, CartItem } from '../services/cart';
 
@@ -11,18 +11,31 @@ export default function CartScreen() {
   const [placingOrder, setPlacingOrder] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
 
-  useEffect(() => {
-    loadCart();
-  }, []);
+  // Reload cart when screen comes into focus (e.g., after login)
+  useFocusEffect(
+    useCallback(() => {
+      loadCart();
+    }, [])
+  );
 
   const loadCart = async () => {
     try {
       setLoading(true);
       const cartData = await cartService.getCart();
+      // Ensure items array exists
+      if (cartData && !cartData.items) {
+        cartData.items = [];
+      }
       setCart(cartData);
     } catch (error: any) {
       console.error('Error loading cart:', error);
-      Alert.alert('Error', 'Failed to load cart');
+      // Don't show alert for empty cart (404/204), only for actual errors
+      if (error.response?.status !== 404 && error.response?.status !== 204) {
+        Alert.alert('Error', error.response?.data?.error || 'Failed to load cart');
+      } else {
+        // Empty cart is fine, just set to null
+        setCart(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -90,7 +103,7 @@ export default function CartScreen() {
     );
   }
 
-  if (!cart || cart.items.length === 0) {
+  if (!cart || !cart.items || cart.items.length === 0) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>

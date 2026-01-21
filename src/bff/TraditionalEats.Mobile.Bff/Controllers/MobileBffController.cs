@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace TraditionalEats.Mobile.Bff.Controllers;
 
@@ -84,7 +85,15 @@ public class MobileBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync("/api/order");
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order");
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             
             if (response.IsSuccessStatusCode)
             {
@@ -274,7 +283,18 @@ public class MobileBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("OrderService");
             var requestBody = request ?? new CreateCartRequest(null);
-            var response = await client.PostAsJsonAsync("/api/order/cart", requestBody);
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/cart")
+            {
+                Content = System.Net.Http.Json.JsonContent.Create(requestBody)
+            };
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
@@ -286,19 +306,71 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpGet("cart")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> GetCart()
     {
+        _logger.LogInformation("GetCart endpoint called");
         try
         {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync("/api/order/cart");
-            var content = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, content);
+            // Check if Authorization header is present
+            var hasAuthHeader = Request.Headers.TryGetValue("Authorization", out var authHeader);
+            _logger.LogInformation("Authorization header present: {HasAuthHeader}, User authenticated: {IsAuthenticated}", 
+                hasAuthHeader, User.Identity?.IsAuthenticated ?? false);
+            
+            if (hasAuthHeader)
+            {
+                var authHeaderValue = authHeader.ToString();
+                _logger.LogInformation("Authorization header value: {AuthHeader}", 
+                    authHeaderValue.Length > 20 ? authHeaderValue.Substring(0, 20) + "..." : authHeaderValue);
+            }
+            
+            // For authenticated users, prioritize getting cart by customerId
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                _logger.LogInformation("User is authenticated, userId: {UserId}, trying to get cart by customer", userIdClaim);
+                var client = _httpClientFactory.CreateClient("OrderService");
+                
+                // Forward JWT token to OrderService
+                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
+                if (hasAuthHeader)
+                {
+                    httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+                    _logger.LogInformation("Forwarded Authorization header to OrderService");
+                }
+                else
+                {
+                    _logger.LogWarning("User is authenticated but no Authorization header found!");
+                }
+                
+                var response = await client.SendAsync(httpRequestMessage);
+                var content = await response.Content.ReadAsStringAsync();
+                
+                _logger.LogInformation("OrderService response: StatusCode={StatusCode}, ContentLength={Length}", 
+                    response.StatusCode, content.Length);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Found cart by customerId. Response length: {Length} bytes", content.Length);
+                    return Content(content, "application/json");
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("No cart found for authenticated user (customerId: {CustomerId})", userIdClaim);
+                    return Ok((object?)null);
+                }
+                
+                return StatusCode((int)response.StatusCode, content);
+            }
+
+            // For guest users, return null (no session management for mobile - use cartId directly)
+            _logger.LogInformation("User is not authenticated (guest) - returning null");
+            return Ok((object?)null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting cart");
-            return StatusCode(500, new { error = "Failed to get cart" });
+            _logger.LogError(ex, "Error getting cart: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Failed to get cart: {ex.Message}" });
         }
     }
 
@@ -325,7 +397,18 @@ public class MobileBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.PostAsJsonAsync($"/api/order/cart/{cartId}/items", request);
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items")
+            {
+                Content = System.Net.Http.Json.JsonContent.Create(request)
+            };
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
@@ -342,7 +425,18 @@ public class MobileBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.PutAsJsonAsync($"/api/order/cart/{cartId}/items/{cartItemId}", request);
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Put, $"/api/order/cart/{cartId}/items/{cartItemId}")
+            {
+                Content = System.Net.Http.Json.JsonContent.Create(request)
+            };
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
@@ -359,7 +453,15 @@ public class MobileBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.DeleteAsync($"/api/order/cart/{cartId}/items/{cartItemId}");
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Delete, $"/api/order/cart/{cartId}/items/{cartItemId}");
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
@@ -376,7 +478,18 @@ public class MobileBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.PostAsJsonAsync("/api/order/place", request);
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/place")
+            {
+                Content = System.Net.Http.Json.JsonContent.Create(request)
+            };
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
@@ -393,7 +506,15 @@ public class MobileBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync($"/api/order/{orderId}");
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }

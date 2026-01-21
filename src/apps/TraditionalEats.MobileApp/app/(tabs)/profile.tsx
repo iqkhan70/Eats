@@ -1,9 +1,50 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { authService } from '../../services/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    const authenticated = await authService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+    if (authenticated) {
+      // You can fetch user info here if needed
+      // For now, we'll just show a placeholder
+    }
+  };
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authService.logout();
+              setIsAuthenticated(false);
+              setUserEmail(null);
+              Alert.alert('Success', 'You have been signed out');
+            } catch (error: any) {
+              Alert.alert('Error', 'Failed to sign out');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const menuItems = [
     { icon: 'person-outline', label: 'Personal Information', route: '/profile/personal' },
@@ -20,29 +61,61 @@ export default function ProfileScreen() {
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={48} color="#fff" />
         </View>
-        <Text style={styles.userName}>John Doe</Text>
-        <Text style={styles.userEmail}>john.doe@example.com</Text>
+        {isAuthenticated ? (
+          <>
+            <Text style={styles.userName}>Welcome</Text>
+            <Text style={styles.userEmail}>{userEmail || 'User'}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.userName}>Guest</Text>
+            <Text style={styles.userEmail}>Sign in to access your account</Text>
+          </>
+        )}
       </View>
 
-      <View style={styles.menuSection}>
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.menuItem}
-            onPress={() => router.push(item.route as any)}
+      {isAuthenticated ? (
+        <>
+          <View style={styles.menuSection}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.menuItem}
+                onPress={() => router.push(item.route as any)}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name={item.icon as any} size={24} color="#333" />
+                  <Text style={styles.menuItemLabel}>{item.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity 
+            style={styles.logoutButton}
+            onPress={handleLogout}
           >
-            <View style={styles.menuItemLeft}>
-              <Ionicons name={item.icon as any} size={24} color="#333" />
-              <Text style={styles.menuItemLabel}>{item.label}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
+            <Text style={styles.logoutButtonText}>Sign Out</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <TouchableOpacity style={styles.logoutButton}>
-        <Text style={styles.logoutButtonText}>Sign Out</Text>
-      </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.menuSection}>
+          <TouchableOpacity 
+            style={styles.loginButton}
+            onPress={() => router.push('/login')}
+          >
+            <Ionicons name="log-in-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.loginButtonText}>Sign In</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.registerButton}
+            onPress={() => router.push('/register')}
+          >
+            <Text style={styles.registerButtonText}>Don't have an account? Sign Up</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -112,5 +185,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#d32f2f',
+  },
+  loginButton: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#6200ee',
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  registerButton: {
+    margin: 16,
+    marginTop: 0,
+    padding: 16,
+    alignItems: 'center',
+  },
+  registerButtonText: {
+    fontSize: 14,
+    color: '#666',
   },
 });

@@ -73,30 +73,70 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("cart")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> GetCartByCustomer()
     {
         try
         {
+            _logger.LogInformation("OrderService GetCartByCustomer called");
+            _logger.LogInformation("User.Identity.IsAuthenticated: {IsAuthenticated}", User.Identity?.IsAuthenticated ?? false);
+            
+            // Check if Authorization header is present
+            var hasAuthHeader = Request.Headers.TryGetValue("Authorization", out var authHeader);
+            _logger.LogInformation("Authorization header present: {HasAuthHeader}", hasAuthHeader);
+            
+            if (hasAuthHeader)
+            {
+                var authHeaderValue = authHeader.ToString();
+                _logger.LogInformation("Authorization header value: {AuthHeader}", 
+                    authHeaderValue.Length > 30 ? authHeaderValue.Substring(0, 30) + "..." : authHeaderValue);
+            }
+            
             // Allow both authenticated and unauthenticated users
             Guid? customerId = null;
             if (User.Identity?.IsAuthenticated == true)
             {
                 var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                _logger.LogInformation("User is authenticated, userIdClaim: {UserIdClaim}", userIdClaim ?? "null");
                 if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
                 {
                     customerId = userId;
+                    _logger.LogInformation("Extracted customerId: {CustomerId}", customerId);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to parse userIdClaim as Guid: {UserIdClaim}", userIdClaim);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("User is not authenticated");
+                if (hasAuthHeader)
+                {
+                    _logger.LogWarning("Authorization header present but user not authenticated - JWT validation may have failed");
                 }
             }
 
             // If authenticated, try to get cart by customer
             if (customerId.HasValue)
             {
+                _logger.LogInformation("Getting cart for customerId: {CustomerId}", customerId.Value);
                 var cart = await _orderService.GetCartByCustomerAsync(customerId.Value);
                 if (cart != null)
+                {
+                    _logger.LogInformation("Found cart for customerId {CustomerId}: CartId={CartId}, ItemCount={ItemCount}", 
+                        customerId.Value, cart.CartId, cart.Items?.Count ?? 0);
                     return Ok(cart);
+                }
+                else
+                {
+                    _logger.LogInformation("No cart found for customerId: {CustomerId}", customerId.Value);
+                }
             }
 
             // If no cart found for customer or not authenticated, return NotFound
+            _logger.LogInformation("Returning NotFound - customerId: {CustomerId}, isAuthenticated: {IsAuthenticated}", 
+                customerId, User.Identity?.IsAuthenticated ?? false);
             return NotFound();
         }
         catch (Exception ex)

@@ -104,8 +104,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="always">
-        <View style={styles.header}>
+      <View style={styles.header}>
         <Text style={styles.title}>Welcome to TraditionalEats</Text>
         <Text style={styles.subtitle}>Discover authentic traditional food</Text>
       </View>
@@ -163,6 +162,7 @@ export default function HomeScreen() {
 
       </View>
 
+      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="always">
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Popular Categories</Text>
         <View style={styles.categoryGrid}>
@@ -246,8 +246,10 @@ const styles = StyleSheet.create({
   },
   searchWrapper: {
     margin: 16,
+    marginBottom: 0,
     position: 'relative',
-    zIndex: 10,
+    zIndex: 1000,
+    backgroundColor: '#f5f5f5',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -273,7 +275,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 10,
+    zIndex: 1001,
   },
   suggestionItem: {
     flexDirection: 'row',
