@@ -148,25 +148,51 @@
     private async Task IncreaseQuantity(CartItemDto item)
     {
         if (cart == null) return;
-        await CartService.UpdateCartItemQuantityAsync(cart.CartId, item.CartItemId, item.Quantity + 1);
-        await LoadCart();
-        // Trigger navigation to refresh cart count in MainLayout
-        NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+        try
+        {
+            await CartService.UpdateCartItemQuantityAsync(cart.CartId, item.CartItemId, item.Quantity + 1);
+            await LoadCart();
+            // Trigger navigation to refresh cart count in MainLayout
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error increasing quantity: {ex.Message}");
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = $"Failed to update quantity: {ex.Message}" 
+            });
+        }
     }
 
     private async Task DecreaseQuantity(CartItemDto item)
     {
         if (cart == null) return;
-        if (item.Quantity > 1)
+        try
         {
-            await CartService.UpdateCartItemQuantityAsync(cart.CartId, item.CartItemId, item.Quantity - 1);
-            await LoadCart();
-            // Trigger navigation to refresh cart count in MainLayout
-            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+            if (item.Quantity > 1)
+            {
+                await CartService.UpdateCartItemQuantityAsync(cart.CartId, item.CartItemId, item.Quantity - 1);
+                await LoadCart();
+                // Trigger navigation to refresh cart count in MainLayout
+                NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+            }
+            else
+            {
+                await RemoveItem(item);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            await RemoveItem(item);
+            Console.WriteLine($"Error decreasing quantity: {ex.Message}");
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = $"Failed to update quantity: {ex.Message}" 
+            });
         }
     }
 

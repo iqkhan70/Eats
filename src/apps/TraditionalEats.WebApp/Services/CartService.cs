@@ -79,7 +79,8 @@ public class CartService
     public async Task UpdateCartItemQuantityAsync(Guid cartId, Guid cartItemId, int quantity)
     {
         var request = new { Quantity = quantity };
-        await _httpClient.PutAsJsonAsync($"WebBff/cart/{cartId}/items/{cartItemId}", request);
+        var response = await _httpClient.PutAsJsonAsync($"WebBff/cart/{cartId}/items/{cartItemId}", request);
+        response.EnsureSuccessStatusCode();
     }
 
     public async Task RemoveCartItemAsync(Guid cartId, Guid cartItemId)

@@ -158,9 +158,16 @@ public class OrderService : IOrderService
 
     public async Task UpdateCartItemQuantityAsync(Guid cartId, Guid cartItemId, int quantity)
     {
-        var cart = await GetCartAsync(cartId);
+        // Always get from database to ensure EF Core tracking
+        var cart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CartId == cartId);
+        
         if (cart == null)
             throw new InvalidOperationException("Cart not found");
+
+        // Reload items collection to ensure we have the latest data
+        await _context.Entry(cart).Collection(c => c.Items).LoadAsync();
 
         var item = cart.Items.FirstOrDefault(i => i.CartItemId == cartItemId);
         if (item == null)
@@ -172,6 +179,9 @@ public class OrderService : IOrderService
             return;
         }
 
+        _logger.LogInformation("Updating cart item quantity: CartItemId={CartItemId}, OldQuantity={OldQuantity}, NewQuantity={NewQuantity}", 
+            cartItemId, item.Quantity, quantity);
+
         item.Quantity = quantity;
         item.TotalPrice = item.Quantity * item.UnitPrice;
 
@@ -179,7 +189,19 @@ public class OrderService : IOrderService
         cart.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
-        await _redis.SetAsync($"cart:{cartId}", cart, TimeSpan.FromHours(1));
+        
+        // Invalidate cache to ensure fresh data on next read
+        await _redis.DeleteAsync($"cart:{cartId}");
+        
+        // Reload cart from database to get the latest state
+        cart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CartId == cartId);
+        
+        if (cart != null)
+        {
+            await _redis.SetAsync($"cart:{cartId}", cart, TimeSpan.FromHours(1));
+        }
     }
 
     public async Task RemoveCartItemAsync(Guid cartId, Guid cartItemId)
