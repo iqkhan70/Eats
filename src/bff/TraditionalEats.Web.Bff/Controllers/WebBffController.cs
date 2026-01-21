@@ -131,15 +131,23 @@ public class WebBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync("/api/order");
+            
+            // Forward JWT token to OrderService
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
             
             if (response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsStringAsync();
                 return Ok(content);
             }
             
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            return StatusCode((int)response.StatusCode, content);
         }
         catch (Exception ex)
         {
@@ -621,7 +629,16 @@ public class WebBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.PostAsJsonAsync("/api/order/place", request);
+            
+            // Forward JWT token to OrderService
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
@@ -638,7 +655,15 @@ public class WebBffController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync($"/api/order/{orderId}");
+            
+            // Forward JWT token to OrderService
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
         }
