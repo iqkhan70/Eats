@@ -267,12 +267,164 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("cart")]
+    public async Task<IActionResult> CreateCart([FromBody] CreateCartRequest? request = null)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var requestBody = request ?? new CreateCartRequest(null);
+            var response = await client.PostAsJsonAsync("/api/order/cart", requestBody);
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating cart");
+            return StatusCode(500, new { error = "Failed to create cart" });
+        }
+    }
+
+    [HttpGet("cart")]
+    public async Task<IActionResult> GetCart()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.GetAsync("/api/order/cart");
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting cart");
+            return StatusCode(500, new { error = "Failed to get cart" });
+        }
+    }
+
+    [HttpGet("cart/{cartId}")]
+    public async Task<IActionResult> GetCartById(Guid cartId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.GetAsync($"/api/order/cart/{cartId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting cart");
+            return StatusCode(500, new { error = "Failed to get cart" });
+        }
+    }
+
+    [HttpPost("cart/{cartId}/items")]
+    public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.PostAsJsonAsync($"/api/order/cart/{cartId}/items", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding item to cart");
+            return StatusCode(500, new { error = "Failed to add item to cart" });
+        }
+    }
+
+    [HttpPut("cart/{cartId}/items/{cartItemId}")]
+    public async Task<IActionResult> UpdateCartItem(Guid cartId, Guid cartItemId, [FromBody] UpdateCartItemRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.PutAsJsonAsync($"/api/order/cart/{cartId}/items/{cartItemId}", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating cart item");
+            return StatusCode(500, new { error = "Failed to update cart item" });
+        }
+    }
+
+    [HttpDelete("cart/{cartId}/items/{cartItemId}")]
+    public async Task<IActionResult> RemoveCartItem(Guid cartId, Guid cartItemId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.DeleteAsync($"/api/order/cart/{cartId}/items/{cartItemId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing cart item");
+            return StatusCode(500, new { error = "Failed to remove cart item" });
+        }
+    }
+
+    [HttpPost("orders/place")]
+    public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.PostAsJsonAsync("/api/order/place", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error placing order");
+            return StatusCode(500, new { error = "Failed to place order" });
+        }
+    }
+
+    [HttpGet("orders/{orderId}")]
+    public async Task<IActionResult> GetOrder(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.GetAsync($"/api/order/{orderId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting order");
+            return StatusCode(500, new { error = "Failed to get order" });
+        }
+    }
+
     [HttpGet("health")]
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "MobileBff" });
     }
 }
+
+public record CreateCartRequest(Guid? RestaurantId);
+public record AddCartItemRequest(
+    Guid MenuItemId,
+    string Name,
+    decimal Price,
+    int Quantity,
+    Dictionary<string, string>? Options
+);
+public record UpdateCartItemRequest(int Quantity);
+public record PlaceOrderRequest(
+    Guid CartId,
+    string DeliveryAddress,
+    string? IdempotencyKey
+);
 
 public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);

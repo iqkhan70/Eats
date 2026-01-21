@@ -1,9 +1,11 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
 @using TraditionalEats.WebApp.Services
 @inject AuthService AuthService
+@inject CartService CartService
 
 <RadzenLayout>
     <RadzenHeader>
@@ -15,6 +17,13 @@
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Class="desktop-nav">
                 <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
                 <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <div style="position: relative;">
+                    <RadzenButton Text="Cart" Icon="shopping_cart" Click="@(() => NavigationManager.NavigateTo("/cart"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    @if (cartItemCount > 0)
+                    {
+                        <RadzenBadge Text="@cartItemCount.ToString()" Size="BadgeSize.Small" Style="position: absolute; top: -8px; right: -8px; background-color: var(--rz-danger); color: white; min-width: 20px; text-align: center;" />
+                    }
+                </div>
                 @if (isAuthenticated)
                 {
                     <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
@@ -51,10 +60,15 @@
     
     private bool sidebarExpanded = false;
     private bool isAuthenticated = false;
+    private int cartItemCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
         await CheckAuthStatus();
+        await LoadCartCount();
+        
+        // Subscribe to navigation events to refresh cart count
+        NavigationManager.LocationChanged += OnLocationChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -62,8 +76,21 @@
         if (firstRender)
         {
             await CheckAuthStatus();
+            await LoadCartCount();
             StateHasChanged();
         }
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        // Refresh cart count when navigating
+        await LoadCartCount();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 
     private async Task CheckAuthStatus()
@@ -71,10 +98,24 @@
         isAuthenticated = await AuthService.IsAuthenticatedAsync();
     }
 
+    private async Task LoadCartCount()
+    {
+        try
+        {
+            var cart = await CartService.GetCartAsync();
+            cartItemCount = cart?.Items?.Sum(i => i.Quantity) ?? 0;
+        }
+        catch
+        {
+            cartItemCount = 0;
+        }
+    }
+
     private async Task HandleLogout()
     {
         await AuthService.ClearTokensAsync();
         isAuthenticated = false;
+        cartItemCount = 0;
         NavigationManager.NavigateTo("/");
         StateHasChanged();
     }

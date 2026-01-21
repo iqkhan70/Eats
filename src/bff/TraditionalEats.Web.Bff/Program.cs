@@ -1,4 +1,8 @@
 using TraditionalEats.BuildingBlocks.Configuration;
+using TraditionalEats.BuildingBlocks.Redis;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +12,61 @@ builder.Configuration.AddSharedConfiguration(builder.Environment);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Redis for cart session management
+builder.Services.AddRedis(builder.Configuration);
+
+// JWT Authentication (optional - allows extracting customerId from token)
+var jwtSecret = builder.Configuration["Jwt:Secret"] 
+    ?? builder.Configuration["Jwt:Key"]
+    ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+
+// Log JWT configuration for debugging
+var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger<Program>();
+logger.LogInformation("BFF JWT Configuration - Issuer: {Issuer}, Audience: {Audience}, Secret Length: {SecretLength}", 
+    jwtIssuer, jwtAudience, jwtSecret?.Length ?? 0);
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = !string.IsNullOrEmpty(jwtAudience), // Only validate if audience is set
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"))
+        };
+        // Don't fail if token is missing (for anonymous access)
+        // But still validate tokens when present
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                // Log the failure but allow the request to continue (for anonymous access)
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning(context.Exception, "JWT authentication failed: {Error}", context.Exception?.Message);
+                // Don't fail the request - allow it to proceed (anonymous access)
+                context.NoResult();
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                // Log successful token validation
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                logger.LogInformation("JWT token validated successfully for user: {UserId}", userId);
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // Add CORS for Blazor WebAssembly
 // Allow connections from localhost and any IP address (for mobile browser access)
@@ -85,10 +144,15 @@ builder.Services.AddHttpClient("PromotionService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:PromotionService"] ?? "http://localhost:5008");
 });
 
-builder.Services.AddHttpClient("ReviewService", client =>
-{
-    client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
-});
+    builder.Services.AddHttpClient("ReviewService", client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
+    });
+
+    builder.Services.AddHttpClient("OrderService", client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");
+    });
 
 var app = builder.Build();
 

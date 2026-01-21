@@ -1,16 +1,65 @@
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { api } from '../../services/api';
 
 interface Order {
-  id: string;
-  restaurantName: string;
-  date: string;
-  status: string;
+  orderId: string;
+  customerId: string;
+  restaurantId: string;
+  subtotal: number;
+  tax: number;
+  deliveryFee: number;
   total: number;
+  status: string;
+  deliveryAddress: string;
+  createdAt: string;
+  deliveredAt?: string;
+  items: OrderItem[];
+}
+
+interface OrderItem {
+  orderItemId: string;
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
 }
 
 export default function OrdersScreen() {
-  const orders: Order[] = []; // TODO: Load from API
+  const router = useRouter();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get<Order[]>('/MobileBff/orders');
+      setOrders(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading orders:', error);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#6200ee" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -21,27 +70,79 @@ export default function OrdersScreen() {
           <Text style={styles.emptySubtext}>
             Your order history will appear here
           </Text>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => router.push('/(tabs)')}
+          >
+            <Text style={styles.browseButtonText}>Browse Restaurants</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
           data={orders}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.orderId}
           renderItem={({ item }) => (
-            <View style={styles.orderCard}>
+            <TouchableOpacity
+              style={styles.orderCard}
+              onPress={() => router.push(`/orders/${item.orderId}`)}
+            >
               <View style={styles.orderHeader}>
-                <Text style={styles.restaurantName}>{item.restaurantName}</Text>
-                <Text style={styles.orderDate}>{item.date}</Text>
+                <Text style={styles.orderId}>Order #{item.orderId.substring(0, 8)}</Text>
+                <Text style={styles.orderDate}>
+                  {new Date(item.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+              </View>
+              <View style={styles.orderItems}>
+                {item.items.slice(0, 2).map((orderItem) => (
+                  <Text key={orderItem.orderItemId} style={styles.orderItemText}>
+                    {orderItem.name} x {orderItem.quantity}
+                  </Text>
+                ))}
+                {item.items.length > 2 && (
+                  <Text style={styles.orderItemText}>
+                    +{item.items.length - 2} more items
+                  </Text>
+                )}
               </View>
               <View style={styles.orderFooter}>
-                <Text style={styles.orderStatus}>{item.status}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                  <Text style={styles.orderStatus}>{item.status}</Text>
+                </View>
                 <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
     </View>
   );
+
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case 'Pending':
+        return '#fff3cd';
+      case 'Confirmed':
+        return '#d1ecf1';
+      case 'Preparing':
+        return '#d4edda';
+      case 'Ready':
+        return '#cce5ff';
+      case 'OutForDelivery':
+        return '#e2e3e5';
+      case 'Delivered':
+        return '#d4edda';
+      case 'Cancelled':
+        return '#f8d7da';
+      default:
+        return '#e9ecef';
+    }
+  }
 }
 
 const styles = StyleSheet.create({
@@ -66,6 +167,41 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 8,
     textAlign: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  browseButton: {
+    backgroundColor: '#6200ee',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  browseButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  orderId: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  orderItems: {
+    marginVertical: 8,
+  },
+  orderItemText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   orderCard: {
     backgroundColor: '#fff',

@@ -2,8 +2,12 @@
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Services
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
+@inject CartService CartService
+@inject NotificationService NotificationService
+@inject ILogger<Menu> _logger
 
 <PageTitle>Menu - TraditionalEats</PageTitle>
 
@@ -66,7 +70,10 @@
                                     </RadzenStack>
                                     @if (item.IsAvailable)
                                     {
-                                        <RadzenButton Text="Add" Icon="add_shopping_cart" Click="@(() => AddToCart(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                                        <RadzenButton Text="Add" Icon="add_shopping_cart" Click="@(() => AddToCart(item))" 
+                                                     Variant="Variant.Flat" Size="ButtonSize.Small" 
+                                                     IsLoading="@(isAddingToCart && addingItemId == item.MenuItemId)" 
+                                                     Disabled="@(isAddingToCart)" />
                                     }
                                     else
                                     {
@@ -152,10 +159,84 @@
         // TODO: Navigate to item details page
     }
 
-    private void AddToCart(MenuItemDto item)
+    private Guid? currentCartId = null;
+    private Guid? addingItemId = null;
+    private bool isAddingToCart = false;
+
+    private async Task AddToCart(MenuItemDto item)
     {
-        // TODO: Implement cart functionality
-        Console.WriteLine($"Adding {item.Name} to cart");
+        // Prevent double-clicking or concurrent adds
+        if (isAddingToCart || addingItemId == item.MenuItemId)
+        {
+            return;
+        }
+
+        try
+        {
+            isAddingToCart = true;
+            addingItemId = item.MenuItemId;
+
+            // Get or create cart
+            if (currentCartId == null)
+            {
+                var cart = await CartService.GetCartAsync();
+                if (cart == null)
+                {
+                    currentCartId = await CartService.CreateCartAsync(RestaurantId);
+                    if (currentCartId == Guid.Empty)
+                    {
+                        throw new Exception("Failed to create cart");
+                    }
+                }
+                else
+                {
+                    currentCartId = cart.CartId;
+                    // If cart is for a different restaurant, create a new one
+                    if (cart.RestaurantId.HasValue && cart.RestaurantId != RestaurantId)
+                    {
+                        currentCartId = await CartService.CreateCartAsync(RestaurantId);
+                        if (currentCartId == Guid.Empty)
+                        {
+                            throw new Exception("Failed to create cart");
+                        }
+                    }
+                }
+            }
+
+            var response = await CartService.AddItemToCartAsync(currentCartId.Value, item.MenuItemId, item.Name, item.Price, 1);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Server error: {errorContent}");
+            }
+            
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Success, 
+                Summary = "Added to Cart", 
+                Detail = $"{item.Name} added to cart" 
+            });
+            
+            // Trigger navigation to refresh cart count in MainLayout
+            // Use a small delay to ensure the item is saved before refreshing
+            await Task.Delay(200);
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding item to cart: {ex.Message}");
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = $"Failed to add item to cart: {ex.Message}" 
+            });
+        }
+        finally
+        {
+            addingItemId = null;
+            isAddingToCart = false;
+        }
     }
 
     private IEnumerable<IGrouping<string, MenuItemDto>> menuItemsByCategory =>

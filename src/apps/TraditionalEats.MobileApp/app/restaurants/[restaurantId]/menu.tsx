@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { api } from '../../../services/api';
+import { cartService } from '../../../services/cart';
 
 interface MenuItem {
   menuItemId: string;
@@ -32,6 +33,8 @@ export default function MenuScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentCartId, setCurrentCartId] = useState<string | null>(null);
+  const [addingItemId, setAddingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     loadMenu();
@@ -82,9 +85,36 @@ export default function MenuScreen() {
     setSelectedCategoryId(categoryId);
   };
 
-  const addToCart = (item: MenuItem) => {
-    // TODO: Implement cart functionality
-    console.log(`Adding ${item.name} to cart`);
+  const addToCart = async (item: MenuItem) => {
+    if (!item.isAvailable) return;
+
+    try {
+      setAddingItemId(item.menuItemId);
+
+      // Get or create cart
+      if (!currentCartId) {
+        const cart = await cartService.getCart();
+        if (cart) {
+          setCurrentCartId(cart.cartId);
+          // If cart is for a different restaurant, create a new one
+          if (cart.restaurantId && cart.restaurantId !== restaurantId) {
+            const newCartId = await cartService.createCart(restaurantId);
+            setCurrentCartId(newCartId);
+          }
+        } else {
+          const newCartId = await cartService.createCart(restaurantId);
+          setCurrentCartId(newCartId);
+        }
+      }
+
+      await cartService.addItemToCart(currentCartId!, item.menuItemId, item.name, item.price, 1);
+      Alert.alert('Success', `${item.name} added to cart`);
+    } catch (error: any) {
+      console.error('Error adding to cart:', error);
+      Alert.alert('Error', 'Failed to add item to cart');
+    } finally {
+      setAddingItemId(null);
+    }
   };
 
   // Group menu items by category
@@ -169,7 +199,7 @@ export default function MenuScreen() {
               <TouchableOpacity
                 key={item.menuItemId}
                 style={styles.menuItemCard}
-                onPress={() => addToCart(item)}
+                activeOpacity={0.8}
               >
                 <View style={styles.menuItemContent}>
                   <Ionicons name="restaurant" size={40} color="#6200ee" style={styles.menuItemIcon} />
@@ -191,10 +221,15 @@ export default function MenuScreen() {
                   </View>
                   {item.isAvailable ? (
                     <TouchableOpacity
-                      style={styles.addButton}
+                      style={[styles.addButton, addingItemId === item.menuItemId && styles.addButtonDisabled]}
                       onPress={() => addToCart(item)}
+                      disabled={addingItemId === item.menuItemId}
                     >
-                      <Ionicons name="add-circle" size={32} color="#6200ee" />
+                      {addingItemId === item.menuItemId ? (
+                        <ActivityIndicator size="small" color="#6200ee" />
+                      ) : (
+                        <Ionicons name="add-circle" size={32} color="#6200ee" />
+                      )}
                     </TouchableOpacity>
                   ) : (
                     <View style={styles.unavailableBadge}>
@@ -343,6 +378,9 @@ const styles = StyleSheet.create({
   },
   addButton: {
     marginLeft: 12,
+  },
+  addButtonDisabled: {
+    opacity: 0.5,
   },
   unavailableBadge: {
     backgroundColor: '#ffebee',

@@ -9,11 +9,16 @@ namespace TraditionalEats.OrderService.Services;
 
 public interface IOrderService
 {
-    Task<Guid> CreateCartAsync(Guid? customerId);
+    Task<Guid> CreateCartAsync(Guid? customerId, Guid? restaurantId = null);
     Task<Cart?> GetCartAsync(Guid cartId);
+    Task<Cart?> GetCartByCustomerAsync(Guid customerId);
     Task AddItemToCartAsync(Guid cartId, Guid menuItemId, string name, decimal price, int quantity, Dictionary<string, string>? options);
+    Task UpdateCartItemQuantityAsync(Guid cartId, Guid cartItemId, int quantity);
+    Task RemoveCartItemAsync(Guid cartId, Guid cartItemId);
+    Task ClearCartAsync(Guid cartId);
     Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string idempotencyKey);
     Task<Order?> GetOrderAsync(Guid orderId);
+    Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId);
     Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null);
 }
 
@@ -36,13 +41,14 @@ public class OrderService : IOrderService
         _logger = logger;
     }
 
-    public async Task<Guid> CreateCartAsync(Guid? customerId)
+    public async Task<Guid> CreateCartAsync(Guid? customerId, Guid? restaurantId = null)
     {
         var cartId = Guid.NewGuid();
         var cart = new Cart
         {
             CartId = cartId,
             CustomerId = customerId,
+            RestaurantId = restaurantId,
             UpdatedAt = DateTime.UtcNow
         };
 
@@ -74,20 +80,47 @@ public class OrderService : IOrderService
         return cart;
     }
 
+    public async Task<Cart?> GetCartByCustomerAsync(Guid customerId)
+    {
+        var cart = await _context.Carts
+            .Include(c => c.Items)
+            .Where(c => c.CustomerId == customerId)
+            .OrderByDescending(c => c.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        if (cart != null)
+        {
+            await _redis.SetAsync($"cart:{cart.CartId}", cart, TimeSpan.FromHours(1));
+        }
+
+        return cart;
+    }
+
     public async Task AddItemToCartAsync(Guid cartId, Guid menuItemId, string name, decimal price, int quantity, Dictionary<string, string>? options)
     {
-        var cart = await GetCartAsync(cartId);
+        // Always get from database to ensure EF Core tracking
+        var cart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CartId == cartId);
+        
         if (cart == null)
             throw new InvalidOperationException("Cart not found");
 
+        // Check for existing item - reload from database to ensure we have the latest items
+        // This prevents duplicate items if the method is called concurrently
+        await _context.Entry(cart).Collection(c => c.Items).LoadAsync();
+        
         var existingItem = cart.Items.FirstOrDefault(i => i.MenuItemId == menuItemId);
         if (existingItem != null)
         {
+            _logger.LogInformation("Updating existing cart item: MenuItemId={MenuItemId}, CurrentQuantity={CurrentQuantity}, AddingQuantity={AddingQuantity}", 
+                menuItemId, existingItem.Quantity, quantity);
             existingItem.Quantity += quantity;
             existingItem.TotalPrice = existingItem.Quantity * existingItem.UnitPrice;
         }
         else
         {
+            _logger.LogInformation("Adding new cart item: MenuItemId={MenuItemId}, Quantity={Quantity}", menuItemId, quantity);
             var cartItem = new CartItem
             {
                 CartItemId = Guid.NewGuid(),
@@ -99,9 +132,83 @@ public class OrderService : IOrderService
                 TotalPrice = price * quantity,
                 SelectedOptionsJson = options != null ? System.Text.Json.JsonSerializer.Serialize(options) : null
             };
+            // Explicitly add to context to ensure EF Core tracks it
+            _context.CartItems.Add(cartItem);
             cart.Items.Add(cartItem);
         }
 
+        RecalculateCartTotals(cart);
+        cart.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        
+        // Invalidate cache to ensure fresh data on next read
+        await _redis.DeleteAsync($"cart:{cartId}");
+        
+        // Reload cart from database to get the latest state
+        cart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CartId == cartId);
+        
+        if (cart != null)
+        {
+            await _redis.SetAsync($"cart:{cartId}", cart, TimeSpan.FromHours(1));
+        }
+    }
+
+    public async Task UpdateCartItemQuantityAsync(Guid cartId, Guid cartItemId, int quantity)
+    {
+        var cart = await GetCartAsync(cartId);
+        if (cart == null)
+            throw new InvalidOperationException("Cart not found");
+
+        var item = cart.Items.FirstOrDefault(i => i.CartItemId == cartItemId);
+        if (item == null)
+            throw new InvalidOperationException("Cart item not found");
+
+        if (quantity <= 0)
+        {
+            await RemoveCartItemAsync(cartId, cartItemId);
+            return;
+        }
+
+        item.Quantity = quantity;
+        item.TotalPrice = item.Quantity * item.UnitPrice;
+
+        RecalculateCartTotals(cart);
+        cart.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        await _redis.SetAsync($"cart:{cartId}", cart, TimeSpan.FromHours(1));
+    }
+
+    public async Task RemoveCartItemAsync(Guid cartId, Guid cartItemId)
+    {
+        var cart = await GetCartAsync(cartId);
+        if (cart == null)
+            throw new InvalidOperationException("Cart not found");
+
+        var item = cart.Items.FirstOrDefault(i => i.CartItemId == cartItemId);
+        if (item != null)
+        {
+            cart.Items.Remove(item);
+            _context.CartItems.Remove(item);
+
+            RecalculateCartTotals(cart);
+            cart.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await _redis.SetAsync($"cart:{cartId}", cart, TimeSpan.FromHours(1));
+        }
+    }
+
+    public async Task ClearCartAsync(Guid cartId)
+    {
+        var cart = await GetCartAsync(cartId);
+        if (cart == null)
+            throw new InvalidOperationException("Cart not found");
+
+        cart.Items.Clear();
         RecalculateCartTotals(cart);
         cart.UpdatedAt = DateTime.UtcNow;
 
@@ -220,6 +327,16 @@ public class OrderService : IOrderService
             .Include(o => o.Items)
             .Include(o => o.StatusHistory)
             .FirstOrDefaultAsync(o => o.OrderId == orderId);
+    }
+
+    public async Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId)
+    {
+        return await _context.Orders
+            .Include(o => o.Items)
+            .Include(o => o.StatusHistory)
+            .Where(o => o.CustomerId == customerId)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
     }
 
     public async Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null)

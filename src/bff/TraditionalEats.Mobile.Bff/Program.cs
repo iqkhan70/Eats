@@ -1,4 +1,8 @@
 using TraditionalEats.BuildingBlocks.Configuration;
+using TraditionalEats.BuildingBlocks.Redis;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +12,52 @@ builder.Configuration.AddSharedConfiguration(builder.Environment);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Redis for cart session management
+builder.Services.AddRedis(builder.Configuration);
+
+// JWT Authentication (optional - allows extracting customerId from token)
+var jwtSecret = builder.Configuration["Jwt:Secret"] 
+    ?? builder.Configuration["Jwt:Key"]
+    ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+        };
+        // Don't fail if token is missing (for anonymous access)
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning(context.Exception, "JWT authentication failed: {Error}", context.Exception?.Message);
+                context.NoResult();
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                logger.LogInformation("JWT token validated successfully for user: {UserId}", userId);
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // Add HTTP clients for downstream services
 builder.Services.AddHttpClient("IdentityService", client =>

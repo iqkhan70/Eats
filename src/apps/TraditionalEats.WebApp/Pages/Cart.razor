@@ -1,0 +1,217 @@
+@page "/cart"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Services
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject CartService CartService
+@inject NotificationService NotificationService
+
+<PageTitle>Cart - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">Shopping Cart</RadzenText>
+    </RadzenStack>
+
+    @if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (cart != null && cart.Items != null && cart.Items.Any())
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                @foreach (var item in cart.Items)
+                {
+                    <RadzenCard>
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
+                            <RadzenStack Gap="0.5rem" Style="flex: 1; min-width: 200px;">
+                                <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: bold;">@item.Name</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                    $@item.UnitPrice.ToString("F2") each
+                                </RadzenText>
+                            </RadzenStack>
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                <RadzenButton Icon="remove" Click="@(() => DecreaseQuantity(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                                <RadzenText TextStyle="TextStyle.Body1" Style="min-width: 30px; text-align: center;">@item.Quantity</RadzenText>
+                                <RadzenButton Icon="add" Click="@(() => IncreaseQuantity(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                            </RadzenStack>
+                            <RadzenText TextStyle="TextStyle.H4" Style="min-width: 80px; text-align: right;">
+                                $@item.TotalPrice.ToString("F2")
+                            </RadzenText>
+                            <RadzenButton Icon="delete" Click="@(() => RemoveItem(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        </RadzenStack>
+                    </RadzenCard>
+                }
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenStack Gap="0.75rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenText TextStyle="TextStyle.Body1">Subtotal</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body1">$@cart.Subtotal.ToString("F2")</RadzenText>
+                </RadzenStack>
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenText TextStyle="TextStyle.Body1">Tax</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body1">$@cart.Tax.ToString("F2")</RadzenText>
+                </RadzenStack>
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenText TextStyle="TextStyle.Body1">Delivery Fee</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body1">$@cart.DeliveryFee.ToString("F2")</RadzenText>
+                </RadzenStack>
+                <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">Total</RadzenText>
+                    <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold; color: var(--rz-primary);">
+                        $@cart.Total.ToString("F2")
+                    </RadzenText>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenFormField Text="Delivery Address" class="w-100">
+                    <RadzenTextBox @bind-Value="@deliveryAddress" Placeholder="Enter your delivery address" />
+                </RadzenFormField>
+                <RadzenButton Text="Place Order" Icon="shopping_cart" Click="@PlaceOrder" Variant="Variant.Filled" 
+                             IsLoading="@placingOrder" Disabled="@isPlaceOrderDisabled" 
+                             Class="w-100" />
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem" Style="align-items: center; padding: 2rem;">
+                <RadzenIcon Icon="shopping_cart" Style="font-size: 64px; color: var(--rz-text-secondary-color);" />
+                <RadzenText TextStyle="TextStyle.H3">Your cart is empty</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
+                    Add items from the menu to get started
+                </RadzenText>
+                <RadzenButton Text="Browse Restaurants" Icon="restaurant" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" 
+                             Variant="Variant.Flat" />
+            </RadzenStack>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private bool loading = true;
+    private bool placingOrder = false;
+    private CartDto? cart;
+    private string deliveryAddress = string.Empty;
+
+    private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCart();
+    }
+
+    private async Task LoadCart()
+    {
+        try
+        {
+            loading = true;
+            cart = await CartService.GetCartAsync();
+            Console.WriteLine($"Cart loaded: CartId={cart?.CartId}, Items.Count={cart?.Items?.Count ?? 0}");
+            if (cart != null && cart.Items != null)
+            {
+                Console.WriteLine($"Cart has {cart.Items.Count} items");
+                foreach (var item in cart.Items)
+                {
+                    Console.WriteLine($"  - {item.Name} x{item.Quantity}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Cart is null or has no items");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading cart: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            cart = null;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task IncreaseQuantity(CartItemDto item)
+    {
+        if (cart == null) return;
+        await CartService.UpdateCartItemQuantityAsync(cart.CartId, item.CartItemId, item.Quantity + 1);
+        await LoadCart();
+        // Trigger navigation to refresh cart count in MainLayout
+        NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+    }
+
+    private async Task DecreaseQuantity(CartItemDto item)
+    {
+        if (cart == null) return;
+        if (item.Quantity > 1)
+        {
+            await CartService.UpdateCartItemQuantityAsync(cart.CartId, item.CartItemId, item.Quantity - 1);
+            await LoadCart();
+            // Trigger navigation to refresh cart count in MainLayout
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+        }
+        else
+        {
+            await RemoveItem(item);
+        }
+    }
+
+    private async Task RemoveItem(CartItemDto item)
+    {
+        if (cart == null) return;
+        await CartService.RemoveCartItemAsync(cart.CartId, item.CartItemId);
+        await LoadCart();
+        // Trigger navigation to refresh cart count in MainLayout
+        NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+    }
+
+    private async Task PlaceOrder()
+    {
+        if (cart == null || string.IsNullOrWhiteSpace(deliveryAddress)) return;
+
+        try
+        {
+            placingOrder = true;
+            var orderId = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress);
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Success, 
+                Summary = "Order Placed", 
+                Detail = $"Your order #{orderId.ToString().Substring(0, 8)} has been placed successfully!" 
+            });
+            NavigationManager.NavigateTo("/orders");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Order Failed", 
+                Detail = $"Failed to place order: {ex.Message}" 
+            });
+        }
+        finally
+        {
+            placingOrder = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/restaurants");
+    }
+}

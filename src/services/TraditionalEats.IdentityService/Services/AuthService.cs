@@ -227,9 +227,13 @@ public class AuthService : IAuthService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        // Get JWT issuer and audience with fallbacks
+        var jwtIssuer = _configuration["Jwt:Issuer"] ?? "TraditionalEats";
+        var jwtAudience = _configuration["Jwt:Audience"] ?? "TraditionalEats";
+
         var token = new JwtSecurityToken(
-            issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            issuer: jwtIssuer,
+            audience: jwtAudience,
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: creds);
