@@ -77,9 +77,25 @@ class CartService {
   }
 
   async createCart(restaurantId?: string): Promise<string> {
-    const request = restaurantId ? { restaurantId } : {};
-    const response = await api.post<{ cartId: string }>('/MobileBff/cart', request);
-    return response.data.cartId;
+    try {
+      const request = restaurantId ? { restaurantId } : {};
+      console.log('Creating cart with request:', request);
+      const response = await api.post<{ cartId: string }>('/MobileBff/cart', request);
+      
+      if (!response.data || !response.data.cartId) {
+        throw new Error('Cart creation failed: No cartId returned');
+      }
+      
+      console.log('Cart created successfully:', response.data.cartId);
+      return response.data.cartId;
+    } catch (error: any) {
+      console.error('Error creating cart:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', JSON.stringify(error.response.data));
+      }
+      throw error;
+    }
   }
 
   async addItemToCart(
@@ -89,13 +105,53 @@ class CartService {
     price: number,
     quantity: number = 1
   ): Promise<void> {
-    await api.post(`/MobileBff/cart/${cartId}/items`, {
-      menuItemId,
-      name,
-      price,
-      quantity,
-      options: null,
-    });
+    try {
+      // Validate cartId
+      if (!cartId || cartId.trim() === '') {
+        throw new Error(`Invalid CartId: cartId is empty or null`);
+      }
+      
+      // Validate GUID format for cartId
+      if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(cartId)) {
+        throw new Error(`Invalid CartId format: ${cartId}`);
+      }
+      
+      // Validate menuItemId
+      if (!menuItemId || menuItemId.trim() === '') {
+        throw new Error(`Invalid MenuItemId: menuItemId is empty or null`);
+      }
+      
+      // Validate GUID format for menuItemId
+      if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(menuItemId)) {
+        throw new Error(`Invalid MenuItemId format: ${menuItemId}`);
+      }
+      
+      console.log('addItemToCart: Adding item to cart:', { cartId, menuItemId, name, price, quantity });
+      
+      const requestBody = {
+        menuItemId: menuItemId,
+        name: name,
+        price: price,
+        quantity: quantity,
+        options: null as { [key: string]: string } | null
+      };
+      
+      console.log('addItemToCart: Request body:', JSON.stringify(requestBody));
+      console.log('addItemToCart: Sending to URL:', `/MobileBff/cart/${cartId}/items`);
+      
+      const response = await api.post(`/MobileBff/cart/${cartId}/items`, requestBody);
+      console.log('Item added to cart successfully:', response.status);
+    } catch (error: any) {
+      console.error('Error adding item to cart:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+        // Re-throw with more context
+        const errorMessage = error.response.data?.error || error.response.data?.message || error.response.data?.title || `Failed to add item: ${error.response.status}`;
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
   }
 
   async updateCartItemQuantity(cartId: string, cartItemId: string, quantity: number): Promise<void> {

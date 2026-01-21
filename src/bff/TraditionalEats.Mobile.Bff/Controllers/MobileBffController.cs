@@ -392,10 +392,48 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpPost("cart/{cartId}/items")]
-    public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest request)
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest? request)
     {
         try
         {
+            _logger.LogInformation("AddItemToCart called for cartId: {CartId}", cartId);
+            _logger.LogInformation("Request body received: {@Request}", request);
+            
+            if (request == null)
+            {
+                _logger.LogWarning("AddItemToCart request is null - request body was not deserialized");
+                return BadRequest(new { error = "Request body is required and must be valid JSON" });
+            }
+            
+            // Validate required fields
+            if (request.MenuItemId == Guid.Empty)
+            {
+                _logger.LogWarning("AddItemToCart MenuItemId is empty. Request: {@Request}", request);
+                return BadRequest(new { error = "MenuItemId is required and must be a valid GUID", receivedMenuItemId = request.MenuItemId });
+            }
+            
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                _logger.LogWarning("AddItemToCart Name is empty");
+                return BadRequest(new { error = "Name is required" });
+            }
+            
+            if (request.Price < 0)
+            {
+                _logger.LogWarning("AddItemToCart Price is negative: {Price}", request.Price);
+                return BadRequest(new { error = "Price must be non-negative" });
+            }
+            
+            if (request.Quantity <= 0)
+            {
+                _logger.LogWarning("AddItemToCart Quantity is invalid: {Quantity}", request.Quantity);
+                return BadRequest(new { error = "Quantity must be positive" });
+            }
+            
+            _logger.LogInformation("AddItemToCart validation passed. Forwarding to OrderService: CartId={CartId}, MenuItemId={MenuItemId}, Name={Name}, Price={Price}, Quantity={Quantity}", 
+                cartId, request.MenuItemId, request.Name, request.Price, request.Quantity);
+            
             var client = _httpClientFactory.CreateClient("OrderService");
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items")
             {
@@ -406,16 +444,27 @@ public class MobileBffController : ControllerBase
             if (Request.Headers.TryGetValue("Authorization", out var authHeader))
             {
                 httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+                _logger.LogInformation("Forwarded Authorization header to OrderService");
             }
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation("OrderService response for AddItemToCart: StatusCode={StatusCode}, Content={Content}", 
+                response.StatusCode, content);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("OrderService returned error: StatusCode={StatusCode}, Content={Content}", 
+                    response.StatusCode, content);
+            }
+            
             return StatusCode((int)response.StatusCode, content);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding item to cart");
-            return StatusCode(500, new { error = "Failed to add item to cart" });
+            _logger.LogError(ex, "Error adding item to cart: {Message}, StackTrace: {StackTrace}", ex.Message, ex.StackTrace);
+            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
         }
     }
 
@@ -534,11 +583,11 @@ public class MobileBffController : ControllerBase
 
 public record CreateCartRequest(Guid? RestaurantId);
 public record AddCartItemRequest(
-    Guid MenuItemId,
-    string Name,
-    decimal Price,
-    int Quantity,
-    Dictionary<string, string>? Options
+    [System.Text.Json.Serialization.JsonPropertyName("menuItemId")] Guid MenuItemId,
+    [System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
+    [System.Text.Json.Serialization.JsonPropertyName("price")] decimal Price,
+    [System.Text.Json.Serialization.JsonPropertyName("quantity")] int Quantity,
+    [System.Text.Json.Serialization.JsonPropertyName("options")] Dictionary<string, string>? Options
 );
 public record UpdateCartItemRequest(int Quantity);
 public record PlaceOrderRequest(

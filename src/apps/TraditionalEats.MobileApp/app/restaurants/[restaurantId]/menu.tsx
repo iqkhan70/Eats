@@ -39,6 +39,8 @@ export default function MenuScreen() {
   useEffect(() => {
     loadMenu();
     loadCategories();
+    // Reset cartId when restaurant changes
+    setCurrentCartId(null);
   }, [restaurantId, selectedCategoryId]);
 
   const loadMenu = async () => {
@@ -91,27 +93,60 @@ export default function MenuScreen() {
     try {
       setAddingItemId(item.menuItemId);
 
-      // Get or create cart
-      if (!currentCartId) {
+      // Get or create cart - ensure we have a valid cartId before proceeding
+      // Use local variable to avoid race condition with async state updates
+      let cartIdToUse = currentCartId;
+      
+      console.log('addToCart: Starting with currentCartId:', cartIdToUse);
+      
+      if (!cartIdToUse) {
+        console.log('addToCart: No currentCartId, fetching or creating cart...');
         const cart = await cartService.getCart();
-        if (cart) {
-          setCurrentCartId(cart.cartId);
+        console.log('addToCart: getCart result:', cart ? { cartId: cart.cartId, restaurantId: cart.restaurantId } : 'null');
+        
+        if (cart && cart.cartId) {
+          cartIdToUse = cart.cartId;
           // If cart is for a different restaurant, create a new one
           if (cart.restaurantId && cart.restaurantId !== restaurantId) {
-            const newCartId = await cartService.createCart(restaurantId);
-            setCurrentCartId(newCartId);
+            console.log('addToCart: Cart is for different restaurant, creating new cart...');
+            cartIdToUse = await cartService.createCart(restaurantId);
+            console.log('addToCart: New cart created:', cartIdToUse);
           }
         } else {
-          const newCartId = await cartService.createCart(restaurantId);
-          setCurrentCartId(newCartId);
+          console.log('addToCart: No existing cart, creating new cart...');
+          cartIdToUse = await cartService.createCart(restaurantId);
+          console.log('addToCart: New cart created:', cartIdToUse);
         }
+        
+        // Update state with the cartId we'll use (for future calls)
+        setCurrentCartId(cartIdToUse);
       }
 
-      await cartService.addItemToCart(currentCartId!, item.menuItemId, item.name, item.price, 1);
+      // Validate cartId before proceeding
+      if (!cartIdToUse || cartIdToUse.trim() === '') {
+        console.error('addToCart: Invalid cartId:', cartIdToUse);
+        throw new Error('Failed to create or retrieve cart');
+      }
+
+      // Validate menuItemId
+      if (!item.menuItemId || item.menuItemId.trim() === '') {
+        console.error('addToCart: Invalid menuItemId:', item.menuItemId);
+        throw new Error('MenuItem ID is missing');
+      }
+
+      console.log('addToCart: Adding item with validated IDs:', { 
+        cartId: cartIdToUse, 
+        menuItemId: item.menuItemId,
+        name: item.name,
+        price: item.price
+      });
+      
+      await cartService.addItemToCart(cartIdToUse, item.menuItemId, item.name, item.price, 1);
       Alert.alert('Success', `${item.name} added to cart`);
     } catch (error: any) {
       console.error('Error adding to cart:', error);
-      Alert.alert('Error', 'Failed to add item to cart');
+      const errorMessage = error.message || 'Failed to add item to cart';
+      Alert.alert('Error', errorMessage);
     } finally {
       setAddingItemId(null);
     }

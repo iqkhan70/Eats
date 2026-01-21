@@ -42,17 +42,21 @@ class ApiClient {
             hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/app.config.ts with your computer's IP address.`
           });
         } else if (error.response) {
-          // Don't log 404/204 errors for cart endpoints (empty cart is valid)
+          // Don't log 404/204 errors for GET cart endpoints (empty cart is valid)
+          // But do log errors for POST/PUT/DELETE cart operations
           const url = error.config?.url || '';
-          const isCartEndpoint = url.includes('/cart');
+          const method = error.config?.method?.toUpperCase() || '';
+          const isCartGetEndpoint = url.includes('/cart') && method === 'GET';
           const isExpectedEmptyResponse = error.response.status === 404 || error.response.status === 204;
 
-          if (!(isCartEndpoint && isExpectedEmptyResponse)) {
+          // Only suppress logging for GET cart requests that return 404/204
+          if (!(isCartGetEndpoint && isExpectedEmptyResponse)) {
             console.error('❌ API Error:', {
               status: error.response.status,
               statusText: error.response.statusText,
               data: error.response.data,
-              url: url
+              url: url,
+              method: method
             });
           }
         } else if (error.request) {
