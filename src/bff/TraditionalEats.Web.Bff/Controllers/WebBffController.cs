@@ -10,56 +10,55 @@ public class WebBffController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WebBffController> _logger;
-    private readonly IRedisService _redis;
+    private readonly ICartSessionService _cartSessionService;
     private const string SESSION_COOKIE_NAME = "cart_session";
-    private const string CART_SESSION_PREFIX = "cart_session:";
 
     public WebBffController(
         IHttpClientFactory httpClientFactory, 
         ILogger<WebBffController> logger,
-        IRedisService redis)
+        ICartSessionService cartSessionService)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-        _redis = redis;
+        _cartSessionService = cartSessionService;
     }
 
-    private string GetOrCreateSessionId()
+    private async Task<string> GetOrCreateSessionIdAsync()
     {
-        // Try to get session ID from cookie
-        if (Request.Cookies.TryGetValue(SESSION_COOKIE_NAME, out var sessionId) && !string.IsNullOrEmpty(sessionId))
+        // Try to get session ID from header first (for Blazor WebAssembly)
+        string? existingSessionId = null;
+        if (Request.Headers.TryGetValue("X-Cart-Session-Id", out var headerSessionId))
         {
-            return sessionId;
+            var headerValue = headerSessionId.ToString();
+            if (!string.IsNullOrWhiteSpace(headerValue))
+            {
+                existingSessionId = headerValue;
+            }
+        }
+        
+        // Fallback to cookie (for server-side scenarios)
+        if (string.IsNullOrEmpty(existingSessionId) && Request.Cookies.TryGetValue(SESSION_COOKIE_NAME, out var cookieSessionId) && !string.IsNullOrEmpty(cookieSessionId))
+        {
+            existingSessionId = cookieSessionId;
         }
 
-        // Create new session ID
-        sessionId = Guid.NewGuid().ToString();
-        Response.Cookies.Append(SESSION_COOKIE_NAME, sessionId, new CookieOptions
+        // Get or create session ID using CartSessionService
+        var sessionId = await _cartSessionService.GetOrCreateSessionIdAsync(existingSessionId);
+
+        // If we got a new session ID, set it in the cookie (for server-side scenarios)
+        // Note: For Blazor WebAssembly, the client manages the session ID in localStorage
+        if (existingSessionId != sessionId && string.IsNullOrEmpty(existingSessionId))
         {
-            HttpOnly = true,
-            Secure = false, // Set to true in production with HTTPS
-            SameSite = SameSiteMode.Lax,
-            Expires = DateTimeOffset.UtcNow.AddDays(30)
-        });
+            Response.Cookies.Append(SESSION_COOKIE_NAME, sessionId, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = false, // Set to true in production with HTTPS
+                SameSite = SameSiteMode.Lax,
+                Expires = DateTimeOffset.UtcNow.AddDays(30)
+            });
+        }
 
         return sessionId;
-    }
-
-    private async Task<Guid?> GetCartIdFromSessionAsync()
-    {
-        var sessionId = GetOrCreateSessionId();
-        var cartIdString = await _redis.GetAsync<string>($"{CART_SESSION_PREFIX}{sessionId}");
-        if (Guid.TryParse(cartIdString, out var cartId))
-        {
-            return cartId;
-        }
-        return null;
-    }
-
-    private async Task StoreCartIdInSessionAsync(Guid cartId)
-    {
-        var sessionId = GetOrCreateSessionId();
-        await _redis.SetAsync($"{CART_SESSION_PREFIX}{sessionId}", cartId.ToString(), TimeSpan.FromDays(30));
     }
 
         [HttpGet("restaurants")]
@@ -260,12 +259,80 @@ public class WebBffController : ControllerBase
                 return BadRequest(new { error = "Email and password are required" });
             }
 
+            // Get guest session ID before login (for cart merge)
+            var guestSessionId = await GetOrCreateSessionIdAsync();
+            var guestCartId = await _cartSessionService.GetCartIdForSessionAsync(guestSessionId);
+
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/login", request);
 
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
+                
+                // Parse the login response to get user ID and merge carts
+                try
+                {
+                    var loginResponse = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
+                    string? userIdString = null;
+                    
+                    // Try to get userId from various possible response formats
+                    if (loginResponse.TryGetProperty("userId", out var userIdElement))
+                    {
+                        userIdString = userIdElement.GetString();
+                    }
+                    else if (loginResponse.TryGetProperty("user", out var userElement) && 
+                             userElement.TryGetProperty("id", out var idElement))
+                    {
+                        userIdString = idElement.GetString();
+                    }
+                    else if (loginResponse.TryGetProperty("id", out var idElement2))
+                    {
+                        userIdString = idElement2.GetString();
+                    }
+
+                    // If we have a user ID and a guest cart, merge them
+                    if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var userId) && guestCartId.HasValue)
+                    {
+                        _logger.LogInformation("Merging guest cart {GuestCartId} into user cart for user {UserId}", 
+                            guestCartId.Value, userId);
+                        
+                        var userCartId = await _cartSessionService.GetCartIdForUserAsync(userId);
+                        
+                        // Call OrderService to merge carts
+                        var orderClient = _httpClientFactory.CreateClient("OrderService");
+                        var mergeUrl = userCartId.HasValue
+                            ? $"/api/order/cart/merge?guestCartId={guestCartId.Value}&userCartId={userCartId.Value}"
+                            : $"/api/order/cart/merge?guestCartId={guestCartId.Value}&userCartId={Guid.Empty}";
+                        
+                        var mergeResponse = await orderClient.PostAsync(mergeUrl, null);
+                        
+                        if (mergeResponse.IsSuccessStatusCode)
+                        {
+                            var mergeContent = await mergeResponse.Content.ReadAsStringAsync();
+                            var mergedCart = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(mergeContent);
+                            if (mergedCart.TryGetProperty("cartId", out var mergedCartIdElement))
+                            {
+                                var finalCartId = Guid.Parse(mergedCartIdElement.GetString()!);
+                                await _cartSessionService.StoreCartIdForUserAsync(userId, finalCartId);
+                                await _cartSessionService.ClearSessionCartAsync(guestSessionId);
+                                _logger.LogInformation("Successfully merged carts. Final cart ID: {CartId}", finalCartId);
+                            }
+                        }
+                        else
+                        {
+                            // If merge fails, just transfer guest cart to user
+                            await _cartSessionService.StoreCartIdForUserAsync(userId, guestCartId.Value);
+                            await _cartSessionService.ClearSessionCartAsync(guestSessionId);
+                            _logger.LogWarning("Cart merge failed, transferred guest cart to user");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse login response or merge carts, continuing with login");
+                }
+                
                 return Content(content, "application/json");
             }
 
@@ -336,31 +403,17 @@ public class WebBffController : ControllerBase
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> CreateCart([FromBody] CreateCartRequest? request = null)
     {
-        _logger.LogInformation("CreateCart called with request: {@Request}", request);
         try
         {
-            // Log authentication state
-            _logger.LogInformation("User.Identity.IsAuthenticated: {IsAuthenticated}", User.Identity?.IsAuthenticated ?? false);
-            
             // Extract customerId from JWT token if user is authenticated
             Guid? customerId = null;
             if (User.Identity?.IsAuthenticated == true)
             {
                 var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                _logger.LogInformation("Found userIdClaim: {UserIdClaim}", userIdClaim ?? "null");
                 if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
                 {
                     customerId = userId;
-                    _logger.LogInformation("Extracted customerId {CustomerId} from JWT token", customerId);
                 }
-                else
-                {
-                    _logger.LogWarning("Failed to parse userIdClaim as Guid: {UserIdClaim}", userIdClaim);
-                }
-            }
-            else
-            {
-                _logger.LogInformation("User is not authenticated");
             }
 
             var client = _httpClientFactory.CreateClient("OrderService");
@@ -369,14 +422,7 @@ public class WebBffController : ControllerBase
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/cart");
             if (Request.Headers.TryGetValue("Authorization", out var authHeader))
             {
-                var authHeaderValue = authHeader.ToString();
-                _logger.LogInformation("Forwarding Authorization header to OrderService: {AuthHeader}", 
-                    authHeaderValue.Substring(0, Math.Min(20, authHeaderValue.Length)) + "...");
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeaderValue);
-            }
-            else
-            {
-                _logger.LogInformation("No Authorization header found in request");
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
             }
             
             var requestBody = new CreateCartRequest(request?.RestaurantId);
@@ -384,9 +430,6 @@ public class WebBffController : ControllerBase
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
-            
-            _logger.LogInformation("OrderService response for CreateCart: StatusCode={StatusCode}, Content={Content}", 
-                response.StatusCode, content);
             
             if (response.IsSuccessStatusCode)
             {
@@ -398,14 +441,14 @@ public class WebBffController : ControllerBase
                     {
                         if (Guid.TryParse(cartIdElement.GetString(), out var cartId))
                         {
-                            await StoreCartIdInSessionAsync(cartId);
-                            _logger.LogInformation("Stored cartId {CartId} in Redis session", cartId);
+                            var sessionId = await GetOrCreateSessionIdAsync();
+                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to parse cartId from response");
+                    _logger.LogError(ex, "Failed to parse cartId from response");
                 }
             }
             else
@@ -426,13 +469,11 @@ public class WebBffController : ControllerBase
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> GetCart()
     {
-        _logger.LogInformation("GetCart endpoint called");
         try
         {
             // For authenticated users, prioritize getting cart by customerId
             if (User.Identity?.IsAuthenticated == true)
             {
-                _logger.LogInformation("User is authenticated, trying to get cart by customer");
                 var client = _httpClientFactory.CreateClient("OrderService");
                 
                 // Forward JWT token to OrderService
@@ -447,45 +488,10 @@ public class WebBffController : ControllerBase
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("Found cart by customerId. Response length: {Length} bytes", content.Length);
-                    _logger.LogInformation("Cart response content: {Content}", content);
-                    
-                    // Try to parse and log cart structure
-                    try
-                    {
-                        var cartJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
-                        if (cartJson.TryGetProperty("cartId", out var cartIdElement))
-                        {
-                            _logger.LogInformation("Cart ID: {CartId}", cartIdElement.GetString());
-                        }
-                        if (cartJson.TryGetProperty("items", out var items))
-                        {
-                            _logger.LogInformation("Cart has {Count} items", items.GetArrayLength());
-                            foreach (var item in items.EnumerateArray())
-                            {
-                                if (item.TryGetProperty("name", out var name))
-                                {
-                                    _logger.LogInformation("  Item: {Name}, Quantity: {Quantity}", 
-                                        name.GetString(),
-                                        item.TryGetProperty("quantity", out var qty) ? qty.GetInt32() : 0);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Cart response does not have 'items' property");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to parse cart JSON");
-                    }
-                    
                     return Content(content, "application/json");
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
-                    _logger.LogInformation("No cart found for authenticated user");
                     return Ok((object?)null);
                 }
                 
@@ -493,10 +499,11 @@ public class WebBffController : ControllerBase
             }
 
             // For guest users, try to get cartId from Redis session
-            var cartId = await GetCartIdFromSessionAsync();
+            var sessionId = await GetOrCreateSessionIdAsync();
+            var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+            
             if (cartId.HasValue)
             {
-                _logger.LogInformation("Found cartId {CartId} in Redis session for guest user", cartId.Value);
                 var client = _httpClientFactory.CreateClient("OrderService");
                 var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
                 var content = await response.Content.ReadAsStringAsync();
@@ -508,15 +515,12 @@ public class WebBffController : ControllerBase
                 else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     // Cart doesn't exist anymore, clear session
-                    var sessionId = GetOrCreateSessionId();
-                    await _redis.DeleteAsync($"{CART_SESSION_PREFIX}{sessionId}");
-                    _logger.LogInformation("Cart not found, cleared session");
+                    await _cartSessionService.ClearSessionCartAsync(sessionId);
                     return Ok((object?)null);
                 }
             }
 
             // No cart found
-            _logger.LogInformation("No cart found for guest user");
             return Ok((object?)null);
         }
         catch (Exception ex)
@@ -530,14 +534,11 @@ public class WebBffController : ControllerBase
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> GetCartById(Guid cartId)
     {
-        _logger.LogInformation("GetCartById called with cartId: {CartId}", cartId);
         try
         {
             var client = _httpClientFactory.CreateClient("OrderService");
             var response = await client.GetAsync($"/api/order/cart/{cartId}");
             var content = await response.Content.ReadAsStringAsync();
-            
-            _logger.LogInformation("OrderService response for GetCartById: StatusCode={StatusCode}", response.StatusCode);
             
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -557,12 +558,10 @@ public class WebBffController : ControllerBase
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest request)
     {
-        _logger.LogInformation("AddItemToCart called with cartId: {CartId}, request: {@Request}", cartId, request);
         try
         {
             if (request == null)
             {
-                _logger.LogWarning("AddItemToCart: Request body is null");
                 return BadRequest(new { error = "Request body is required" });
             }
 
@@ -570,10 +569,34 @@ public class WebBffController : ControllerBase
             var response = await client.PostAsJsonAsync($"/api/order/cart/{cartId}/items", request);
             var content = await response.Content.ReadAsStringAsync();
             
-            _logger.LogInformation("OrderService response for AddItemToCart: StatusCode={StatusCode}, Content={Content}", 
-                response.StatusCode, content);
-            
-            if (!response.IsSuccessStatusCode)
+            if (response.IsSuccessStatusCode)
+            {
+                // Ensure cartId is stored in Redis session for guest users
+                // This handles the case where cart was created but session wasn't set yet
+                if (User.Identity?.IsAuthenticated != true)
+                {
+                    var sessionId = await GetOrCreateSessionIdAsync();
+                    var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+                    if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                    {
+                        await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                    }
+                }
+                else
+                {
+                    // For authenticated users, store in user cart
+                    var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
+                    {
+                        var existingCartId = await _cartSessionService.GetCartIdForUserAsync(userId);
+                        if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                        {
+                            await _cartSessionService.StoreCartIdForUserAsync(userId, cartId);
+                        }
+                    }
+                }
+            }
+            else
             {
                 _logger.LogWarning("OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
             }

@@ -16,6 +16,7 @@ public interface IOrderService
     Task UpdateCartItemQuantityAsync(Guid cartId, Guid cartItemId, int quantity);
     Task RemoveCartItemAsync(Guid cartId, Guid cartItemId);
     Task ClearCartAsync(Guid cartId);
+    Task<Guid> MergeCartsAsync(Guid guestCartId, Guid userCartId);
     Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string idempotencyKey);
     Task<Order?> GetOrderAsync(Guid orderId);
     Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId);
@@ -98,7 +99,7 @@ public class OrderService : IOrderService
 
     public async Task AddItemToCartAsync(Guid cartId, Guid menuItemId, string name, decimal price, int quantity, Dictionary<string, string>? options)
     {
-        // Always get from database to ensure EF Core tracking
+        // Always load with tracking to ensure EF Core can detect changes
         var cart = await _context.Carts
             .Include(c => c.Items)
             .FirstOrDefaultAsync(c => c.CartId == cartId);
@@ -106,13 +107,12 @@ public class OrderService : IOrderService
         if (cart == null)
             throw new InvalidOperationException("Cart not found");
 
-        // Check for existing item - reload from database to ensure we have the latest items
-        // This prevents duplicate items if the method is called concurrently
-        await _context.Entry(cart).Collection(c => c.Items).LoadAsync();
-        
+        // Check if item already exists in the tracked cart
         var existingItem = cart.Items.FirstOrDefault(i => i.MenuItemId == menuItemId);
+        
         if (existingItem != null)
         {
+            // Item exists - update quantity
             _logger.LogInformation("Updating existing cart item: MenuItemId={MenuItemId}, CurrentQuantity={CurrentQuantity}, AddingQuantity={AddingQuantity}", 
                 menuItemId, existingItem.Quantity, quantity);
             existingItem.Quantity += quantity;
@@ -120,6 +120,7 @@ public class OrderService : IOrderService
         }
         else
         {
+            // Item doesn't exist - add new one
             _logger.LogInformation("Adding new cart item: MenuItemId={MenuItemId}, Quantity={Quantity}", menuItemId, quantity);
             var cartItem = new CartItem
             {
@@ -132,7 +133,6 @@ public class OrderService : IOrderService
                 TotalPrice = price * quantity,
                 SelectedOptionsJson = options != null ? System.Text.Json.JsonSerializer.Serialize(options) : null
             };
-            // Explicitly add to context to ensure EF Core tracks it
             _context.CartItems.Add(cartItem);
             cart.Items.Add(cartItem);
         }
@@ -142,12 +142,13 @@ public class OrderService : IOrderService
 
         await _context.SaveChangesAsync();
         
-        // Invalidate cache to ensure fresh data on next read
+        // Invalidate cache and reload cart to get latest state
         await _redis.DeleteAsync($"cart:{cartId}");
         
-        // Reload cart from database to get the latest state
+        // Reload cart from database to get the latest state for caching
         cart = await _context.Carts
             .Include(c => c.Items)
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.CartId == cartId);
         
         if (cart != null)
@@ -236,6 +237,102 @@ public class OrderService : IOrderService
 
         await _context.SaveChangesAsync();
         await _redis.SetAsync($"cart:{cartId}", cart, TimeSpan.FromHours(1));
+    }
+
+    public async Task<Guid> MergeCartsAsync(Guid guestCartId, Guid userCartId)
+    {
+        _logger.LogInformation("Merging guest cart {GuestCartId} into user cart {UserCartId}", guestCartId, userCartId);
+        
+        var guestCart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CartId == guestCartId);
+        
+        var userCart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CartId == userCartId);
+
+        if (guestCart == null)
+        {
+            _logger.LogWarning("Guest cart {GuestCartId} not found, returning user cart {UserCartId}", guestCartId, userCartId);
+            return userCartId;
+        }
+
+        if (userCart == null)
+        {
+            _logger.LogWarning("User cart {UserCartId} not found, transferring guest cart {GuestCartId} to user", userCartId, guestCartId);
+            // Transfer guest cart to user - just return the guest cart ID
+            // The caller will update the customerId in the database
+            return guestCartId;
+        }
+
+        // If carts are from different restaurants, prefer the most recently updated one
+        if (guestCart.RestaurantId.HasValue && userCart.RestaurantId.HasValue && 
+            guestCart.RestaurantId != userCart.RestaurantId)
+        {
+            _logger.LogInformation("Carts are from different restaurants. Guest: {GuestRestaurantId}, User: {UserRestaurantId}. Preferring most recent.", 
+                guestCart.RestaurantId, userCart.RestaurantId);
+            
+            // Prefer the most recently updated cart
+            if (guestCart.UpdatedAt > userCart.UpdatedAt)
+            {
+                _logger.LogInformation("Guest cart is more recent, replacing user cart");
+                // Clear user cart and transfer guest cart items
+                userCart.Items.Clear();
+                foreach (var item in guestCart.Items)
+                {
+                    item.CartId = userCartId;
+                    item.Cart = userCart;
+                    userCart.Items.Add(item);
+                }
+                userCart.RestaurantId = guestCart.RestaurantId;
+            }
+            else
+            {
+                _logger.LogInformation("User cart is more recent, keeping user cart");
+            }
+        }
+        else
+        {
+            // Same restaurant - merge items by MenuItemId
+            _logger.LogInformation("Merging items from guest cart into user cart (same restaurant)");
+            foreach (var guestItem in guestCart.Items)
+            {
+                var existingItem = userCart.Items.FirstOrDefault(i => i.MenuItemId == guestItem.MenuItemId);
+                if (existingItem != null)
+                {
+                    // Merge quantities
+                    existingItem.Quantity += guestItem.Quantity;
+                    existingItem.TotalPrice = existingItem.Quantity * existingItem.UnitPrice;
+                    _logger.LogDebug("Merged item {MenuItemId}: New quantity = {Quantity}", guestItem.MenuItemId, existingItem.Quantity);
+                }
+                else
+                {
+                    // Add new item to user cart
+                    guestItem.CartId = userCartId;
+                    guestItem.Cart = userCart;
+                    userCart.Items.Add(guestItem);
+                    _logger.LogDebug("Added new item {MenuItemId} to user cart", guestItem.MenuItemId);
+                }
+            }
+        }
+
+        RecalculateCartTotals(userCart);
+        userCart.UpdatedAt = DateTime.UtcNow;
+
+        // Delete guest cart items from database
+        _context.CartItems.RemoveRange(guestCart.Items);
+        _context.Carts.Remove(guestCart);
+
+        await _context.SaveChangesAsync();
+
+        // Update Redis cache
+        await _redis.DeleteAsync($"cart:{guestCartId}");
+        await _redis.SetAsync($"cart:{userCartId}", userCart, TimeSpan.FromHours(1));
+
+        _logger.LogInformation("Successfully merged carts. Final cart ID: {UserCartId}, Item count: {ItemCount}", 
+            userCartId, userCart.Items.Count);
+
+        return userCartId;
     }
 
     public async Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string idempotencyKey)

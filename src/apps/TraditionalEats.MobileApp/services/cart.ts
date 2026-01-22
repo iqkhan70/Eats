@@ -26,48 +26,24 @@ export interface CartItem {
 class CartService {
   async getCart(): Promise<Cart | null> {
     try {
-      // Check if user is authenticated
-      const { authService } = await import('./auth');
-      const isAuthenticated = await authService.isAuthenticated();
-      const token = await authService.getAccessToken();
-      console.log('Getting cart from MobileBff...', {
-        isAuthenticated,
-        hasToken: !!token,
-        tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
-      });
-      
       const response = await api.get<Cart>('/MobileBff/cart');
-      console.log('Cart response status:', response.status);
       if (response.status === 200 || response.status === 204) {
         // Handle empty response (204 No Content)
         if (response.status === 204 || !response.data) {
-          console.log('Cart is empty (204 or no data)');
           return null;
         }
         // Ensure items array exists
         if (response.data && !response.data.items) {
           response.data.items = [];
         }
-        console.log('Cart loaded successfully:', {
-          cartId: response.data.cartId,
-          itemCount: response.data.items?.length || 0,
-          customerId: response.data.customerId
-        });
         return response.data;
       }
       return null;
     } catch (error: any) {
       // Handle 404 (cart not found) as a valid empty cart
       if (error.response?.status === 404 || error.response?.status === 204) {
-        console.log('Cart not found (404/204) - returning null');
-        console.log('This might mean:', {
-          notLoggedIn: 'User might not be logged in on mobile',
-          noCart: 'User has no cart yet',
-          differentAccount: 'Logged in with different account than webapp'
-        });
         return null;
       }
-      console.error('Error getting cart:', error);
       if (error.response) {
         console.error('Response status:', error.response.status);
         console.error('Response data:', error.response.data);
@@ -79,17 +55,14 @@ class CartService {
   async createCart(restaurantId?: string): Promise<string> {
     try {
       const request = restaurantId ? { restaurantId } : {};
-      console.log('Creating cart with request:', request);
       const response = await api.post<{ cartId: string }>('/MobileBff/cart', request);
       
       if (!response.data || !response.data.cartId) {
         throw new Error('Cart creation failed: No cartId returned');
       }
       
-      console.log('Cart created successfully:', response.data.cartId);
       return response.data.cartId;
     } catch (error: any) {
-      console.error('Error creating cart:', error);
       if (error.response) {
         console.error('Response status:', error.response.status);
         console.error('Response data:', JSON.stringify(error.response.data));
@@ -126,8 +99,6 @@ class CartService {
         throw new Error(`Invalid MenuItemId format: ${menuItemId}`);
       }
       
-      console.log('addItemToCart: Adding item to cart:', { cartId, menuItemId, name, price, quantity });
-      
       const requestBody = {
         menuItemId: menuItemId,
         name: name,
@@ -136,11 +107,7 @@ class CartService {
         options: null as { [key: string]: string } | null
       };
       
-      console.log('addItemToCart: Request body:', JSON.stringify(requestBody));
-      console.log('addItemToCart: Sending to URL:', `/MobileBff/cart/${cartId}/items`);
-      
-      const response = await api.post(`/MobileBff/cart/${cartId}/items`, requestBody);
-      console.log('Item added to cart successfully:', response.status);
+      await api.post(`/MobileBff/cart/${cartId}/items`, requestBody);
     } catch (error: any) {
       console.error('Error adding item to cart:', error);
       if (error.response) {

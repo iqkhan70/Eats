@@ -234,6 +234,8 @@
         }
         finally
         {
+            // Reset flags after a delay to prevent rapid double-clicks
+            await Task.Delay(500);
             addingItemId = null;
             isAddingToCart = false;
         }

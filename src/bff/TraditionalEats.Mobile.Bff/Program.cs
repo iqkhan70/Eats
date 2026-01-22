@@ -21,6 +21,9 @@ builder.Services.AddSwaggerGen();
 // Redis for cart session management
 builder.Services.AddRedis(builder.Configuration);
 
+// Cart session service for guest and authenticated user cart management
+builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Redis.ICartSessionService, TraditionalEats.BuildingBlocks.Redis.CartSessionService>();
+
 // JWT Authentication (optional - allows extracting customerId from token)
 var jwtSecret = builder.Configuration["Jwt:Secret"] 
     ?? builder.Configuration["Jwt:Key"]

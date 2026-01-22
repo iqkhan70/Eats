@@ -119,19 +119,6 @@
         {
             loading = true;
             cart = await CartService.GetCartAsync();
-            Console.WriteLine($"Cart loaded: CartId={cart?.CartId}, Items.Count={cart?.Items?.Count ?? 0}");
-            if (cart != null && cart.Items != null)
-            {
-                Console.WriteLine($"Cart has {cart.Items.Count} items");
-                foreach (var item in cart.Items)
-                {
-                    Console.WriteLine($"  - {item.Name} x{item.Quantity}");
-                }
-            }
-            else
-            {
-                Console.WriteLine("Cart is null or has no items");
-            }
         }
         catch (Exception ex)
         {

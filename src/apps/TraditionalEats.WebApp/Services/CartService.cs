@@ -29,21 +29,11 @@ public class CartService
                 return null;
             }
             var content = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"Cart response content: {content}");
             if (string.IsNullOrWhiteSpace(content) || content == "null")
             {
-                Console.WriteLine("Cart response is null or empty");
                 return null;
             }
             var cart = await response.Content.ReadFromJsonAsync<CartDto>();
-            Console.WriteLine($"Deserialized cart: CartId={cart?.CartId}, Items.Count={cart?.Items?.Count ?? 0}");
-            if (cart != null && cart.Items != null)
-            {
-                foreach (var item in cart.Items)
-                {
-                    Console.WriteLine($"  Item: {item.Name}, Quantity: {item.Quantity}, Price: {item.UnitPrice}");
-                }
-            }
             return cart;
         }
         catch (Exception ex)

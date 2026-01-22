@@ -17,6 +17,7 @@ builder.Services.AddScoped<ContextMenuService>();
 
 // Application services
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<CartSessionService>();
 builder.Services.AddScoped<CartService>();
 
 // HTTP Client for API calls
@@ -45,8 +46,9 @@ builder.Services.AddScoped(sp =>
         apiBaseUri = new UriBuilder(baseUri.Scheme, baseUri.Host, apiPort, "/api/").Uri;
     }
     
-    // Create HttpClient with message handler that adds auth tokens
-    var handler = new AuthTokenHandler(authService);
+    // Create HttpClient with message handler that adds auth tokens and cart session ID
+    var cartSessionService = sp.GetRequiredService<CartSessionService>();
+    var handler = new AuthTokenHandler(authService, cartSessionService);
     return new HttpClient(handler) { BaseAddress = apiBaseUri };
 });
 

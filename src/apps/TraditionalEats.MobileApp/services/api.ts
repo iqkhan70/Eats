@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { APP_CONFIG } from '../config/app.config';
+import { cartSessionService } from './cartSession';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -14,13 +15,19 @@ class ApiClient {
       },
     });
 
-    // Request interceptor to add auth token
+    // Request interceptor to add auth token and cart session ID
     this.client.interceptors.request.use(
       async (config) => {
+        // Add auth token if available
         const token = await AsyncStorage.getItem('access_token');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+
+        // Add cart session ID for guest cart management
+        const sessionId = await cartSessionService.getOrCreateSessionId();
+        config.headers['X-Cart-Session-Id'] = sessionId;
+
         return config;
       },
       (error) => {
