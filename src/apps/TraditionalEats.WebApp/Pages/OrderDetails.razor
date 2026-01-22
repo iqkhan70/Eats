@@ -1,0 +1,291 @@
+@page "/orders/{OrderId}"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Order Details - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+    @if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (order == null)
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem" Style="align-items: center; padding: 2rem;">
+                <RadzenIcon Icon="error" Style="font-size: 64px; color: var(--rz-text-secondary-color);" />
+                <RadzenText TextStyle="TextStyle.H3">Order Not Found</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
+                    The order you're looking for doesn't exist or you don't have permission to view it.
+                </RadzenText>
+                <RadzenButton Text="Back to Orders" Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo("/orders"))" 
+                             Variant="Variant.Flat" />
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenStack Gap="1.5rem">
+            <!-- Header -->
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                <RadzenButton Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo("/orders"))" 
+                             Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <RadzenText TextStyle="TextStyle.H1">Order Details</RadzenText>
+                <div style="width: 40px;"></div> <!-- Spacer for centering -->
+            </RadzenStack>
+
+            <!-- Order Info Card -->
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                        <RadzenStack Gap="0.5rem">
+                            <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">
+                                Order #@order.OrderId.ToString().Substring(0, 8)
+                            </RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                Placed on @order.CreatedAt.ToString("MMM dd, yyyy 'at' HH:mm")
+                            </RadzenText>
+                        </RadzenStack>
+                        <RadzenBadge Text="@order.Status" Style="@GetStatusStyle(order.Status)" />
+                    </RadzenStack>
+
+                    @if (order.EstimatedDeliveryAt.HasValue)
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                            <RadzenIcon Icon="schedule" />
+                            <RadzenText TextStyle="TextStyle.Body1">
+                                Estimated delivery: @order.EstimatedDeliveryAt.Value.ToString("MMM dd, yyyy 'at' HH:mm")
+                            </RadzenText>
+                        </RadzenStack>
+                    }
+
+                    @if (!string.IsNullOrEmpty(order.DeliveryAddress))
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Start">
+                            <RadzenIcon Icon="location_on" />
+                            <RadzenText TextStyle="TextStyle.Body1">
+                                @order.DeliveryAddress
+                            </RadzenText>
+                        </RadzenStack>
+                    }
+                </RadzenStack>
+            </RadzenCard>
+
+            <!-- Status History Timeline -->
+            @if (order.StatusHistory != null && order.StatusHistory.Any())
+            {
+                <RadzenCard>
+                    <RadzenStack Gap="1rem">
+                        <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Order Status</RadzenText>
+                        <RadzenStack Gap="0.5rem">
+                            @foreach (var statusEntry in order.StatusHistory.OrderBy(s => s.ChangedAt))
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Start">
+                                    <div style="display: flex; flex-direction: column; align-items: center; min-width: 24px;">
+                                        <div style="width: 12px; height: 12px; border-radius: 50%; background-color: var(--rz-primary); margin-top: 4px;"></div>
+                                        @if (statusEntry != order.StatusHistory.OrderBy(s => s.ChangedAt).Last())
+                                        {
+                                            <div style="width: 2px; height: 40px; background-color: var(--rz-border-color); margin-top: 4px;"></div>
+                                        }
+                                    </div>
+                                    <RadzenStack Gap="0.25rem" Style="flex: 1;">
+                                        <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: 500;">
+                                            @statusEntry.Status
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                            @statusEntry.ChangedAt.ToString("MMM dd, yyyy 'at' HH:mm")
+                                        </RadzenText>
+                                        @if (!string.IsNullOrEmpty(statusEntry.Notes))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); font-style: italic;">
+                                                @statusEntry.Notes
+                                            </RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </RadzenStack>
+                            }
+                        </RadzenStack>
+                    </RadzenStack>
+                </RadzenCard>
+            }
+
+            <!-- Order Items -->
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Order Items</RadzenText>
+                    <RadzenStack Gap="1rem">
+                        @foreach (var item in order.Items)
+                        {
+                            <RadzenStack Gap="0.5rem">
+                                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Start">
+                                    <RadzenStack Gap="0.25rem" Style="flex: 1;">
+                                        <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: 500;">
+                                            @item.Name
+                                        </RadzenText>
+                                        @if (!string.IsNullOrEmpty(item.Description))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                                @item.Description
+                                            </RadzenText>
+                                        }
+                                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                            Quantity: @item.Quantity × $@item.UnitPrice.ToString("F2")
+                                        </RadzenText>
+                                    </RadzenStack>
+                                    <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: bold;">
+                                        $@item.TotalPrice.ToString("F2")
+                                    </RadzenText>
+                                </RadzenStack>
+                                @if (!string.IsNullOrEmpty(item.ModifiersJson))
+                                {
+                                    try
+                                    {
+                                        var modifiers = System.Text.Json.JsonSerializer.Deserialize<List<string>>(item.ModifiersJson);
+                                        @if (modifiers != null && modifiers.Any())
+                                        {
+                                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
+                                                @foreach (var modifier in modifiers)
+                                                {
+                                                    <RadzenBadge Text="@modifier" Variant="Variant.Flat" Size="BadgeSize.Small" />
+                                                }
+                                            </RadzenStack>
+                                        }
+                                    }
+                                    catch { }
+                                }
+                            </RadzenStack>
+                            @if (item != order.Items.Last())
+                            {
+                                <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0;" />
+                            }
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+
+            <!-- Order Summary -->
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Order Summary</RadzenText>
+                    <RadzenStack Gap="0.75rem">
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body1">Subtotal</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body1">$@order.Subtotal.ToString("F2")</RadzenText>
+                        </RadzenStack>
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body1">Tax</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body1">$@order.Tax.ToString("F2")</RadzenText>
+                        </RadzenStack>
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body1">Delivery Fee</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body1">$@order.DeliveryFee.ToString("F2")</RadzenText>
+                        </RadzenStack>
+                        <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Total</RadzenText>
+                            <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold; color: var(--rz-primary);">
+                                $@order.Total.ToString("F2")
+                            </RadzenText>
+                        </RadzenStack>
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public string OrderId { get; set; } = string.Empty;
+
+    private bool loading = true;
+    private OrderDetailsDto? order;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrder();
+    }
+
+    private async Task LoadOrder()
+    {
+        try
+        {
+            loading = true;
+            if (Guid.TryParse(OrderId, out var orderIdGuid))
+            {
+                var response = await Http.GetFromJsonAsync<OrderDetailsDto>($"WebBff/orders/{orderIdGuid}");
+                order = response;
+            }
+            else
+            {
+                order = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading order: {ex.Message}");
+            order = null;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private string GetStatusStyle(string status)
+    {
+        return status switch
+        {
+            "Pending" => "background-color: #fff3cd; color: #856404;",
+            "Confirmed" => "background-color: #d1ecf1; color: #0c5460;",
+            "Preparing" => "background-color: #d4edda; color: #155724;",
+            "Ready" => "background-color: #cce5ff; color: #004085;",
+            "OutForDelivery" => "background-color: #e2e3e5; color: #383d41;",
+            "Delivered" => "background-color: #d4edda; color: #155724;",
+            "Cancelled" => "background-color: #f8d7da; color: #721c24;",
+            _ => "background-color: #e9ecef; color: #495057;"
+        };
+    }
+
+    public class OrderDetailsDto
+    {
+        public Guid OrderId { get; set; }
+        public Guid CustomerId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal Tax { get; set; }
+        public decimal DeliveryFee { get; set; }
+        public decimal Total { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? DeliveryAddress { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? EstimatedDeliveryAt { get; set; }
+        public DateTime? DeliveredAt { get; set; }
+        public List<OrderItemDetailsDto> Items { get; set; } = new();
+        public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
+    }
+
+    public class OrderItemDetailsDto
+    {
+        public Guid OrderItemId { get; set; }
+        public Guid MenuItemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalPrice { get; set; }
+        public string? ModifiersJson { get; set; }
+    }
+
+    public class OrderStatusHistoryDto
+    {
+        public Guid Id { get; set; }
+        public Guid OrderId { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+        public DateTime ChangedAt { get; set; }
+    }
+}

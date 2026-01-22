@@ -1,9 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace TraditionalEats.OrderService.Entities;
 
 public class OrderStatusHistory
 {
     public Guid Id { get; set; }
     public Guid OrderId { get; set; }
+    [JsonIgnore]
     public Order Order { get; set; } = null!;
     public string Status { get; set; } = string.Empty;
     public string? Notes { get; set; }

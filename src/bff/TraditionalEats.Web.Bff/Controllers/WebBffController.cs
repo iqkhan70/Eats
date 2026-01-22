@@ -562,15 +562,30 @@ public class WebBffController : ControllerBase
         {
             if (request == null)
             {
+                _logger.LogWarning("AddItemToCart: Request body is null");
                 return BadRequest(new { error = "Request body is required" });
             }
 
+            _logger.LogInformation("AddItemToCart: CartId={CartId}, MenuItemId={MenuItemId}, Quantity={Quantity}", 
+                cartId, request.MenuItemId, request.Quantity);
+
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.PostAsJsonAsync($"/api/order/cart/{cartId}/items", request);
+            
+            // Forward JWT token to OrderService if present
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
+            
+            var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
             
             if (response.IsSuccessStatusCode)
             {
+                _logger.LogInformation("AddItemToCart: Successfully added item to cart {CartId}", cartId);
+                
                 // Ensure cartId is stored in Redis session for guest users
                 // This handles the case where cart was created but session wasn't set yet
                 if (User.Identity?.IsAuthenticated != true)
@@ -580,6 +595,7 @@ public class WebBffController : ControllerBase
                     if (!existingCartId.HasValue || existingCartId.Value != cartId)
                     {
                         await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                        _logger.LogInformation("AddItemToCart: Stored cartId {CartId} for session {SessionId}", cartId, sessionId);
                     }
                 }
                 else
@@ -592,20 +608,23 @@ public class WebBffController : ControllerBase
                         if (!existingCartId.HasValue || existingCartId.Value != cartId)
                         {
                             await _cartSessionService.StoreCartIdForUserAsync(userId, cartId);
+                            _logger.LogInformation("AddItemToCart: Stored cartId {CartId} for user {UserId}", cartId, userId);
                         }
                     }
                 }
+                
+                // Return success response
+                return Ok(new { success = true, cartId = cartId });
             }
             else
             {
-                _logger.LogWarning("OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
+                _logger.LogWarning("AddItemToCart: OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
+                return StatusCode((int)response.StatusCode, content);
             }
-            
-            return StatusCode((int)response.StatusCode, content);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding item to cart: {Message}", ex.Message);
+            _logger.LogError(ex, "AddItemToCart: Error adding item to cart: {Message}", ex.Message);
             return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
         }
     }

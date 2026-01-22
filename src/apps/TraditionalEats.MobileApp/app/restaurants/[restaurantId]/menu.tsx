@@ -35,6 +35,7 @@ export default function MenuScreen() {
   const [loading, setLoading] = useState(true);
   const [currentCartId, setCurrentCartId] = useState<string | null>(null);
   const [addingItemId, setAddingItemId] = useState<string | null>(null);
+  const isAddingToCartRef = React.useRef(false);
 
   useEffect(() => {
     loadMenu();
@@ -89,29 +90,33 @@ export default function MenuScreen() {
 
   const addToCart = async (item: MenuItem) => {
     if (!item.isAvailable) return;
+    
+    // Prevent double-tapping - use ref for immediate check
+    if (isAddingToCartRef.current) {
+      console.log('Add to cart already in progress, ignoring duplicate call');
+      return;
+    }
 
     try {
+      isAddingToCartRef.current = true;
       setAddingItemId(item.menuItemId);
 
-      // Get or create cart - ensure we have a valid cartId before proceeding
-      // Use local variable to avoid race condition with async state updates
-      let cartIdToUse = currentCartId;
+      // Always get cart from server first (don't rely on local state)
+      // This ensures we have the correct cartId from Redis session
+      let cart = await cartService.getCart();
+      let cartIdToUse: string | null = null;
       
-      if (!cartIdToUse) {
-        const cart = await cartService.getCart();
-        
-        if (cart && cart.cartId) {
-          cartIdToUse = cart.cartId;
-          // If cart is for a different restaurant, create a new one
-          if (cart.restaurantId && cart.restaurantId !== restaurantId) {
-            cartIdToUse = await cartService.createCart(restaurantId);
-          }
-        } else {
+      if (cart && cart.cartId) {
+        cartIdToUse = cart.cartId;
+        // If cart is for a different restaurant, create a new one
+        if (cart.restaurantId && cart.restaurantId !== restaurantId) {
+          console.log('Cart is for different restaurant, creating new cart');
           cartIdToUse = await cartService.createCart(restaurantId);
         }
-        
-        // Update state with the cartId we'll use (for future calls)
-        setCurrentCartId(cartIdToUse);
+      } else {
+        // No cart exists, create a new one
+        console.log('No cart found, creating new cart');
+        cartIdToUse = await cartService.createCart(restaurantId);
       }
 
       // Validate cartId before proceeding
@@ -124,13 +129,21 @@ export default function MenuScreen() {
         throw new Error('MenuItem ID is missing');
       }
       
+      console.log('Adding item to cart:', { cartId: cartIdToUse, menuItemId: item.menuItemId, price: item.price, quantity: 1 });
       await cartService.addItemToCart(cartIdToUse, item.menuItemId, item.name, item.price, 1);
+      
+      // Update local state for future calls
+      setCurrentCartId(cartIdToUse);
+      
       Alert.alert('Success', `${item.name} added to cart`);
     } catch (error: any) {
       console.error('Error adding to cart:', error);
       const errorMessage = error.message || 'Failed to add item to cart';
       Alert.alert('Error', errorMessage);
     } finally {
+      // Add a small delay before resetting to prevent rapid double-clicks
+      await new Promise(resolve => setTimeout(resolve, 500));
+      isAddingToCartRef.current = false;
       setAddingItemId(null);
     }
   };

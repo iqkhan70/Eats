@@ -200,12 +200,23 @@
         {
             placingOrder = true;
             var orderId = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress);
+            
+            // Clear cart state immediately after successful order placement
+            cart = null;
+            deliveryAddress = string.Empty;
+            
             NotificationService.Notify(new NotificationMessage 
             { 
                 Severity = NotificationSeverity.Success, 
                 Summary = "Order Placed", 
                 Detail = $"Your order #{orderId.ToString().Substring(0, 8)} has been placed successfully!" 
             });
+            
+            // Trigger navigation to refresh cart count in MainLayout
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+            
+            // Navigate to orders page
+            await Task.Delay(100); // Small delay to ensure state updates
             NavigationManager.NavigateTo("/orders");
         }
         catch (Exception ex)

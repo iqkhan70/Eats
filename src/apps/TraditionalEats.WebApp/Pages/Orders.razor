@@ -37,16 +37,36 @@
                         <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
 
                         <RadzenStack Gap="0.5rem">
-                            @foreach (var item in order.Items)
+                            @if (order.Items.Count <= 3)
                             {
-                                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
-                                    <RadzenText TextStyle="TextStyle.Body1">
-                                        @item.Name x @item.Quantity
-                                    </RadzenText>
-                                    <RadzenText TextStyle="TextStyle.Body1">
-                                        $@item.TotalPrice.ToString("F2")
-                                    </RadzenText>
-                                </RadzenStack>
+                                @foreach (var item in order.Items)
+                                {
+                                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                                        <RadzenText TextStyle="TextStyle.Body1">
+                                            @item.Name x @item.Quantity
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body1">
+                                            $@item.TotalPrice.ToString("F2")
+                                        </RadzenText>
+                                    </RadzenStack>
+                                }
+                            }
+                            else
+                            {
+                                @foreach (var item in order.Items.Take(2))
+                                {
+                                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                                        <RadzenText TextStyle="TextStyle.Body1">
+                                            @item.Name x @item.Quantity
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body1">
+                                            $@item.TotalPrice.ToString("F2")
+                                        </RadzenText>
+                                    </RadzenStack>
+                                }
+                                <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); font-style: italic;">
+                                    +@(order.Items.Count - 2) more items
+                                </RadzenText>
                             }
                         </RadzenStack>
 

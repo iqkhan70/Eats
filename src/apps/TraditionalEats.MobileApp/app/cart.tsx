@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { cartService, Cart, CartItem } from '../services/cart';
+import { authService } from '../services/auth';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -10,13 +11,20 @@ export default function CartScreen() {
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Reload cart when screen comes into focus (e.g., after login)
   useFocusEffect(
     useCallback(() => {
       loadCart();
+      checkAuthStatus();
     }, [])
   );
+
+  const checkAuthStatus = async () => {
+    const authenticated = await authService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+  };
 
   const loadCart = async () => {
     try {
@@ -27,13 +35,21 @@ export default function CartScreen() {
         cartData.items = [];
       }
       setCart(cartData);
+      
+      // If cart is null or has no items, set to null
+      if (!cartData || !cartData.items || cartData.items.length === 0) {
+        setCart(null);
+      }
     } catch (error: any) {
       console.error('Error loading cart:', error);
-      // Don't show alert for empty cart (404/204), only for actual errors
-      if (error.response?.status !== 404 && error.response?.status !== 204) {
-        Alert.alert('Error', error.response?.data?.error || 'Failed to load cart');
+      // Don't show alert for empty cart (404/204/400 with "not found"), only for actual errors
+      if (error.response?.status === 404 || 
+          error.response?.status === 204 || 
+          (error.response?.status === 400 && error.response?.data?.message?.includes('not found'))) {
+        // Cart doesn't exist or is empty - that's fine
+        setCart(null);
       } else {
-        // Empty cart is fine, just set to null
+        Alert.alert('Error', error.response?.data?.error || 'Failed to load cart');
         setCart(null);
       }
     } finally {
@@ -71,8 +87,45 @@ export default function CartScreen() {
       await cartService.removeCartItem(cart.cartId, item.cartItemId);
       await loadCart();
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to remove item');
+      // If cart not found, just reload - the item is already gone
+      if (error.response?.status === 400 && error.response?.data?.message?.includes('not found')) {
+        await loadCart();
+        return;
+      }
+      const errorMessage = error.message || 'Failed to remove item';
+      Alert.alert('Error', errorMessage);
     }
+  };
+
+  const clearCart = async () => {
+    if (!cart) return;
+    
+    Alert.alert(
+      'Clear Cart',
+      'Are you sure you want to remove all items from your cart?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cartService.clearCart(cart.cartId);
+              await loadCart();
+              Alert.alert('Success', 'Cart cleared');
+            } catch (error: any) {
+              // If cart not found, it's already cleared - just reload
+              if (error.response?.status === 400 && error.response?.data?.message?.includes('not found')) {
+                await loadCart();
+                return;
+              }
+              const errorMessage = error.message || 'Failed to clear cart';
+              Alert.alert('Error', errorMessage);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const placeOrder = async () => {
@@ -81,14 +134,52 @@ export default function CartScreen() {
       return;
     }
 
+    // Check if user is authenticated
+    const isAuthenticated = await authService.isAuthenticated();
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Login Required',
+        'You need to be logged in to place an order. Would you like to log in now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Log In',
+            onPress: () => router.push('/login'),
+          },
+        ]
+      );
+      return;
+    }
+
     try {
       setPlacingOrder(true);
       const orderId = await cartService.placeOrder(cart.cartId, deliveryAddress);
+      
+      // Clear cart state immediately after successful order placement
+      setCart(null);
+      setDeliveryAddress('');
+      
       Alert.alert('Success', `Order placed! Order ID: ${orderId.substring(0, 8)}`, [
         { text: 'OK', onPress: () => router.push('/(tabs)/orders') },
       ]);
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to place order');
+      // Check if it's an authentication error
+      if (error.response?.status === 401) {
+        Alert.alert(
+          'Authentication Required',
+          'Your session has expired. Please log in again to place an order.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Log In',
+              onPress: () => router.push('/login'),
+            },
+          ]
+        );
+      } else {
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to place order';
+        Alert.alert('Error', errorMessage);
+      }
     } finally {
       setPlacingOrder(false);
     }
@@ -188,6 +279,31 @@ export default function CartScreen() {
           </View>
         </View>
 
+        {!isAuthenticated && (
+          <View style={styles.authWarning}>
+            <Ionicons name="alert-circle-outline" size={20} color="#ff9800" />
+            <Text style={styles.authWarningText}>
+              You need to be logged in to place an order
+            </Text>
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={() => router.push('/login')}
+            >
+              <Text style={styles.loginButtonText}>Log In</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {cart.items.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearCartButton}
+            onPress={clearCart}
+          >
+            <Ionicons name="trash-outline" size={20} color="#c62828" />
+            <Text style={styles.clearCartText}>Clear Cart</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.deliverySection}>
           <Text style={styles.deliveryLabel}>Delivery Address</Text>
           <TextInput
@@ -200,9 +316,12 @@ export default function CartScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.placeOrderButton, placingOrder && styles.placeOrderButtonDisabled]}
+          style={[
+            styles.placeOrderButton,
+            (placingOrder || !deliveryAddress.trim() || !isAuthenticated) && styles.placeOrderButtonDisabled
+          ]}
           onPress={placeOrder}
-          disabled={placingOrder || !deliveryAddress.trim()}
+          disabled={placingOrder || !deliveryAddress.trim() || !isAuthenticated}
         >
           {placingOrder ? (
             <ActivityIndicator color="#fff" />
@@ -397,6 +516,48 @@ const styles = StyleSheet.create({
   },
   browseButtonText: {
     color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  authWarning: {
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  authWarningText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#856404',
+  },
+  loginButton: {
+    backgroundColor: '#6200ee',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  clearCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#c62828',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  clearCartText: {
+    color: '#c62828',
     fontSize: 14,
     fontWeight: '600',
   },

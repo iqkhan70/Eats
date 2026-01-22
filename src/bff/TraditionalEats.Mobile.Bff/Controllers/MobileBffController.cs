@@ -582,6 +582,9 @@ public class MobileBffController : ControllerBase
                 return BadRequest(new { error = "Quantity must be positive" });
             }
             
+            _logger.LogInformation("AddItemToCart: CartId={CartId}, MenuItemId={MenuItemId}, Name={Name}, Price={Price}, Quantity={Quantity}", 
+                cartId, request.MenuItemId, request.Name, request.Price, request.Quantity);
+            
             var client = _httpClientFactory.CreateClient("OrderService");
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items")
             {
@@ -596,6 +599,9 @@ public class MobileBffController : ControllerBase
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation("AddItemToCart: OrderService response - StatusCode={StatusCode}, Content={Content}", 
+                response.StatusCode, content);
             
             if (response.IsSuccessStatusCode)
             {
@@ -668,10 +674,13 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpDelete("cart/{cartId}/items/{cartItemId}")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> RemoveCartItem(Guid cartId, Guid cartItemId)
     {
         try
         {
+            _logger.LogInformation("RemoveCartItem: CartId={CartId}, CartItemId={CartItemId}", cartId, cartItemId);
+            
             var client = _httpClientFactory.CreateClient("OrderService");
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Delete, $"/api/order/cart/{cartId}/items/{cartItemId}");
             
@@ -683,12 +692,48 @@ public class MobileBffController : ControllerBase
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation("RemoveCartItem: OrderService response - StatusCode={StatusCode}, Content={Content}", 
+                response.StatusCode, content);
+            
             return StatusCode((int)response.StatusCode, content);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing cart item");
-            return StatusCode(500, new { error = "Failed to remove cart item" });
+            _logger.LogError(ex, "Error removing cart item: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Failed to remove cart item: {ex.Message}" });
+        }
+    }
+
+    [HttpDelete("cart/{cartId}")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    public async Task<IActionResult> ClearCart(Guid cartId)
+    {
+        try
+        {
+            _logger.LogInformation("ClearCart: CartId={CartId}", cartId);
+            
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Delete, $"/api/order/cart/{cartId}");
+            
+            // Forward JWT token to OrderService if present
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation("ClearCart: OrderService response - StatusCode={StatusCode}, Content={Content}", 
+                response.StatusCode, content);
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing cart: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Failed to clear cart: {ex.Message}" });
         }
     }
 

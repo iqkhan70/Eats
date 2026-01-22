@@ -156,6 +156,30 @@ public class OrderController : ControllerBase
             if (cart == null)
                 return NotFound();
 
+            // Log cart details before returning
+            _logger.LogInformation("GetCart: Returning cart {CartId} - ItemCount={ItemCount}, Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, Total={Total}", 
+                cartId, cart.Items?.Count ?? 0, cart.Subtotal, cart.Tax, cart.DeliveryFee, cart.Total);
+            
+            if (cart.Items != null && cart.Items.Any())
+            {
+                decimal calculatedSubtotal = 0;
+                foreach (var item in cart.Items)
+                {
+                    var expectedTotalPrice = item.Quantity * item.UnitPrice;
+                    calculatedSubtotal += item.TotalPrice;
+                    _logger.LogInformation("GetCart: Cart item - CartItemId={CartItemId}, MenuItemId={MenuItemId}, Name={Name}, Quantity={Quantity}, UnitPrice={UnitPrice}, TotalPrice={TotalPrice}, ExpectedTotalPrice={ExpectedTotalPrice}", 
+                        item.CartItemId, item.MenuItemId, item.Name, item.Quantity, item.UnitPrice, item.TotalPrice, expectedTotalPrice);
+                }
+                _logger.LogInformation("GetCart: Calculated subtotal from items: {CalculatedSubtotal}, Cart.Subtotal: {CartSubtotal}", 
+                    calculatedSubtotal, cart.Subtotal);
+                
+                if (calculatedSubtotal != cart.Subtotal)
+                {
+                    _logger.LogError("GetCart: SUBTOTAL MISMATCH! Calculated={Calculated}, Cart.Subtotal={CartSubtotal}", 
+                        calculatedSubtotal, cart.Subtotal);
+                }
+            }
+
             return Ok(cart);
         }
         catch (Exception ex)
@@ -166,10 +190,20 @@ public class OrderController : ControllerBase
     }
 
     [HttpPost("cart/{cartId}/items")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest request)
     {
         try
         {
+            if (request == null)
+            {
+                _logger.LogWarning("AddItemToCart: Request body is null");
+                return BadRequest(new { message = "Request body is required" });
+            }
+
+            _logger.LogInformation("AddItemToCart: CartId={CartId}, MenuItemId={MenuItemId}, Quantity={Quantity}, Price={Price}", 
+                cartId, request.MenuItemId, request.Quantity, request.Price);
+
             await _orderService.AddItemToCartAsync(
                 cartId,
                 request.MenuItemId,
@@ -178,12 +212,19 @@ public class OrderController : ControllerBase
                 request.Quantity,
                 request.Options);
 
+            _logger.LogInformation("AddItemToCart: Successfully added item to cart {CartId}", cartId);
             return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "AddItemToCart: Invalid operation - {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add item to cart");
-            return StatusCode(500, new { message = "Failed to add item to cart" });
+            _logger.LogError(ex, "AddItemToCart: Failed to add item to cart - {Message}, StackTrace: {StackTrace}", 
+                ex.Message, ex.StackTrace);
+            return StatusCode(500, new { message = $"Failed to add item to cart: {ex.Message}" });
         }
     }
 
@@ -203,32 +244,59 @@ public class OrderController : ControllerBase
     }
 
     [HttpDelete("cart/{cartId}/items/{cartItemId}")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> RemoveCartItem(Guid cartId, Guid cartItemId)
     {
         try
         {
+            _logger.LogInformation("RemoveCartItem: CartId={CartId}, CartItemId={CartItemId}", cartId, cartItemId);
+            
             await _orderService.RemoveCartItemAsync(cartId, cartItemId);
+            
+            _logger.LogInformation("RemoveCartItem: Successfully removed item {CartItemId} from cart {CartId}", cartItemId, cartId);
             return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "RemoveCartItem: Invalid operation - {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove cart item");
-            return StatusCode(500, new { message = "Failed to remove cart item" });
+            _logger.LogError(ex, "RemoveCartItem: Failed to remove cart item - {Message}, StackTrace: {StackTrace}", 
+                ex.Message, ex.StackTrace);
+            return StatusCode(500, new { message = $"Failed to remove cart item: {ex.Message}" });
         }
     }
 
     [HttpDelete("cart/{cartId}")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> ClearCart(Guid cartId)
     {
         try
         {
+            _logger.LogInformation("ClearCart: CartId={CartId}", cartId);
+            
             await _orderService.ClearCartAsync(cartId);
+            
+            _logger.LogInformation("ClearCart: Successfully cleared cart {CartId}", cartId);
             return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            // If cart doesn't exist, that's fine - it's already cleared
+            if (ex.Message.Contains("not found"))
+            {
+                _logger.LogInformation("ClearCart: Cart {CartId} not found - already cleared", cartId);
+                return Ok(new { message = "Cart already cleared" });
+            }
+            _logger.LogWarning(ex, "ClearCart: Invalid operation - {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to clear cart");
-            return StatusCode(500, new { message = "Failed to clear cart" });
+            _logger.LogError(ex, "ClearCart: Failed to clear cart - {Message}", ex.Message);
+            return StatusCode(500, new { message = $"Failed to clear cart: {ex.Message}" });
         }
     }
 
@@ -286,7 +354,28 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var customerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            if (request == null)
+            {
+                _logger.LogWarning("PlaceOrder: Request body is null");
+                return BadRequest(new { message = "Request body is required" });
+            }
+
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userIdClaim))
+            {
+                _logger.LogError("PlaceOrder: User ID claim is missing");
+                return Unauthorized(new { message = "User ID claim is missing" });
+            }
+
+            if (!Guid.TryParse(userIdClaim, out var customerId))
+            {
+                _logger.LogError("PlaceOrder: Invalid user ID format: {UserIdClaim}", userIdClaim);
+                return BadRequest(new { message = "Invalid user ID format" });
+            }
+
+            _logger.LogInformation("PlaceOrder: CartId={CartId}, CustomerId={CustomerId}, DeliveryAddress={DeliveryAddress}", 
+                request.CartId, customerId, request.DeliveryAddress);
+
             var idempotencyKey = request.IdempotencyKey ?? Guid.NewGuid().ToString();
 
             var orderId = await _orderService.PlaceOrderAsync(
@@ -295,12 +384,18 @@ public class OrderController : ControllerBase
                 request.DeliveryAddress,
                 idempotencyKey);
 
+            _logger.LogInformation("PlaceOrder: Successfully placed order {OrderId} for customer {CustomerId}", orderId, customerId);
             return Ok(new { orderId });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "PlaceOrder: Invalid operation - {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to place order");
-            return StatusCode(500, new { message = "Failed to place order" });
+            _logger.LogError(ex, "PlaceOrder: Failed to place order - {Message}", ex.Message);
+            return StatusCode(500, new { message = $"Failed to place order: {ex.Message}" });
         }
     }
 
@@ -310,14 +405,35 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var customerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            _logger.LogInformation("GetOrders: User.Identity.IsAuthenticated={IsAuthenticated}, UserIdClaim={UserIdClaim}", 
+                User.Identity?.IsAuthenticated ?? false, userIdClaim);
+            
+            if (string.IsNullOrEmpty(userIdClaim))
+            {
+                _logger.LogError("GetOrders: User ID claim is missing");
+                return Unauthorized(new { message = "User ID claim is missing" });
+            }
+            
+            if (!Guid.TryParse(userIdClaim, out var customerId))
+            {
+                _logger.LogError("GetOrders: Invalid user ID format: {UserIdClaim}", userIdClaim);
+                return BadRequest(new { message = "Invalid user ID format" });
+            }
+            
+            _logger.LogInformation("GetOrders: CustomerId={CustomerId}", customerId);
+            
             var orders = await _orderService.GetOrdersByCustomerAsync(customerId);
+            
+            _logger.LogInformation("GetOrders: Returning {OrderCount} orders for CustomerId={CustomerId}", orders.Count, customerId);
+            
             return Ok(orders);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get orders");
-            return StatusCode(500, new { message = "Failed to get orders" });
+            _logger.LogError(ex, "GetOrders: Failed to get orders - {Message}, StackTrace: {StackTrace}", 
+                ex.Message, ex.StackTrace);
+            return StatusCode(500, new { message = $"Failed to get orders: {ex.Message}" });
         }
     }
 

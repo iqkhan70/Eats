@@ -53,6 +53,9 @@ public class OrderDbContext : DbContext
         {
             entity.HasKey(e => e.CartItemId);
             entity.HasIndex(e => e.CartId);
+            // Add unique constraint on CartId + MenuItemId to prevent duplicate items
+            entity.HasIndex(e => new { e.CartId, e.MenuItemId })
+                .IsUnique();
         });
 
         modelBuilder.Entity<OrderIdempotencyKey>(entity =>
