@@ -87,7 +87,17 @@ class AuthService {
    */
   private decodeToken(token: string): any {
     try {
-      const base64Url = token.split('.')[1];
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return null;
+      }
+
+      const base64Url = parts[1];
+      if (!base64Url) {
+        return null;
+      }
+
+      // Convert base64url to base64
       let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       
       // Add padding if needed
@@ -96,22 +106,44 @@ class AuthService {
       }
       
       // React Native compatible base64 decode
-      // Manual base64 decode implementation
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-      let decoded = '';
-      let i = 0;
+      const lookup = new Array(256);
+      for (let i = 0; i < chars.length; i++) {
+        lookup[chars.charCodeAt(i)] = i;
+      }
       
-      while (i < base64.length) {
-        const encoded1 = chars.indexOf(base64.charAt(i++));
-        const encoded2 = chars.indexOf(base64.charAt(i++));
-        const encoded3 = chars.indexOf(base64.charAt(i++));
-        const encoded4 = chars.indexOf(base64.charAt(i++));
+      let bufferLength = base64.length * 0.75;
+      if (base64[base64.length - 1] === '=') {
+        bufferLength--;
+        if (base64[base64.length - 2] === '=') {
+          bufferLength--;
+        }
+      }
+      
+      const bytes = new Uint8Array(bufferLength);
+      let p = 0;
+      
+      for (let i = 0; i < base64.length; i += 4) {
+        const encoded1 = lookup[base64.charCodeAt(i)];
+        const encoded2 = lookup[base64.charCodeAt(i + 1)];
+        const encoded3 = lookup[base64.charCodeAt(i + 2)];
+        const encoded4 = lookup[base64.charCodeAt(i + 3)];
         
-        const bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
-        
-        if (encoded3 !== 64) decoded += String.fromCharCode((bitmap >> 16) & 255);
-        if (encoded4 !== 64) decoded += String.fromCharCode((bitmap >> 8) & 255);
-        if (encoded4 !== 64) decoded += String.fromCharCode(bitmap & 255);
+        bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
+        bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
+        bytes[p++] = ((encoded3 & 3) << 6) | (encoded4 & 63);
+      }
+      
+      // Convert bytes to string using TextDecoder if available, otherwise manual conversion
+      let decoded: string;
+      if (typeof TextDecoder !== 'undefined') {
+        decoded = new TextDecoder('utf-8').decode(bytes);
+      } else {
+        // Manual UTF-8 decoding
+        decoded = '';
+        for (let i = 0; i < bytes.length; i++) {
+          decoded += String.fromCharCode(bytes[i]);
+        }
       }
       
       return JSON.parse(decoded);

@@ -1037,6 +1037,108 @@ public class MobileBffController : ControllerBase
             return StatusCode(500, new { error = "Failed to toggle menu item availability" });
         }
     }
+
+    // Admin endpoints
+    [HttpGet("admin/restaurants")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllRestaurants([FromQuery] int skip = 0, [FromQuery] int take = 100)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.GetAsync($"/api/restaurant/admin/all?skip={skip}&take={take}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all restaurants (admin)");
+            return StatusCode(500, new { error = "Failed to fetch restaurants" });
+        }
+    }
+
+    [HttpPatch("admin/restaurants/{restaurantId}/status")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminToggleRestaurantStatus(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PatchAsync($"/api/restaurant/admin/{restaurantId}/status", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling restaurant status (admin)");
+            return StatusCode(500, new { error = "Failed to toggle restaurant status" });
+        }
+    }
+
+    [HttpDelete("admin/restaurants/{restaurantId}")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminDeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.DeleteAsync($"/api/restaurant/admin/{restaurantId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to delete restaurant" });
+        }
+    }
 }
 
 public record CreateCartRequest(Guid? RestaurantId);

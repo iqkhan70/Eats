@@ -120,8 +120,7 @@ export default function AdminDashboardScreen() {
               key={index}
               style={styles.menuItem}
               onPress={() => {
-                Alert.alert('Coming Soon', `${item.label} functionality will be available soon.`);
-                // router.push(item.route as any);
+                router.push(item.route as any);
               }}
             >
               <View style={[styles.menuIconContainer, { backgroundColor: `${item.color}15` }]}>
