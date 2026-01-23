@@ -57,6 +57,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// Geocoding
+builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Geocoding.IZipCodeLookupService, TraditionalEats.RestaurantService.Services.ZipCodeLookupService>();
+builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Geocoding.IGeocodingService, TraditionalEats.BuildingBlocks.Geocoding.GeocodingService>();
+
 // Application services
 builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 

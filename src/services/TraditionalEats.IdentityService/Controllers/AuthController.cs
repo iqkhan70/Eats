@@ -109,8 +109,31 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Logout failed" });
         }
     }
+
+    [HttpPost("assign-role")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AssignRole([FromBody] AssignRoleRequest request)
+    {
+        try
+        {
+            var success = await _authService.AssignRoleAsync(request.Email, request.Role);
+            
+            if (!success)
+            {
+                return BadRequest(new { message = "User not found or role assignment failed" });
+            }
+
+            return Ok(new { message = $"Role '{request.Role}' assigned successfully to {request.Email}" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Role assignment failed");
+            return StatusCode(500, new { message = "Role assignment failed" });
+        }
+    }
 }
 
 public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
+public record AssignRoleRequest(string Email, string Role);

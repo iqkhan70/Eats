@@ -17,6 +17,7 @@ public interface IAuthService
     Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken);
     Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
+    Task<bool> AssignRoleAsync(string email, string role);
 }
 
 public class AuthService : IAuthService
@@ -199,6 +200,45 @@ public class AuthService : IAuthService
             tokenEntity.RevokedReason = "User logout";
             await _context.SaveChangesAsync();
         }
+    }
+
+    public async Task<bool> AssignRoleAsync(string email, string role)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user == null)
+        {
+            return false;
+        }
+
+        // Check if user already has this role
+        if (user.UserRoles.Any(ur => ur.Role.Name == role))
+        {
+            return true; // Already has the role
+        }
+
+        // Get or create the role
+        var roleEntity = await _context.Roles.FirstOrDefaultAsync(r => r.Name == role);
+        if (roleEntity == null)
+        {
+            roleEntity = new Role { Id = Guid.NewGuid(), Name = role };
+            _context.Roles.Add(roleEntity);
+            await _context.SaveChangesAsync();
+        }
+
+        // Add the role to the user
+        _context.UserRoles.Add(new UserRole
+        {
+            UserId = user.Id,
+            RoleId = roleEntity.Id
+        });
+
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     private string GenerateAccessToken(User user)

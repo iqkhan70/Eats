@@ -19,13 +19,13 @@ public class CartService
             var response = await _httpClient.GetAsync("WebBff/cart");
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                Console.WriteLine("Cart not found (404)");
+                // Cart doesn't exist yet - this is normal for new users
                 return null;
             }
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"Error getting cart: {response.StatusCode} - {errorContent}");
+                // Silently handle errors (e.g., Redis connection issues)
+                // The cart count will just show 0, which is acceptable
                 return null;
             }
             var content = await response.Content.ReadAsStringAsync();
@@ -36,10 +36,10 @@ public class CartService
             var cart = await response.Content.ReadFromJsonAsync<CartDto>();
             return cart;
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"Exception getting cart: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            // Silently handle exceptions (e.g., network errors, Redis connection issues)
+            // The cart count will just show 0, which is acceptable
             return null;
         }
     }

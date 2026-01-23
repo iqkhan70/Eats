@@ -1,0 +1,112 @@
+using Microsoft.Extensions.Logging;
+
+namespace TraditionalEats.BuildingBlocks.Geocoding;
+
+public interface IGeocodingService
+{
+    /// <summary>
+    /// Geocode an address to get latitude and longitude coordinates
+    /// </summary>
+    /// <param name="address">Full address string (e.g., "123 Main St, New York, NY 10001")</param>
+    /// <returns>Tuple of (Latitude, Longitude) or null if geocoding fails</returns>
+    Task<(double Latitude, double Longitude)?> GeocodeAddressAsync(string address);
+    
+    /// <summary>
+    /// Geocode using ZIP code (fallback method)
+    /// </summary>
+    Task<(double Latitude, double Longitude)?> GeocodeZipCodeAsync(string zipCode);
+}
+
+public class GeocodingService : IGeocodingService
+{
+    private readonly ILogger<GeocodingService> _logger;
+    private readonly IZipCodeLookupService? _zipCodeLookup;
+
+    public GeocodingService(ILogger<GeocodingService> logger, IZipCodeLookupService? zipCodeLookup = null)
+    {
+        _logger = logger;
+        _zipCodeLookup = zipCodeLookup;
+    }
+
+    public async Task<(double Latitude, double Longitude)?> GeocodeAddressAsync(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            _logger.LogWarning("GeocodeAddressAsync: Address is null or empty");
+            return null;
+        }
+
+        try
+        {
+            // Try to extract ZIP code from address and use ZIP lookup as primary method
+            var zipCode = ExtractZipCode(address);
+            if (!string.IsNullOrEmpty(zipCode) && _zipCodeLookup != null)
+            {
+                _logger.LogInformation("GeocodeAddressAsync: Extracted ZIP code {ZipCode} from address, using ZIP lookup", zipCode);
+                var result = await _zipCodeLookup.GetLatLonFromZipCodeAsync(zipCode);
+                if (result.HasValue)
+                {
+                    return ((double)result.Value.Latitude, (double)result.Value.Longitude);
+                }
+            }
+
+            // TODO: Integrate with a geocoding API (Google Maps, Mapbox, etc.) for full address geocoding
+            // For now, return null if ZIP lookup fails
+            _logger.LogWarning("GeocodeAddressAsync: Unable to geocode address '{Address}'. ZIP lookup failed and no geocoding API configured.", address);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GeocodeAddressAsync: Error geocoding address '{Address}'", address);
+            return null;
+        }
+    }
+
+    public async Task<(double Latitude, double Longitude)?> GeocodeZipCodeAsync(string zipCode)
+    {
+        if (string.IsNullOrWhiteSpace(zipCode))
+        {
+            return null;
+        }
+
+        if (_zipCodeLookup == null)
+        {
+            _logger.LogWarning("GeocodeZipCodeAsync: ZIP code lookup service not configured");
+            return null;
+        }
+
+        try
+        {
+            var result = await _zipCodeLookup.GetLatLonFromZipCodeAsync(zipCode);
+            if (result.HasValue)
+            {
+                return ((double)result.Value.Latitude, (double)result.Value.Longitude);
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GeocodeZipCodeAsync: Error looking up ZIP code {ZipCode}", zipCode);
+            return null;
+        }
+    }
+
+    private string? ExtractZipCode(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+            return null;
+
+        // Try to extract 5-digit ZIP code (US format)
+        // Pattern: 5 digits, optionally followed by - and 4 more digits
+        var zipPattern = @"\b\d{5}(?:-\d{4})?\b";
+        var match = System.Text.RegularExpressions.Regex.Match(address, zipPattern);
+        
+        if (match.Success)
+        {
+            // Return just the 5-digit ZIP code
+            return match.Value.Substring(0, 5);
+        }
+
+        return null;
+    }
+}

@@ -1,0 +1,398 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { api } from '../../services/api';
+import { authService } from '../../services/auth';
+
+interface Restaurant {
+  restaurantId: string;
+  name: string;
+  description?: string;
+  cuisineType?: string;
+  address?: string;
+  phoneNumber?: string;
+  email?: string;
+  imageUrl?: string;
+  isActive: boolean;
+}
+
+export default function VendorDashboardScreen() {
+  const router = useRouter();
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isVendor, setIsVendor] = useState(false);
+
+  useEffect(() => {
+    checkAuthAndLoad();
+  }, []);
+
+  const checkAuthAndLoad = async () => {
+    const authenticated = await authService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+    
+    if (authenticated) {
+      const vendor = await authService.isVendor();
+      setIsVendor(vendor);
+      
+      if (vendor) {
+        await loadRestaurants();
+      } else {
+        Alert.alert('Access Denied', 'You must be a vendor to access this page.');
+        router.back();
+      }
+    } else {
+      Alert.alert('Authentication Required', 'Please log in to access the vendor dashboard.');
+      router.push('/login');
+    }
+  };
+
+  const loadRestaurants = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get<Restaurant[]>('/MobileBff/vendor/my-restaurants');
+      setRestaurants(response.data || []);
+    } catch (error: any) {
+      // Don't log expected errors (axios interceptor handles logging)
+      if (error.response?.status === 401) {
+        Alert.alert('Session Expired', 'Please log in again.');
+        await authService.logout();
+        router.push('/login');
+      } else if (error.response?.status === 403) {
+        Alert.alert('Access Denied', 'You do not have permission to access this page.');
+        router.back();
+      } else {
+        // Only show alert for unexpected errors
+        const errorMessage = error.response?.data?.error || error.message || 'Failed to load restaurants. Please try again.';
+        Alert.alert('Error', errorMessage);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadRestaurants();
+  };
+
+  const handleCreateRestaurant = () => {
+    router.push('/vendor/create-restaurant');
+  };
+
+  const handleEditRestaurant = (restaurantId: string) => {
+    router.push(`/vendor/restaurants/${restaurantId}/edit`);
+  };
+
+  const handleManageMenu = (restaurantId: string) => {
+    router.push(`/vendor/restaurants/${restaurantId}/menu`);
+  };
+
+  const handleDeleteRestaurant = (restaurant: Restaurant) => {
+    Alert.alert(
+      'Delete Restaurant',
+      `Are you sure you want to delete "${restaurant.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/MobileBff/vendor/restaurants/${restaurant.restaurantId}`);
+              Alert.alert('Success', 'Restaurant deleted successfully.');
+              await loadRestaurants();
+            } catch (error: any) {
+              // Don't log expected errors (axios interceptor handles logging)
+              const errorMessage = error.response?.data?.error || error.message || 'Failed to delete restaurant. Please try again.';
+              Alert.alert('Error', errorMessage);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading && restaurants.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#6200ee" />
+        <Text style={styles.loadingText}>Loading restaurants...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Restaurants</Text>
+        <TouchableOpacity onPress={handleCreateRestaurant} style={styles.addButton}>
+          <Ionicons name="add" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {restaurants.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="restaurant-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No restaurants yet</Text>
+          <Text style={styles.emptySubtext}>Create your first restaurant to get started</Text>
+          <TouchableOpacity style={styles.createButton} onPress={handleCreateRestaurant}>
+            <Text style={styles.createButtonText}>Create Restaurant</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.restaurantsList}>
+          {restaurants.map((restaurant) => (
+            <View key={restaurant.restaurantId} style={styles.restaurantCard}>
+              <View style={styles.restaurantHeader}>
+                <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                <View style={[styles.statusBadge, restaurant.isActive ? styles.activeBadge : styles.inactiveBadge]}>
+                  <Text style={styles.statusText}>{restaurant.isActive ? 'Active' : 'Inactive'}</Text>
+                </View>
+              </View>
+              
+              {restaurant.description && (
+                <Text style={styles.restaurantDescription} numberOfLines={2}>
+                  {restaurant.description}
+                </Text>
+              )}
+              
+              {restaurant.cuisineType && (
+                <Text style={styles.cuisineType}>{restaurant.cuisineType}</Text>
+              )}
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.editButton]}
+                  onPress={() => handleEditRestaurant(restaurant.restaurantId)}
+                >
+                  <Ionicons name="create-outline" size={18} color="#6200ee" />
+                  <Text style={styles.editButtonText}>Edit</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.menuButton]}
+                  onPress={() => handleManageMenu(restaurant.restaurantId)}
+                >
+                  <Ionicons name="restaurant-outline" size={18} color="#fff" />
+                  <Text style={styles.menuButtonText}>Menu</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => handleDeleteRestaurant(restaurant)}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#d32f2f" />
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <TouchableOpacity style={styles.fab} onPress={handleCreateRestaurant}>
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  header: {
+    backgroundColor: '#6200ee',
+    padding: 16,
+    paddingTop: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    flex: 1,
+    textAlign: 'center',
+  },
+  addButton: {
+    padding: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    minHeight: 400,
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  createButton: {
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#6200ee',
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  restaurantsList: {
+    padding: 16,
+  },
+  restaurantCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  restaurantHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  restaurantName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  activeBadge: {
+    backgroundColor: '#4caf50',
+  },
+  inactiveBadge: {
+    backgroundColor: '#ccc',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  restaurantDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  cuisineType: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 12,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  editButton: {
+    backgroundColor: '#f3e5f5',
+    borderWidth: 1,
+    borderColor: '#6200ee',
+  },
+  editButtonText: {
+    color: '#6200ee',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  menuButton: {
+    backgroundColor: '#6200ee',
+  },
+  menuButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#ffebee',
+    borderWidth: 1,
+    borderColor: '#d32f2f',
+  },
+  deleteButtonText: {
+    color: '#d32f2f',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#6200ee',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+});

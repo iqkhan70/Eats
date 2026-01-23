@@ -795,6 +795,248 @@ public class MobileBffController : ControllerBase
     {
         return Ok(new { status = "healthy", service = "MobileBff" });
     }
+
+    // Vendor endpoints
+    [HttpGet("vendor/my-restaurants")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetMyRestaurants()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor restaurants");
+            return StatusCode(500, new { error = "Failed to fetch vendor restaurants" });
+        }
+    }
+
+    [HttpPost("vendor/restaurants")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateRestaurant([FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/restaurant", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating restaurant");
+            return StatusCode(500, new { error = "Failed to create restaurant" });
+        }
+    }
+
+    [HttpPut("vendor/restaurants/{restaurantId}")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateRestaurant(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/restaurant/{restaurantId}", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating restaurant");
+            return StatusCode(500, new { error = "Failed to update restaurant" });
+        }
+    }
+
+    [HttpDelete("vendor/restaurants/{restaurantId}")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> DeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.DeleteAsync($"/api/restaurant/{restaurantId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                return Ok(new { message = "Restaurant deleted successfully" });
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting restaurant");
+            return StatusCode(500, new { error = "Failed to delete restaurant" });
+        }
+    }
+
+    // Menu item management endpoints
+    [HttpPost("restaurants/{restaurantId}/menu-items")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateMenuItem(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync($"/api/catalog/restaurants/{restaurantId}/menu-items", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating menu item");
+            return StatusCode(500, new { error = "Failed to create menu item" });
+        }
+    }
+
+    [HttpPut("menu-items/{menuItemId}")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateMenuItem(Guid menuItemId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/catalog/menu-items/{menuItemId}", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating menu item");
+            return StatusCode(500, new { error = "Failed to update menu item" });
+        }
+    }
+
+    [HttpPatch("menu-items/{menuItemId}/availability")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> ToggleMenuItemAvailability(Guid menuItemId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PatchAsync($"/api/catalog/menu-items/{menuItemId}/availability", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling menu item availability");
+            return StatusCode(500, new { error = "Failed to toggle menu item availability" });
+        }
+    }
 }
 
 public record CreateCartRequest(Guid? RestaurantId);

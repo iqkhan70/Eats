@@ -81,6 +81,99 @@ class AuthService {
     return token !== null;
   }
 
+  /**
+   * Decode JWT token to extract claims
+   * React Native compatible base64 decoding
+   */
+  private decodeToken(token: string): any {
+    try {
+      const base64Url = token.split('.')[1];
+      let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      
+      // Add padding if needed
+      while (base64.length % 4) {
+        base64 += '=';
+      }
+      
+      // React Native compatible base64 decode
+      // Manual base64 decode implementation
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+      let decoded = '';
+      let i = 0;
+      
+      while (i < base64.length) {
+        const encoded1 = chars.indexOf(base64.charAt(i++));
+        const encoded2 = chars.indexOf(base64.charAt(i++));
+        const encoded3 = chars.indexOf(base64.charAt(i++));
+        const encoded4 = chars.indexOf(base64.charAt(i++));
+        
+        const bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
+        
+        if (encoded3 !== 64) decoded += String.fromCharCode((bitmap >> 16) & 255);
+        if (encoded4 !== 64) decoded += String.fromCharCode((bitmap >> 8) & 255);
+        if (encoded4 !== 64) decoded += String.fromCharCode(bitmap & 255);
+      }
+      
+      return JSON.parse(decoded);
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user roles from JWT token
+   */
+  async getUserRoles(): Promise<string[]> {
+    const token = await this.getAccessToken();
+    if (!token) {
+      return [];
+    }
+
+    const decoded = this.decodeToken(token);
+    if (!decoded) {
+      return [];
+    }
+
+    // JWT roles can be in different claim names: 'role', 'roles', 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role'
+    const roles: string[] = [];
+    
+    if (decoded.role) {
+      roles.push(...(Array.isArray(decoded.role) ? decoded.role : [decoded.role]));
+    }
+    if (decoded.roles) {
+      roles.push(...(Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles]));
+    }
+    if (decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']) {
+      const roleClaim = decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+      roles.push(...(Array.isArray(roleClaim) ? roleClaim : [roleClaim]));
+    }
+
+    return [...new Set(roles)]; // Remove duplicates
+  }
+
+  /**
+   * Check if user has a specific role
+   */
+  async isInRole(role: string): Promise<boolean> {
+    const roles = await this.getUserRoles();
+    return roles.includes(role);
+  }
+
+  /**
+   * Check if user is an admin
+   */
+  async isAdmin(): Promise<boolean> {
+    return await this.isInRole('Admin');
+  }
+
+  /**
+   * Check if user is a vendor
+   */
+  async isVendor(): Promise<boolean> {
+    return await this.isInRole('Vendor');
+  }
+
   private async storeTokens(accessToken: string, refreshToken: string): Promise<void> {
     await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, accessToken);
     await AsyncStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);

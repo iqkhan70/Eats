@@ -1,0 +1,110 @@
+@page "/admin"
+@using TraditionalEats.WebApp.Services
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject ILogger<Admin> Logger
+
+<PageTitle>Admin Dashboard - TraditionalEats</PageTitle>
+
+<div class="container mt-4">
+    <h2>Admin Dashboard</h2>
+    
+    @if (!isAuthenticated)
+    {
+        <div class="alert alert-warning">
+            Please log in to access the admin dashboard.
+        </div>
+    }
+    else if (!isAdmin)
+    {
+        <div class="alert alert-danger">
+            Access denied. Admin role required.
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5>System Overview</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Welcome to the Admin Dashboard!</p>
+                        <p>Your roles: <strong>@string.Join(", ", userRoles)</strong></p>
+                        <p>Email: <strong>@userEmail</strong></p>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5>Admin Functions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group">
+                            <a href="/vendor" class="list-group-item list-group-item-action">
+                                <strong>Vendor Management</strong>
+                                <p class="mb-0 text-muted small">Manage restaurants and vendors</p>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action" onclick="alert('Coming soon!'); return false;">
+                                <strong>User Management</strong>
+                                <p class="mb-0 text-muted small">View and manage all users</p>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action" onclick="alert('Coming soon!'); return false;">
+                                <strong>Order Management</strong>
+                                <p class="mb-0 text-muted small">View and manage all orders</p>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action" onclick="alert('Coming soon!'); return false;">
+                                <strong>System Settings</strong>
+                                <p class="mb-0 text-muted small">Configure system settings</p>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private List<string> userRoles = new();
+    private string userEmail = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isAdmin = await AuthService.IsAdminAsync();
+            userRoles = await AuthService.GetUserRolesAsync();
+            userEmail = await GetUserEmailAsync();
+        }
+    }
+
+    private async Task<string> GetUserEmailAsync()
+    {
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                return "";
+            }
+
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            var jsonToken = handler.ReadJwtToken(token);
+            
+            var email = jsonToken.Claims
+                .FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+            
+            return email ?? "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+}

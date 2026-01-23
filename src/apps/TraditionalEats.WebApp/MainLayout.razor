@@ -27,6 +27,14 @@
                 @if (isAuthenticated)
                 {
                     <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    @if (isVendor || isAdmin)
+                    {
+                        <RadzenButton Text="Vendor Dashboard" Click="@(() => NavigationManager.NavigateTo("/vendor"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    }
+                    @if (isAdmin)
+                    {
+                        <RadzenButton Text="Admin" Click="@(() => NavigationManager.NavigateTo("/admin"))" Variant="Variant.Flat" Size="ButtonSize.Small" Style="background-color: #dc3545; color: white;" />
+                    }
                     <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
                     <RadzenButton Text="Logout" Icon="logout" Click="@HandleLogout" Variant="Variant.Flat" Size="ButtonSize.Small" />
                 }
@@ -60,6 +68,8 @@
     
     private bool sidebarExpanded = false;
     private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private bool isVendor = false;
     private int cartItemCount = 0;
 
     protected override async Task OnInitializedAsync()
@@ -96,17 +106,36 @@
     private async Task CheckAuthStatus()
     {
         isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isAdmin = await AuthService.IsAdminAsync();
+            isVendor = await AuthService.IsVendorAsync();
+        }
+        else
+        {
+            isAdmin = false;
+            isVendor = false;
+        }
     }
 
     private async Task LoadCartCount()
     {
+        // Only try to load cart if user is authenticated or might have a guest cart
+        // Skip if we know services are unavailable to avoid console errors
         try
         {
             var cart = await CartService.GetCartAsync();
             cartItemCount = cart?.Items?.Sum(i => i.Quantity) ?? 0;
         }
+        catch (HttpRequestException)
+        {
+            // Silently handle HTTP errors (e.g., Redis connection issues)
+            // Don't set cartItemCount to avoid unnecessary state changes
+            return;
+        }
         catch
         {
+            // Silently handle other errors
             cartItemCount = 0;
         }
     }
@@ -115,6 +144,8 @@
     {
         await AuthService.ClearTokensAsync();
         isAuthenticated = false;
+        isAdmin = false;
+        isVendor = false;
         cartItemCount = 0;
         NavigationManager.NavigateTo("/");
         StateHasChanged();

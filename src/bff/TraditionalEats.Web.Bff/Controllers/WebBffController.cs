@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using TraditionalEats.BuildingBlocks.Redis;
 using System.Security.Claims;
 
@@ -222,6 +223,112 @@ public class WebBffController : ControllerBase
         {
             _logger.LogError(ex, "Error fetching categories");
             return StatusCode(500, new { error = "Failed to fetch categories" });
+        }
+    }
+
+    // Menu Item Management (Vendor endpoints)
+    [HttpPost("restaurants/{restaurantId}/menu-items")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateMenuItem(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync($"/api/catalog/restaurants/{restaurantId}/menu-items", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating menu item");
+            return StatusCode(500, new { error = "Failed to create menu item" });
+        }
+    }
+
+    [HttpPut("menu-items/{menuItemId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateMenuItem(Guid menuItemId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/catalog/menu-items/{menuItemId}", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating menu item");
+            return StatusCode(500, new { error = "Failed to update menu item" });
+        }
+    }
+
+    [HttpPatch("menu-items/{menuItemId}/availability")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> ToggleMenuItemAvailability(Guid menuItemId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PatchAsync($"/api/catalog/menu-items/{menuItemId}/availability", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling menu item availability");
+            return StatusCode(500, new { error = "Failed to toggle menu item availability" });
         }
     }
 
@@ -499,25 +606,42 @@ public class WebBffController : ControllerBase
             }
 
             // For guest users, try to get cartId from Redis session
-            var sessionId = await GetOrCreateSessionIdAsync();
-            var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-            
-            if (cartId.HasValue)
+            try
             {
-                var client = _httpClientFactory.CreateClient("OrderService");
-                var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
-                var content = await response.Content.ReadAsStringAsync();
+                var sessionId = await GetOrCreateSessionIdAsync();
+                var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
                 
-                if (response.IsSuccessStatusCode)
+                if (cartId.HasValue)
                 {
-                    return Content(content, "application/json");
+                    var client = _httpClientFactory.CreateClient("OrderService");
+                    var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
+                    var content = await response.Content.ReadAsStringAsync();
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        return Content(content, "application/json");
+                    }
+                    else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        // Cart doesn't exist anymore, clear session (if Redis is available)
+                        try
+                        {
+                            await _cartSessionService.ClearSessionCartAsync(sessionId);
+                        }
+                        catch
+                        {
+                            // Ignore Redis errors when clearing session
+                        }
+                        return Ok((object?)null);
+                    }
                 }
-                else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    // Cart doesn't exist anymore, clear session
-                    await _cartSessionService.ClearSessionCartAsync(sessionId);
-                    return Ok((object?)null);
-                }
+            }
+            catch (Exception redisEx)
+            {
+                // If Redis is unavailable, just return empty cart instead of 500
+                // This prevents annoying console errors in the browser
+                _logger.LogWarning(redisEx, "Redis unavailable when getting cart, returning empty cart");
+                return Ok((object?)null);
             }
 
             // No cart found
@@ -525,8 +649,10 @@ public class WebBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting cart: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to get cart: {ex.Message}" });
+            // For any other errors, return empty cart instead of 500 to avoid browser console errors
+            // This is acceptable since an empty cart is a valid state
+            _logger.LogWarning(ex, "Error getting cart, returning empty cart: {Message}", ex.Message);
+            return Ok((object?)null);
         }
     }
 
@@ -720,6 +846,280 @@ public class WebBffController : ControllerBase
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "WebBff" });
+    }
+
+    // Vendor endpoints
+    [HttpGet("vendor/my-restaurants")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetMyRestaurants()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor restaurants");
+            return StatusCode(500, new { error = "Failed to fetch vendor restaurants" });
+        }
+    }
+
+    [HttpPost("vendor/restaurants")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateRestaurant([FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/restaurant", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating restaurant");
+            return StatusCode(500, new { error = "Failed to create restaurant" });
+        }
+    }
+
+    [HttpPut("vendor/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateRestaurant(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/restaurant/{restaurantId}", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating restaurant");
+            return StatusCode(500, new { error = "Failed to update restaurant" });
+        }
+    }
+
+    [HttpDelete("vendor/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> DeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.DeleteAsync($"/api/restaurant/vendor/{restaurantId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting restaurant");
+            return StatusCode(500, new { error = "Failed to delete restaurant" });
+        }
+    }
+
+    // Admin endpoints
+    [HttpGet("admin/restaurants")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllRestaurants([FromQuery] int skip = 0, [FromQuery] int take = 100)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.GetAsync($"/api/restaurant/admin/all?skip={skip}&take={take}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return Content(content, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all restaurants");
+            return StatusCode(500, new { error = "Failed to fetch all restaurants" });
+        }
+    }
+
+    [HttpPut("admin/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminUpdateRestaurant(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/restaurant/admin/{restaurantId}", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to update restaurant" });
+        }
+    }
+
+    [HttpDelete("admin/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminDeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.DeleteAsync($"/api/restaurant/admin/{restaurantId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to delete restaurant" });
+        }
+    }
+
+    [HttpPatch("admin/restaurants/{restaurantId}/status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminToggleRestaurantStatus(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PatchAsync($"/api/restaurant/admin/{restaurantId}/status", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return Content(responseContent, "application/json");
+            }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling restaurant status (admin)");
+            return StatusCode(500, new { error = "Failed to toggle restaurant status" });
+        }
     }
 }
 

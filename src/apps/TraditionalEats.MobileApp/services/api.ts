@@ -49,17 +49,29 @@ class ApiClient {
             hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/app.config.ts with your computer's IP address.`
           });
         } else if (error.response) {
-          // Don't log 404/204 errors for GET cart endpoints (empty cart is valid)
-          // But do log errors for POST/PUT/DELETE cart operations
           const url = error.config?.url || '';
           const method = error.config?.method?.toUpperCase() || '';
-          const isCartGetEndpoint = url.includes('/cart') && method === 'GET';
-          const isExpectedEmptyResponse = error.response.status === 404 || error.response.status === 204;
+          const status = error.response.status;
 
-          // Only suppress logging for GET cart requests that return 404/204
-          if (!(isCartGetEndpoint && isExpectedEmptyResponse)) {
+          // Don't log 404/204 errors for GET cart endpoints (empty cart is valid)
+          const isCartGetEndpoint = url.includes('/cart') && method === 'GET';
+          const isExpectedEmptyResponse = status === 404 || status === 204;
+
+          // Don't log 401 errors for vendor/admin endpoints if user might not be authenticated
+          // These are handled by the UI components with user-friendly messages
+          const isAuthEndpoint = url.includes('/vendor/') || url.includes('/admin/');
+          const isUnauthorized = status === 401;
+
+          // Only suppress logging for:
+          // 1. GET cart requests that return 404/204 (empty cart is valid)
+          // 2. 401 errors on vendor/admin endpoints (handled by UI)
+          const shouldSuppress =
+            (isCartGetEndpoint && isExpectedEmptyResponse) ||
+            (isAuthEndpoint && isUnauthorized);
+
+          if (!shouldSuppress) {
             console.error('❌ API Error:', {
-              status: error.response.status,
+              status: status,
               statusText: error.response.statusText,
               data: error.response.data,
               url: url,

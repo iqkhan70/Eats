@@ -19,7 +19,7 @@ public class RestaurantController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> CreateRestaurant([FromBody] CreateRestaurantDto dto)
     {
         try
@@ -197,4 +197,122 @@ public class RestaurantController : ControllerBase
             return StatusCode(500, new { message = "Failed to get search suggestions" });
         }
     }
+
+    // Vendor endpoints
+    [HttpGet("vendor/my-restaurants")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetMyRestaurants()
+    {
+        try
+        {
+            var vendorId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var restaurants = await _restaurantService.GetVendorRestaurantsAsync(vendorId);
+            return Ok(restaurants);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get vendor restaurants");
+            return StatusCode(500, new { message = "Failed to get vendor restaurants" });
+        }
+    }
+
+    [HttpDelete("vendor/{restaurantId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> DeleteMyRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var vendorId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var success = await _restaurantService.DeleteRestaurantAsync(restaurantId, vendorId);
+            if (!success)
+            {
+                return NotFound(new { message = "Restaurant not found or you don't have permission" });
+            }
+            return Ok(new { message = "Restaurant deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete restaurant");
+            return StatusCode(500, new { message = "Failed to delete restaurant" });
+        }
+    }
+
+    // Admin endpoints
+    [HttpGet("admin/all")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllRestaurants([FromQuery] int skip = 0, [FromQuery] int take = 100)
+    {
+        try
+        {
+            var restaurants = await _restaurantService.GetAllRestaurantsAsync(skip, take);
+            return Ok(restaurants);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get all restaurants");
+            return StatusCode(500, new { message = "Failed to get all restaurants" });
+        }
+    }
+
+    [HttpPut("admin/{restaurantId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminUpdateRestaurant(Guid restaurantId, [FromBody] UpdateRestaurantDto dto)
+    {
+        try
+        {
+            var success = await _restaurantService.AdminUpdateRestaurantAsync(restaurantId, dto);
+            if (!success)
+            {
+                return NotFound(new { message = "Restaurant not found" });
+            }
+            return Ok(new { message = "Restaurant updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update restaurant");
+            return StatusCode(500, new { message = "Failed to update restaurant" });
+        }
+    }
+
+    [HttpDelete("admin/{restaurantId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminDeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var success = await _restaurantService.AdminDeleteRestaurantAsync(restaurantId);
+            if (!success)
+            {
+                return NotFound(new { message = "Restaurant not found" });
+            }
+            return Ok(new { message = "Restaurant deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete restaurant");
+            return StatusCode(500, new { message = "Failed to delete restaurant" });
+        }
+    }
+
+    [HttpPatch("admin/{restaurantId}/status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminToggleRestaurantStatus(Guid restaurantId, [FromBody] ToggleStatusRequest request)
+    {
+        try
+        {
+            var success = await _restaurantService.AdminToggleRestaurantStatusAsync(restaurantId, request.IsActive);
+            if (!success)
+            {
+                return NotFound(new { message = "Restaurant not found" });
+            }
+            return Ok(new { message = $"Restaurant status set to {(request.IsActive ? "Active" : "Inactive")}" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to toggle restaurant status");
+            return StatusCode(500, new { message = "Failed to toggle restaurant status" });
+        }
+    }
 }
+
+public record ToggleStatusRequest(bool IsActive);

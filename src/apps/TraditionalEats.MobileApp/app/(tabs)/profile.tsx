@@ -8,6 +8,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isVendor, setIsVendor] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     checkAuthStatus();
@@ -17,6 +19,9 @@ export default function ProfileScreen() {
     const authenticated = await authService.isAuthenticated();
     setIsAuthenticated(authenticated);
     if (authenticated) {
+      // Check user roles
+      setIsVendor(await authService.isVendor());
+      setIsAdmin(await authService.isAdmin());
       // You can fetch user info here if needed
       // For now, we'll just show a placeholder
     }
@@ -76,7 +81,38 @@ export default function ProfileScreen() {
 
       {isAuthenticated ? (
         <>
+          {(isVendor || isAdmin) && (
+            <View style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>Business</Text>
+              {isVendor && (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => router.push('/vendor')}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="restaurant" size={24} color="#6200ee" />
+                    <Text style={styles.menuItemLabel}>Vendor Dashboard</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
+              {isAdmin && (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => router.push('/admin')}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="shield-checkmark" size={24} color="#d32f2f" />
+                    <Text style={[styles.menuItemLabel, { color: '#d32f2f' }]}>Admin Dashboard</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+          
           <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>Account</Text>
             {menuItems.map((item, index) => (
               <TouchableOpacity
                 key={index}
@@ -171,6 +207,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginLeft: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    textTransform: 'uppercase',
   },
   logoutButton: {
     margin: 16,
