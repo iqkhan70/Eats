@@ -18,6 +18,8 @@ public interface IAuthService
     Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
     Task<bool> AssignRoleAsync(string email, string role);
+    Task<bool> RemoveRoleAsync(string email, string role);
+    Task<List<string>> GetUserRolesAsync(string email);
 }
 
 public class AuthService : IAuthService
@@ -239,6 +241,57 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<bool> RemoveRoleAsync(string email, string role)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user == null)
+        {
+            return false;
+        }
+
+        // Find the user role to remove
+        var userRole = user.UserRoles.FirstOrDefault(ur => ur.Role.Name == role);
+        if (userRole == null)
+        {
+            return true; // User doesn't have this role, consider it successful
+        }
+
+        // Don't allow removing the last role (user must have at least one role)
+        if (user.UserRoles.Count == 1)
+        {
+            _logger.LogWarning("Cannot remove last role from user {Email}. User must have at least one role.", email);
+            return false;
+        }
+
+        // Remove the role
+        _context.UserRoles.Remove(userRole);
+        await _context.SaveChangesAsync();
+        
+        _logger.LogInformation("Role '{Role}' removed from user {Email}", role, email);
+        return true;
+    }
+
+    public async Task<List<string>> GetUserRolesAsync(string email)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user == null)
+        {
+            return new List<string>();
+        }
+
+        return user.UserRoles.Select(ur => ur.Role.Name).ToList();
     }
 
     private string GenerateAccessToken(User user)

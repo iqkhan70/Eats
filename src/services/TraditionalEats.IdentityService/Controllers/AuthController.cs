@@ -131,9 +131,48 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Role assignment failed" });
         }
     }
+
+    [HttpPost("revoke-role")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RevokeRole([FromBody] RevokeRoleRequest request)
+    {
+        try
+        {
+            var success = await _authService.RemoveRoleAsync(request.Email, request.Role);
+            
+            if (!success)
+            {
+                return BadRequest(new { message = "User not found, role revocation failed, or cannot remove last role" });
+            }
+
+            return Ok(new { message = $"Role '{request.Role}' revoked successfully from {request.Email}" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Role revocation failed");
+            return StatusCode(500, new { message = "Role revocation failed" });
+        }
+    }
+
+    [HttpGet("user-roles/{email}")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetUserRoles(string email)
+    {
+        try
+        {
+            var roles = await _authService.GetUserRolesAsync(email);
+            return Ok(new { email, roles });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get user roles");
+            return StatusCode(500, new { message = "Failed to get user roles" });
+        }
+    }
 }
 
 public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);
+public record RevokeRoleRequest(string Email, string Role);

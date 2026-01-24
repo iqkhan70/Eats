@@ -1155,6 +1155,90 @@ public class WebBffController : ControllerBase
             return StatusCode(500, new { error = "Failed to toggle restaurant status" });
         }
     }
+
+    [HttpPost("admin/users/assign-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AssignUserRole([FromBody] AssignRoleRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.PostAsJsonAsync("/api/auth/assign-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error assigning role");
+            return StatusCode(500, new { error = "Failed to assign role" });
+        }
+    }
+
+    [HttpPost("admin/users/revoke-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RevokeUserRole([FromBody] RevokeRoleRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.PostAsJsonAsync("/api/auth/revoke-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error revoking role");
+            return StatusCode(500, new { error = "Failed to revoke role" });
+        }
+    }
+
+    [HttpGet("admin/users/{email}/roles")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetUserRoles(string email)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.GetAsync($"/api/auth/user-roles/{Uri.EscapeDataString(email)}");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user roles");
+            return StatusCode(500, new { error = "Failed to get user roles" });
+        }
+    }
 }
 
 public record CreateCartRequest(Guid? RestaurantId);
@@ -1175,3 +1259,5 @@ public record PlaceOrderRequest(
 public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
+public record AssignRoleRequest(string Email, string Role);
+public record RevokeRoleRequest(string Email, string Role);
