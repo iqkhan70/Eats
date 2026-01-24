@@ -209,7 +209,7 @@ export default function CartScreen() {
           <Text style={styles.emptySubtext}>Add items from the menu to get started</Text>
           <TouchableOpacity
             style={styles.browseButton}
-            onPress={() => router.push('/(tabs)')}
+            onPress={() => router.push('/(tabs)/restaurants')}
           >
             <Text style={styles.browseButtonText}>Browse Restaurants</Text>
           </TouchableOpacity>
