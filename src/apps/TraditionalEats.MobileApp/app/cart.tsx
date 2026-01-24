@@ -10,7 +10,7 @@ export default function CartScreen() {
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('Delivery is not available yet, might be available later based on customer needs. Pickup only!');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Reload cart when screen comes into focus (e.g., after login)
@@ -310,6 +310,7 @@ export default function CartScreen() {
             style={styles.deliveryInput}
             placeholder="Enter your delivery address"
             value={deliveryAddress}
+            editable={false}
             onChangeText={setDeliveryAddress}
             multiline
           />

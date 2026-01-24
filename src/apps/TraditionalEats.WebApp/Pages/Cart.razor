@@ -10,7 +10,8 @@
 
 <PageTitle>Cart - TraditionalEats</PageTitle>
 
-<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;"
+    Class="page-container">
     <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
         <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
         <RadzenText TextStyle="TextStyle.H1">Shopping Cart</RadzenText>
@@ -27,7 +28,8 @@
                 @foreach (var item in cart.Items)
                 {
                     <RadzenCard>
-                        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center"
+                            Style="flex-wrap: wrap;">
                             <RadzenStack Gap="0.5rem" Style="flex: 1; min-width: 200px;">
                                 <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: bold;">@item.Name</RadzenText>
                                 <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
@@ -35,14 +37,18 @@
                                 </RadzenText>
                             </RadzenStack>
                             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-                                <RadzenButton Icon="remove" Click="@(() => DecreaseQuantity(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                                <RadzenText TextStyle="TextStyle.Body1" Style="min-width: 30px; text-align: center;">@item.Quantity</RadzenText>
-                                <RadzenButton Icon="add" Click="@(() => IncreaseQuantity(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                                <RadzenButton Icon="remove" Click="@(() => DecreaseQuantity(item))" Variant="Variant.Flat"
+                                    Size="ButtonSize.Small" />
+                                <RadzenText TextStyle="TextStyle.Body1" Style="min-width: 30px; text-align: center;">
+                                    @item.Quantity</RadzenText>
+                                <RadzenButton Icon="add" Click="@(() => IncreaseQuantity(item))" Variant="Variant.Flat"
+                                    Size="ButtonSize.Small" />
                             </RadzenStack>
                             <RadzenText TextStyle="TextStyle.H4" Style="min-width: 80px; text-align: right;">
                                 $@item.TotalPrice.ToString("F2")
                             </RadzenText>
-                            <RadzenButton Icon="delete" Click="@(() => RemoveItem(item))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                            <RadzenButton Icon="delete" Click="@(() => RemoveItem(item))" Variant="Variant.Flat"
+                                Size="ButtonSize.Small" />
                         </RadzenStack>
                     </RadzenCard>
                 }
@@ -76,11 +82,11 @@
         <RadzenCard>
             <RadzenStack Gap="1rem">
                 <RadzenFormField Text="Delivery Address" class="w-100">
-                    <RadzenTextBox @bind-Value="@deliveryAddress" Placeholder="Enter your delivery address" />
+                    <RadzenTextBox @bind-Value="@deliveryAddress" Placeholder="Enter your delivery address"
+                        Disabled="true" />
                 </RadzenFormField>
-                <RadzenButton Text="Place Order" Icon="shopping_cart" Click="@PlaceOrder" Variant="Variant.Filled" 
-                             IsLoading="@placingOrder" Disabled="@isPlaceOrderDisabled" 
-                             Class="w-100" />
+                <RadzenButton Text="Place Order" Icon="shopping_cart" Click="@PlaceOrder" Variant="Variant.Filled"
+                    IsLoading="@placingOrder" Disabled="@isPlaceOrderDisabled" Class="w-100" />
             </RadzenStack>
         </RadzenCard>
     }
@@ -93,8 +99,8 @@
                 <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
                     Add items from the menu to get started
                 </RadzenText>
-                <RadzenButton Text="Browse Restaurants" Icon="restaurant" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" 
-                             Variant="Variant.Flat" />
+                <RadzenButton Text="Browse Restaurants" Icon="restaurant"
+                    Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" />
             </RadzenStack>
         </RadzenCard>
     }
@@ -104,7 +110,8 @@
     private bool loading = true;
     private bool placingOrder = false;
     private CartDto? cart;
-    private string deliveryAddress = string.Empty;
+    private string deliveryAddress = "Delivery is not available yet, might be available later based on customer needs. Pickup only!";
+    //string.Empty;
 
     private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress);
 
@@ -145,11 +152,11 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error increasing quantity: {ex.Message}");
-            NotificationService.Notify(new NotificationMessage 
-            { 
-                Severity = NotificationSeverity.Error, 
-                Summary = "Error", 
-                Detail = $"Failed to update quantity: {ex.Message}" 
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = $"Failed to update quantity: {ex.Message}"
             });
         }
     }
@@ -174,11 +181,11 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error decreasing quantity: {ex.Message}");
-            NotificationService.Notify(new NotificationMessage 
-            { 
-                Severity = NotificationSeverity.Error, 
-                Summary = "Error", 
-                Detail = $"Failed to update quantity: {ex.Message}" 
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = $"Failed to update quantity: {ex.Message}"
             });
         }
     }
@@ -200,32 +207,32 @@
         {
             placingOrder = true;
             var orderId = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress);
-            
+
             // Clear cart state immediately after successful order placement
             cart = null;
             deliveryAddress = string.Empty;
-            
-            NotificationService.Notify(new NotificationMessage 
-            { 
-                Severity = NotificationSeverity.Success, 
-                Summary = "Order Placed", 
-                Detail = $"Your order #{orderId.ToString().Substring(0, 8)} has been placed successfully!" 
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Order Placed",
+                Detail = $"Your order #{orderId.ToString().Substring(0, 8)} has been placed successfully!"
             });
-            
+
             // Trigger navigation to refresh cart count in MainLayout
             NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
-            
+
             // Navigate to orders page
             await Task.Delay(100); // Small delay to ensure state updates
             NavigationManager.NavigateTo("/orders");
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(new NotificationMessage 
-            { 
-                Severity = NotificationSeverity.Error, 
-                Summary = "Order Failed", 
-                Detail = $"Failed to place order: {ex.Message}" 
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Order Failed",
+                Detail = $"Failed to place order: {ex.Message}"
             });
         }
         finally
