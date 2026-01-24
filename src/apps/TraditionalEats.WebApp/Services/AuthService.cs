@@ -48,7 +48,50 @@ public class AuthService
     public async Task<bool> IsAuthenticatedAsync()
     {
         var token = await GetAccessTokenAsync();
-        return !string.IsNullOrEmpty(token);
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        // Check if token is expired
+        if (IsTokenExpired(token))
+        {
+            // Clear expired tokens
+            await ClearTokensAsync();
+            return false;
+        }
+
+        return true;
+    }
+
+    public bool IsTokenExpired(string token)
+    {
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            if (!handler.CanReadToken(token))
+            {
+                return true;
+            }
+
+            var jsonToken = handler.ReadJwtToken(token);
+            var expClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == "exp");
+            
+            if (expClaim == null)
+            {
+                return true; // No expiration claim, consider expired
+            }
+
+            // Convert Unix timestamp to DateTime
+            var expirationTime = DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim.Value)).DateTime;
+            
+            // Check if token is expired (with 30 second buffer to account for clock skew)
+            return expirationTime <= DateTime.UtcNow.AddSeconds(30);
+        }
+        catch
+        {
+            return true; // If we can't parse the token, consider it expired
+        }
     }
 
     public async Task<List<string>> GetUserRolesAsync()

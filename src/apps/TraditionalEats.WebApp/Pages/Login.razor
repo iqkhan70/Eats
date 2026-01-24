@@ -39,10 +39,23 @@
 </RadzenStack>
 
 @code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? SessionExpired { get; set; }
+
     private string email = string.Empty;
     private string password = string.Empty;
     private string errorMessage = string.Empty;
     private bool loading = false;
+
+    protected override void OnInitialized()
+    {
+        // Show session expired message if redirected from expired session
+        if (SessionExpired == "true")
+        {
+            errorMessage = "Your session has expired. Please login again.";
+        }
+    }
 
     private async Task HandleLogin()
     {

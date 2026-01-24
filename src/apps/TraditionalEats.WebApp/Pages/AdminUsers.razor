@@ -136,6 +136,21 @@
                 });
             }
         }
+        catch (SessionExpiredException)
+        {
+            // Session expired - redirect to login
+            currentUserRoles = null;
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("401") || ex.Message.Contains("Unauthorized") || ex.Message.Contains("Session expired"))
+        {
+            // Session expired - redirect to login
+            currentUserRoles = null;
+            await AuthService.ClearTokensAsync();
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
         catch (Exception ex)
         {
             errorMessage = $"Failed to load user roles: {ex.Message}";
@@ -192,6 +207,12 @@
                 });
             }
         }
+        catch (SessionExpiredException)
+        {
+            // Session expired - redirect to login
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
         catch (Exception ex)
         {
             errorMessage = $"Failed to assign role: {ex.Message}";
@@ -246,6 +267,12 @@
                     Detail = errorMessage 
                 });
             }
+        }
+        catch (SessionExpiredException)
+        {
+            // Session expired - redirect to login
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
         }
         catch (Exception ex)
         {

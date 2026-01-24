@@ -32,7 +32,7 @@ builder.Services.AddScoped(sp =>
     var navigationManager = sp.GetRequiredService<NavigationManager>();
     var authService = sp.GetRequiredService<AuthService>();
     var baseUri = new Uri(navigationManager.BaseUri);
-    
+
     // If a full URL is configured, use it
     Uri apiBaseUri;
     if (!string.IsNullOrEmpty(configuredApiUrl) && configuredApiUrl.StartsWith("http"))
@@ -45,10 +45,10 @@ builder.Services.AddScoped(sp =>
         // This works for both localhost and IP access
         apiBaseUri = new UriBuilder(baseUri.Scheme, baseUri.Host, apiPort, "/api/").Uri;
     }
-    
+
     // Create HttpClient with message handler that adds auth tokens and cart session ID
     var cartSessionService = sp.GetRequiredService<CartSessionService>();
-    var handler = new AuthTokenHandler(authService, cartSessionService);
+    var handler = new AuthTokenHandler(authService, cartSessionService, navigationManager);
     return new HttpClient(handler) { BaseAddress = apiBaseUri };
 });
 
