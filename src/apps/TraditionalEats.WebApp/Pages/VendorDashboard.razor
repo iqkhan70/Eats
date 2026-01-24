@@ -143,123 +143,126 @@
 @* Menu Items Management Modal *@
 @if (showMenuItemsModal)
 {
-    <div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Manage Menu Items - @GetRestaurantName(currentRestaurantId)</h5>
-                    <button type="button" class="btn-close" @onclick="CloseMenuItemsModal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <button class="btn btn-primary btn-sm" @onclick="ShowCreateMenuItemForm">+ Add Menu Item</button>
-                    </div>
-                    
-                    @if (menuItemsLoading)
-                    {
-                        <p>Loading menu items...</p>
-                    }
-                    else if (menuItems == null || !menuItems.Any())
-                    {
-                        <p class="text-muted">No menu items yet. Add your first item!</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Category</th>
-                                        <th>Price</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var item in menuItems)
-                                    {
-                                        <tr>
-                                            <td>@item.Name</td>
-                                            <td>@item.CategoryName</td>
-                                            <td>$@item.Price.ToString("F2")</td>
-                                            <td>
-                                                <span class="badge @(item.IsAvailable ? "bg-success" : "bg-secondary")">
-                                                    @(item.IsAvailable ? "Available" : "Unavailable")
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <button class="btn btn-sm btn-outline-primary" @onclick="() => EditMenuItem(item)">Edit</button>
-                                                <button class="btn btn-sm @(item.IsAvailable ? "btn-outline-warning" : "btn-outline-success")" 
-                                                        @onclick="() => ToggleMenuItemAvailability(item)">
-                                                    @(item.IsAvailable ? "Disable" : "Enable")
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <RadzenCard Style="max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3">Manage Menu Items - @GetRestaurantName(currentRestaurantId)</RadzenText>
+                    <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseMenuItemsModal" />
+                </RadzenStack>
+                
+                <RadzenButton Text="+ Add Menu Item" Icon="add" Click="ShowCreateMenuItemForm" Variant="Variant.Filled" Size="ButtonSize.Small" />
+                
+                @if (menuItemsLoading)
+                {
+                    <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+                        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                        <RadzenText>Loading menu items...</RadzenText>
+                    </RadzenStack>
+                }
+                else if (menuItems == null || !menuItems.Any())
+                {
+                    <RadzenCard>
+                        <RadzenStack Gap="1rem" AlignItems="AlignItems.Center">
+                            <RadzenText Style="text-align: center; color: var(--rz-text-secondary-color);">No menu items yet. Add your first item!</RadzenText>
+                        </RadzenStack>
+                    </RadzenCard>
+                }
+                else
+                {
+                    <RadzenDataGrid Data="@menuItems" TItem="MenuItemDto" AllowPaging="true" PageSize="10" AllowSorting="true" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="Name" Title="Name" Width="200px" />
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="CategoryName" Title="Category" Width="150px" />
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="Price" Title="Price" Width="100px">
+                                <Template Context="item">
+                                    <RadzenText>$@item.Price.ToString("F2")</RadzenText>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="IsAvailable" Title="Status" Width="120px">
+                                <Template Context="item">
+                                    <RadzenBadge Text="@(item.IsAvailable ? "Available" : "Unavailable")" 
+                                                 Variant="Variant.Flat"
+                                                 Style="@(item.IsAvailable ? "background-color: var(--rz-success); color: white;" : "background-color: var(--rz-secondary); color: white;")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="MenuItemDto" Title="Actions" Width="200px" Sortable="false" Filterable="false">
+                                <Template Context="item">
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                        <RadzenButton Icon="edit" Size="ButtonSize.ExtraSmall" Variant="Variant.Flat" 
+                                                      Click="@(() => EditMenuItem(item))" />
+                                        <RadzenButton Icon="@(item.IsAvailable ? "visibility_off" : "visibility")" 
+                                                      Size="ButtonSize.ExtraSmall" Variant="Variant.Flat"
+                                                      Click="@(() => ToggleMenuItemAvailability(item))"
+                                                      Title="@(item.IsAvailable ? "Disable" : "Enable")" />
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                }
+            </RadzenStack>
+        </RadzenCard>
     </div>
 }
 
 @* Menu Item Create/Edit Form *@
 @if (showMenuItemForm)
 {
-    <div class="modal show d-block" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">@(editingMenuItem != null ? "Edit Menu Item" : "Create Menu Item")</h5>
-                    <button type="button" class="btn-close" @onclick="CloseMenuItemForm"></button>
-                </div>
-                <div class="modal-body">
-                    <EditForm Model="@menuItemForm" OnValidSubmit="@SaveMenuItem">
-                        <DataAnnotationsValidator />
-                        <div class="mb-3">
-                            <label class="form-label">Category *</label>
-                            <InputSelect @bind-Value="menuItemForm.CategoryId" class="form-select">
-                                <option value="">Select a category</option>
-                                @foreach (var category in categories)
-                                {
-                                    <option value="@category.CategoryId.ToString()">@category.Name</option>
-                                }
-                            </InputSelect>
-                            @if (menuItemForm.CategoryId == null || menuItemForm.CategoryId == Guid.Empty)
-                            {
-                                <span class="text-danger small">Category is required</span>
-                            }
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Item Name *</label>
-                            <InputText @bind-Value="menuItemForm.Name" class="form-control" />
-                            <ValidationMessage For="@(() => menuItemForm.Name)" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <InputTextArea @bind-Value="menuItemForm.Description" class="form-control" rows="3" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Price *</label>
-                            <InputNumber @bind-Value="menuItemForm.Price" class="form-control" step="0.01" min="0" />
-                            <ValidationMessage For="@(() => menuItemForm.Price)" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Image URL</label>
-                            <InputText @bind-Value="menuItemForm.ImageUrl" class="form-control" />
-                        </div>
-                        <div class="d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-secondary" @onclick="CloseMenuItemForm">Cancel</button>
-                            <button type="submit" class="btn btn-primary" disabled="@isSavingMenuItem">@(isSavingMenuItem ? "Saving..." : "Save")</button>
-                        </div>
-                    </EditForm>
-                </div>
-            </div>
-        </div>
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 1002; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <RadzenCard Style="max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1003;">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3">@(editingMenuItem != null ? "Edit Menu Item" : "Create Menu Item")</RadzenText>
+                    <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseMenuItemForm" />
+                </RadzenStack>
+                
+                <RadzenFormField Text="Category *" class="w-100">
+                    <RadzenDropDown @bind-Value="menuItemForm.CategoryId" Data="@categories" TextProperty="Name" ValueProperty="CategoryId" 
+                                    Placeholder="Select a category" Style="width: 100%;" />
+                    @if (menuItemForm.CategoryId == null || menuItemForm.CategoryId == Guid.Empty)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Category is required</RadzenText>
+                    }
+                </RadzenFormField>
+                
+                <RadzenFormField Text="Item Name *" class="w-100">
+                    <RadzenTextBox @bind-Value="menuItemForm.Name" Placeholder="Enter menu item name" Style="width: 100%;" />
+                    @if (string.IsNullOrWhiteSpace(menuItemForm.Name))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Item name is required</RadzenText>
+                    }
+                </RadzenFormField>
+                
+                <RadzenFormField Text="Description" class="w-100">
+                    <RadzenTextArea @bind-Value="menuItemForm.Description" Placeholder="Enter description" Rows="3" Style="width: 100%;" />
+                </RadzenFormField>
+                
+                <RadzenFormField Text="Price *" class="w-100">
+                    <RadzenNumeric @bind-Value="menuItemForm.Price" Format="C" Min="0" Step="0.01" Style="width: 100%;" />
+                    @if (menuItemForm.Price <= 0)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Price must be greater than 0</RadzenText>
+                    }
+                </RadzenFormField>
+                
+                <RadzenFormField Text="Image URL" class="w-100">
+                    <RadzenTextBox @bind-Value="menuItemForm.ImageUrl" Placeholder="Enter image URL" Style="width: 100%;" />
+                </RadzenFormField>
+                
+                @if (!string.IsNullOrEmpty(menuItemErrorMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@menuItemErrorMessage" />
+                }
+                
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+                    <RadzenButton Text="Cancel" Click="CloseMenuItemForm" Variant="Variant.Flat" />
+                    <RadzenButton Text="@(isSavingMenuItem ? "Saving..." : "Save")" Icon="save" Click="SaveMenuItem" 
+                                  Variant="Variant.Filled" IsBusy="@isSavingMenuItem" 
+                                  Disabled="@(isSavingMenuItem || string.IsNullOrWhiteSpace(menuItemForm.Name) || menuItemForm.CategoryId == null || menuItemForm.CategoryId == Guid.Empty || menuItemForm.Price <= 0)" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
     </div>
 }
 
@@ -284,6 +287,7 @@
     private List<CategoryDto> categories = new();
     
     private MenuItemForm menuItemForm = new();
+    private string menuItemErrorMessage = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -416,6 +420,7 @@
         showMenuItemForm = false;
         editingMenuItem = null;
         menuItemForm = new MenuItemForm();
+        menuItemErrorMessage = string.Empty;
     }
 
     private async Task SaveMenuItem()
@@ -429,6 +434,7 @@
         }
 
         isSavingMenuItem = true;
+        menuItemErrorMessage = string.Empty;
         try
         {
             // AuthTokenHandler automatically adds the token, no need to set it manually
@@ -466,18 +472,47 @@
 
             if (response.IsSuccessStatusCode)
             {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Success, 
+                    Summary = "Success", 
+                    Detail = editingMenuItem != null ? "Menu item updated successfully" : "Menu item created successfully",
+                    Duration = 3000
+                });
                 CloseMenuItemForm();
                 await LoadMenuItems(currentRestaurantId.Value);
             }
             else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                Logger.LogError("Failed to save menu item: {Error}", error);
+                var errorContent = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    var errorObj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(errorContent);
+                    if (errorObj.TryGetProperty("error", out var errorProp))
+                    {
+                        menuItemErrorMessage = errorProp.GetString() ?? $"Failed to save menu item: {response.StatusCode}";
+                    }
+                    else if (errorObj.TryGetProperty("message", out var messageProp))
+                    {
+                        menuItemErrorMessage = messageProp.GetString() ?? $"Failed to save menu item: {response.StatusCode}";
+                    }
+                    else
+                    {
+                        menuItemErrorMessage = $"Failed to save menu item: {response.StatusCode}";
+                    }
+                }
+                catch
+                {
+                    menuItemErrorMessage = $"Failed to save menu item: {response.StatusCode} - {errorContent}";
+                }
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = menuItemErrorMessage });
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error saving menu item");
+            menuItemErrorMessage = $"An error occurred: {ex.Message}";
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = menuItemErrorMessage });
         }
         finally
         {

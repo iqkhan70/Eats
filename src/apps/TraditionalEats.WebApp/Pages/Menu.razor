@@ -105,8 +105,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Reset cart ID when navigating to a new restaurant
+        currentCartId = null;
         await LoadMenu();
         await LoadCategories();
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reset cart ID when restaurant changes
+        currentCartId = null;
+        await base.OnParametersSetAsync();
     }
 
     private async Task LoadMenu()
@@ -176,34 +185,39 @@
             isAddingToCart = true;
             addingItemId = item.MenuItemId;
 
-            // Get or create cart
-            if (currentCartId == null)
+            // Always get the current cart to ensure we're using the correct one
+            // This is especially important for authenticated users who might have a user cart
+            var cart = await CartService.GetCartAsync();
+            Guid cartIdToUse;
+            
+            if (cart == null)
             {
-                var cart = await CartService.GetCartAsync();
-                if (cart == null)
+                // No cart exists, create a new one
+                cartIdToUse = await CartService.CreateCartAsync(RestaurantId);
+                if (cartIdToUse == Guid.Empty)
                 {
-                    currentCartId = await CartService.CreateCartAsync(RestaurantId);
-                    if (currentCartId == Guid.Empty)
+                    throw new Exception("Failed to create cart");
+                }
+                currentCartId = cartIdToUse;
+            }
+            else
+            {
+                cartIdToUse = cart.CartId;
+                currentCartId = cartIdToUse;
+                
+                // If cart is for a different restaurant, create a new one
+                if (cart.RestaurantId.HasValue && cart.RestaurantId != RestaurantId)
+                {
+                    cartIdToUse = await CartService.CreateCartAsync(RestaurantId);
+                    if (cartIdToUse == Guid.Empty)
                     {
                         throw new Exception("Failed to create cart");
                     }
-                }
-                else
-                {
-                    currentCartId = cart.CartId;
-                    // If cart is for a different restaurant, create a new one
-                    if (cart.RestaurantId.HasValue && cart.RestaurantId != RestaurantId)
-                    {
-                        currentCartId = await CartService.CreateCartAsync(RestaurantId);
-                        if (currentCartId == Guid.Empty)
-                        {
-                            throw new Exception("Failed to create cart");
-                        }
-                    }
+                    currentCartId = cartIdToUse;
                 }
             }
 
-            var response = await CartService.AddItemToCartAsync(currentCartId.Value, item.MenuItemId, item.Name, item.Price, 1);
+            var response = await CartService.AddItemToCartAsync(cartIdToUse, item.MenuItemId, item.Name, item.Price, 1);
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();

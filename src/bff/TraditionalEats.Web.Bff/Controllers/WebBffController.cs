@@ -533,7 +533,18 @@ public class WebBffController : ControllerBase
             }
             
             var requestBody = new CreateCartRequest(request?.RestaurantId);
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(requestBody);
+            
+            // Serialize with camelCase to match OrderService's JSON configuration
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            };
+            
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(requestBody, options: jsonOptions);
+            
+            _logger.LogInformation("CreateCart: Forwarding to OrderService - URL={Url}, RestaurantId={RestaurantId}", 
+                httpRequestMessage.RequestUri, request?.RestaurantId);
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
@@ -567,8 +578,9 @@ public class WebBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating cart: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}" });
+            _logger.LogError(ex, "Error creating cart: {Message}, StackTrace: {StackTrace}", 
+                ex.Message, ex.StackTrace);
+            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
         }
     }
 
@@ -697,13 +709,35 @@ public class WebBffController : ControllerBase
 
             var client = _httpClientFactory.CreateClient("OrderService");
             
+            // Create request body matching OrderService's AddCartItemRequest (PascalCase properties)
+            var orderServiceRequest = new
+            {
+                MenuItemId = request.MenuItemId,
+                Name = request.Name,
+                Price = request.Price,
+                Quantity = request.Quantity,
+                Options = request.Options
+            };
+            
+            // Serialize with camelCase to match OrderService's JSON configuration
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            };
+            
             // Forward JWT token to OrderService if present
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items");
             if (Request.Headers.TryGetValue("Authorization", out var authHeader))
             {
                 httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
             }
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(orderServiceRequest, options: jsonOptions);
+            
+            // Log request details
+            var requestBody = System.Text.Json.JsonSerializer.Serialize(orderServiceRequest, jsonOptions);
+            _logger.LogInformation("AddItemToCart: Forwarding to OrderService - URL={Url}, Body={Body}", 
+                httpRequestMessage.RequestUri, requestBody);
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();

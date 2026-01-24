@@ -88,13 +88,11 @@ export default function ManageMenuScreen() {
   };
 
   const handleEditItem = (item: MenuItem) => {
-    Alert.alert('Coming Soon', 'Edit menu item functionality will be available soon.');
-    // router.push(`/vendor/menu-items/${item.menuItemId}/edit`);
+    router.push(`/vendor/restaurants/${restaurantId}/menu-items/${item.menuItemId}/edit`);
   };
 
   const handleAddItem = () => {
-    Alert.alert('Coming Soon', 'Add menu item functionality will be available soon.');
-    // router.push(`/vendor/restaurants/${restaurantId}/menu-items/new`);
+    router.push(`/vendor/restaurants/${restaurantId}/menu-items/new`);
   };
 
   if (loading && menuItems.length === 0) {

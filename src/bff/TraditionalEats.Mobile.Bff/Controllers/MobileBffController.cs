@@ -377,10 +377,21 @@ public class MobileBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("OrderService");
             var requestBody = request ?? new CreateCartRequest(null);
+            
+            // Serialize with camelCase to match OrderService's JSON configuration
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            };
+            
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/cart")
             {
-                Content = System.Net.Http.Json.JsonContent.Create(requestBody)
+                Content = System.Net.Http.Json.JsonContent.Create(requestBody, options: jsonOptions)
             };
+            
+            _logger.LogInformation("CreateCart: Forwarding to OrderService - URL={Url}, RestaurantId={RestaurantId}", 
+                httpRequestMessage.RequestUri, request?.RestaurantId);
             
             // Forward JWT token to OrderService if present
             if (Request.Headers.TryGetValue("Authorization", out var authHeader))
@@ -429,8 +440,9 @@ public class MobileBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating cart");
-            return StatusCode(500, new { error = "Failed to create cart" });
+            _logger.LogError(ex, "Error creating cart: {Message}, StackTrace: {StackTrace}", 
+                ex.Message, ex.StackTrace);
+            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
         }
     }
 
@@ -586,9 +598,27 @@ public class MobileBffController : ControllerBase
                 cartId, request.MenuItemId, request.Name, request.Price, request.Quantity);
             
             var client = _httpClientFactory.CreateClient("OrderService");
+            
+            // Create request body matching OrderService's AddCartItemRequest (PascalCase properties)
+            var orderServiceRequest = new
+            {
+                MenuItemId = request.MenuItemId,
+                Name = request.Name,
+                Price = request.Price,
+                Quantity = request.Quantity,
+                Options = request.Options
+            };
+            
+            // Serialize with camelCase to match OrderService's JSON configuration
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            };
+            
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items")
             {
-                Content = System.Net.Http.Json.JsonContent.Create(request)
+                Content = System.Net.Http.Json.JsonContent.Create(orderServiceRequest, options: jsonOptions)
             };
             
             // Forward JWT token to OrderService if present
@@ -596,6 +626,11 @@ public class MobileBffController : ControllerBase
             {
                 httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
             }
+            
+            // Log request details
+            var requestBody = System.Text.Json.JsonSerializer.Serialize(orderServiceRequest, jsonOptions);
+            _logger.LogInformation("AddItemToCart: Forwarding to OrderService - URL={Url}, Body={Body}", 
+                httpRequestMessage.RequestUri, requestBody);
             
             var response = await client.SendAsync(httpRequestMessage);
             var content = await response.Content.ReadAsStringAsync();
@@ -640,8 +675,9 @@ public class MobileBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding item to cart: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
+            _logger.LogError(ex, "Error adding item to cart: {Message}, StackTrace: {StackTrace}", 
+                ex.Message, ex.StackTrace);
+            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}", details = ex.ToString() });
         }
     }
 

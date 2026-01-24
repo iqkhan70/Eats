@@ -341,6 +341,37 @@ public class OrderService : IOrderService
             // If duplicates were cleaned or prices were fixed, reload the cart to get the cleaned version
             if (hadDuplicates || needsSave)
             {
+                // Reload with tracking to fix any remaining price issues
+                var trackedCartForFix = await _context.Carts
+                    .Include(c => c.Items)
+                    .FirstOrDefaultAsync(c => c.CartId == cart.CartId);
+
+                if (trackedCartForFix != null)
+                {
+                    // Validate and fix all items' TotalPrice
+                    bool needsFinalSave = false;
+                    foreach (var item in trackedCartForFix.Items)
+                    {
+                        var expectedTotalPrice = item.Quantity * item.UnitPrice;
+                        if (item.TotalPrice != expectedTotalPrice)
+                        {
+                            _logger.LogWarning("GetCartByCustomerAsync: Item {CartItemId} has incorrect TotalPrice after cleanup! Expected={Expected}, Actual={Actual}. Fixing...",
+                                item.CartItemId, expectedTotalPrice, item.TotalPrice);
+                            item.TotalPrice = expectedTotalPrice;
+                            needsFinalSave = true;
+                        }
+                    }
+
+                    if (needsFinalSave)
+                    {
+                        RecalculateCartTotals(trackedCartForFix);
+                        trackedCartForFix.UpdatedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("GetCartByCustomerAsync: Fixed TotalPrice values after cleanup");
+                    }
+                }
+
+                // Now reload as NoTracking for return
                 cart = await _context.Carts
                     .Include(c => c.Items)
                     .AsNoTracking()
@@ -348,20 +379,39 @@ public class OrderService : IOrderService
 
                 if (cart != null)
                 {
-                    // Validate all items again after reload
+                    // Final validation - ensure all TotalPrice values are correct in memory
                     foreach (var item in cart.Items)
                     {
                         var expectedTotalPrice = item.Quantity * item.UnitPrice;
                         if (item.TotalPrice != expectedTotalPrice)
                         {
-                            _logger.LogError("GetCartByCustomerAsync: Item {CartItemId} STILL has incorrect TotalPrice after reload! Expected={Expected}, Actual={Actual}",
+                            _logger.LogError("GetCartByCustomerAsync: Item {CartItemId} STILL has incorrect TotalPrice after all fixes! Expected={Expected}, Actual={Actual}. Fixing in memory...",
                                 item.CartItemId, expectedTotalPrice, item.TotalPrice);
-                            // Fix it in memory
+                            // Fix it in memory for this response
                             item.TotalPrice = expectedTotalPrice;
                         }
                     }
 
                     // Recalculate totals on the cleaned cart
+                    RecalculateCartTotals(cart);
+                }
+            }
+            else
+            {
+                // Even if no cleanup was needed, validate all items one more time
+                if (cart != null && cart.Items != null)
+                {
+                    foreach (var item in cart.Items)
+                    {
+                        var expectedTotalPrice = item.Quantity * item.UnitPrice;
+                        if (item.TotalPrice != expectedTotalPrice)
+                        {
+                            _logger.LogWarning("GetCartByCustomerAsync: Item {CartItemId} has incorrect TotalPrice! Expected={Expected}, Actual={Actual}. Fixing in memory...",
+                                item.CartItemId, expectedTotalPrice, item.TotalPrice);
+                            // Fix it in memory for this response
+                            item.TotalPrice = expectedTotalPrice;
+                        }
+                    }
                     RecalculateCartTotals(cart);
                 }
             }

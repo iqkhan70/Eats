@@ -67,8 +67,9 @@ public class OrderController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create cart");
-            return StatusCode(500, new { message = "Failed to create cart" });
+            _logger.LogError(ex, "Failed to create cart: {Message}, StackTrace: {StackTrace}, InnerException: {InnerException}", 
+                ex.Message, ex.StackTrace, ex.InnerException?.Message);
+            return StatusCode(500, new { message = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
         }
     }
 
