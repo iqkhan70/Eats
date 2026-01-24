@@ -25,12 +25,12 @@ class AuthService {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>('/MobileBff/auth/login', credentials);
-      
+
       if (response.data) {
         await this.storeTokens(response.data.accessToken, response.data.refreshToken);
         return response.data;
       }
-      
+
       throw new Error('Invalid response from server');
     } catch (error: any) {
       if (error.response?.status === 401) {
@@ -43,7 +43,7 @@ class AuthService {
   async register(credentials: RegisterCredentials): Promise<void> {
     try {
       const response = await api.post('/MobileBff/auth/register', credentials);
-      
+
       if (!response.data) {
         throw new Error('Registration failed');
       }
@@ -76,9 +76,26 @@ class AuthService {
     return await AsyncStorage.getItem(this.REFRESH_TOKEN_KEY);
   }
 
+  /**
+   * ✅ More reliable auth check:
+   * - token exists
+   * - token decodes
+   * - token is not expired (based on exp claim)
+   * If expired, clears tokens.
+   */
   async isAuthenticated(): Promise<boolean> {
     const token = await this.getAccessToken();
-    return token !== null;
+    if (!token) return false;
+
+    const decoded = this.decodeToken(token);
+    if (!decoded) return false;
+
+    if (this.isTokenExpired(decoded)) {
+      await this.clearTokens();
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -99,19 +116,19 @@ class AuthService {
 
       // Convert base64url to base64
       let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      
+
       // Add padding if needed
       while (base64.length % 4) {
         base64 += '=';
       }
-      
+
       // React Native compatible base64 decode
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
       const lookup = new Array(256);
       for (let i = 0; i < chars.length; i++) {
         lookup[chars.charCodeAt(i)] = i;
       }
-      
+
       let bufferLength = base64.length * 0.75;
       if (base64[base64.length - 1] === '=') {
         bufferLength--;
@@ -119,38 +136,69 @@ class AuthService {
           bufferLength--;
         }
       }
-      
+
       const bytes = new Uint8Array(bufferLength);
       let p = 0;
-      
+
       for (let i = 0; i < base64.length; i += 4) {
         const encoded1 = lookup[base64.charCodeAt(i)];
         const encoded2 = lookup[base64.charCodeAt(i + 1)];
         const encoded3 = lookup[base64.charCodeAt(i + 2)];
         const encoded4 = lookup[base64.charCodeAt(i + 3)];
-        
+
         bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
         bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
         bytes[p++] = ((encoded3 & 3) << 6) | (encoded4 & 63);
       }
-      
+
       // Convert bytes to string using TextDecoder if available, otherwise manual conversion
       let decoded: string;
       if (typeof TextDecoder !== 'undefined') {
         decoded = new TextDecoder('utf-8').decode(bytes);
       } else {
-        // Manual UTF-8 decoding
         decoded = '';
         for (let i = 0; i < bytes.length; i++) {
           decoded += String.fromCharCode(bytes[i]);
         }
       }
-      
+
       return JSON.parse(decoded);
     } catch (error) {
       console.error('Error decoding token:', error);
       return null;
     }
+  }
+
+  /**
+   * ✅ Extract email from JWT claims
+   * Handles common claim names across identity providers.
+   */
+  async getUserEmail(): Promise<string | null> {
+    const token = await this.getAccessToken();
+    if (!token) return null;
+
+    const decoded = this.decodeToken(token);
+    if (!decoded) return null;
+
+    return (
+      decoded.email ||
+      decoded.preferred_username ||
+      decoded.unique_name ||
+      decoded.upn ||
+      decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] ||
+      decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ||
+      null
+    );
+  }
+
+  /**
+   * ✅ Token expiration based on exp (seconds since epoch)
+   */
+  private isTokenExpired(decoded: any): boolean {
+    const exp = decoded?.exp;
+    if (!exp) return false; // if exp not present, treat as not expired
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    return nowSeconds >= exp;
   }
 
   /**
@@ -167,9 +215,10 @@ class AuthService {
       return [];
     }
 
-    // JWT roles can be in different claim names: 'role', 'roles', 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role'
+    // JWT roles can be in different claim names:
+    // 'role', 'roles', 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role'
     const roles: string[] = [];
-    
+
     if (decoded.role) {
       roles.push(...(Array.isArray(decoded.role) ? decoded.role : [decoded.role]));
     }
@@ -224,12 +273,12 @@ class AuthService {
       }
 
       const response = await api.post<AuthResponse>('/MobileBff/auth/refresh', { refreshToken });
-      
+
       if (response.data) {
         await this.storeTokens(response.data.accessToken, response.data.refreshToken);
         return response.data.accessToken;
       }
-      
+
       return null;
     } catch (error) {
       await this.clearTokens();
