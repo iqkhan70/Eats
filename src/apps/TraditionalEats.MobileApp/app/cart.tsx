@@ -157,7 +157,7 @@ export default function CartScreen() {
       
       // Clear cart state immediately after successful order placement
       setCart(null);
-      setDeliveryAddress('');
+      setDeliveryAddress('Delivery is not available yet, might be available later based on customer needs. Pickup only!');
       
       Alert.alert('Success', `Order placed! Order ID: ${orderId.substring(0, 8)}`, [
         { text: 'OK', onPress: () => router.push('/(tabs)/orders') },
