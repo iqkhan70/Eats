@@ -1,6 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import axios from 'axios';
 import { authService } from '../../services/auth';
 import { api } from '../../services/api';
 
@@ -38,7 +48,16 @@ interface Order {
   statusHistory?: OrderStatusHistory[];
 }
 
-const statusOptions = ['Pending', 'Preparing', 'Ready', 'Completed', 'Cancelled'];
+const statusOptions = ['Pending', 'Preparing', 'Ready', 'Completed', 'Cancelled'] as const;
+type OrderStatus = (typeof statusOptions)[number];
+
+const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
+  Pending: ['Preparing', 'Cancelled'],
+  Preparing: ['Ready', 'Cancelled'],
+  Ready: ['Completed', 'Cancelled'],
+  Completed: [],
+  Cancelled: [],
+};
 
 const getStatusColor = (status: string): string => {
   switch (status) {
@@ -57,129 +76,284 @@ const getStatusColor = (status: string): string => {
   }
 };
 
+function safeJsonParse(input: unknown) {
+  if (typeof input !== 'string') return input;
+  try {
+    return JSON.parse(input);
+  } catch {
+    return input;
+  }
+}
+
+/** Pretty-print for RN console (avoids truncation) */
+function logJson(label: string, obj: any) {
+  try {
+    console.log(label + ':\n' + JSON.stringify(obj, null, 2));
+  } catch {
+    console.log(label + ':', obj);
+  }
+}
+
+function extractAspNetValidationErrors(data: any): string | null {
+  const errors = data?.errors;
+  if (!errors || typeof errors !== 'object') return null;
+
+  const lines: string[] = [];
+  for (const key of Object.keys(errors)) {
+    const arr = errors[key];
+    if (Array.isArray(arr)) {
+      for (const msg of arr) lines.push(`${key}: ${msg}`);
+    }
+  }
+  return lines.length ? lines.join('\n') : null;
+}
+
+function normalizeErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as any;
+
+    const modelErrors = extractAspNetValidationErrors(data);
+    if (modelErrors) return modelErrors;
+
+    if (typeof data === 'string' && data.trim()) return data;
+    if (data?.message) return String(data.message);
+    if (data?.error) return String(data.error);
+    if (data?.title && data?.detail) return `${data.title}\n${data.detail}`;
+    if (data?.title) return String(data.title);
+    if (data?.detail) return String(data.detail);
+
+    return `Request failed (${err.response?.status ?? 'no status'})`;
+  }
+
+  if (err instanceof Error) return err.message;
+  return 'Unexpected error';
+}
+
+/**
+ * IMPORTANT:
+ * Your backend expects:
+ *   public record UpdateOrderStatusRequest(string Status, string? Notes);
+ * So status MUST be a STRING. No numeric fallback.
+ */
+async function putUpdateOrderStatus(orderId: string, status: OrderStatus, notes?: string | null) {
+  const payload = {
+    status, // string only
+    notes: notes ?? null,
+  };
+
+  // If your api baseURL does NOT already include "/api",
+  // Base URL already includes /api, so use /MobileBff/... not /api/MobileBff/...
+  const url = `/MobileBff/orders/${orderId}/status`;
+
+  logJson('Updating order status (PUT)', { url, payload });
+
+  await api.put(url, payload, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export default function VendorOrdersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ restaurantId?: string }>();
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(params.restaurantId || null);
+
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(
+    params.restaurantId || null
+  );
+
   const [loadingRestaurants, setLoadingRestaurants] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkAuthAndLoad();
-  }, []);
+  const didInitRef = useRef(false);
+  const isMountedRef = useRef(true);
 
-  const checkAuthAndLoad = async () => {
-    const authenticated = await authService.isAuthenticated();
-    setIsAuthenticated(authenticated);
-    
-    if (authenticated) {
-      const vendor = await authService.isVendor();
-      setIsVendor(vendor);
-      
-      if (vendor) {
-        await loadRestaurants();
-      }
-    }
-  };
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (params.restaurantId && params.restaurantId !== selectedRestaurantId) {
       setSelectedRestaurantId(params.restaurantId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.restaurantId]);
 
   useEffect(() => {
-    if (isAuthenticated && isVendor) {
-      loadRestaurants();
-    }
-  }, [isAuthenticated, isVendor]);
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    void checkAuthAndLoad();
+  }, []);
 
-  useEffect(() => {
-    if (restaurants.length > 0) {
-      loadOrders();
+  const checkAuthAndLoad = async () => {
+    try {
+      const authenticated = await authService.isAuthenticated();
+      if (!isMountedRef.current) return;
+
+      setIsAuthenticated(authenticated);
+      if (!authenticated) return;
+
+      const vendor = await authService.isVendor();
+      if (!isMountedRef.current) return;
+
+      setIsVendor(vendor);
+
+      if (vendor) {
+        await loadRestaurants();
+      }
+    } catch (err) {
+      console.error('Auth check failed:', err);
+      Alert.alert('Error', 'Failed to validate authentication.');
     }
-  }, [selectedRestaurantId, restaurants]);
+  };
+
+  const activeRestaurants = useMemo(() => {
+    return restaurants.filter((r) => r.isActive);
+  }, [restaurants]);
 
   const loadRestaurants = async () => {
     try {
       setLoadingRestaurants(true);
       const response = await api.get('/MobileBff/vendor/my-restaurants');
-      setRestaurants(response.data || []);
-    } catch (error: any) {
-      console.error('Error loading restaurants:', error);
+
+      const data = response.data ?? [];
+      if (!isMountedRef.current) return;
+
+      setRestaurants(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error loading restaurants:', err);
+      Alert.alert('Error', normalizeErrorMessage(err));
     } finally {
-      setLoadingRestaurants(false);
+      if (isMountedRef.current) setLoadingRestaurants(false);
     }
   };
 
   const loadOrders = async () => {
+    if (!isAuthenticated || !isVendor) return;
+    if (restaurants.length === 0) return;
+
     try {
       setLoadingOrders(true);
+
       let allOrders: Order[] = [];
 
       if (selectedRestaurantId) {
-        const response = await api.get(`/MobileBff/vendor/restaurants/${selectedRestaurantId}/orders`);
-        allOrders = response.data || [];
+        const response = await api.get(
+          `/MobileBff/vendor/restaurants/${selectedRestaurantId}/orders`
+        );
+        const data = response.data ?? [];
+        allOrders = Array.isArray(data) ? data : [];
       } else {
-        // Load orders for all restaurants
-        for (const restaurant of restaurants) {
+        for (const restaurant of activeRestaurants) {
           try {
-            const response = await api.get(`/MobileBff/vendor/restaurants/${restaurant.restaurantId}/orders`);
-            if (response.data) {
-              allOrders.push(...response.data);
-            }
-          } catch (error) {
-            console.error(`Error loading orders for restaurant ${restaurant.restaurantId}:`, error);
+            const response = await api.get(
+              `/MobileBff/vendor/restaurants/${restaurant.restaurantId}/orders`
+            );
+            const data = response.data ?? [];
+            if (Array.isArray(data)) allOrders.push(...data);
+          } catch (innerErr) {
+            console.error(
+              `Error loading orders for restaurant ${restaurant.restaurantId}:`,
+              innerErr
+            );
           }
         }
       }
 
-      // Sort by creation date (newest first)
-      allOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      allOrders.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      if (!isMountedRef.current) return;
       setOrders(allOrders);
-    } catch (error: any) {
-      console.error('Error loading orders:', error);
+    } catch (err) {
+      console.error('Error loading orders:', err);
+      Alert.alert('Error', normalizeErrorMessage(err));
     } finally {
-      setLoadingOrders(false);
+      if (isMountedRef.current) setLoadingOrders(false);
     }
   };
 
+  useEffect(() => {
+    if (isAuthenticated && isVendor && restaurants.length > 0) {
+      void loadOrders();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRestaurantId, restaurants, isAuthenticated, isVendor]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadRestaurants(), loadOrders()]);
-    setRefreshing(false);
+    try {
+      await loadRestaurants();
+      await loadOrders();
+    } finally {
+      if (isMountedRef.current) setRefreshing(false);
+    }
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
       setUpdatingStatus(orderId);
-      await api.put(`/MobileBff/orders/${orderId}/status`, {
-        status: newStatus,
-        notes: null
-      });
-      
-      // Reload orders to get updated status
+
+      await putUpdateOrderStatus(orderId, newStatus, null);
+
       await loadOrders();
-    } catch (error: any) {
-      console.error('Error updating order status:', error);
-      alert('Failed to update order status');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const parsedSent = safeJsonParse(err.config?.data);
+
+        logJson('Error updating order status (axios)', {
+          status: err.response?.status,
+          responseData: err.response?.data,
+          url: err.config?.url,
+          method: err.config?.method,
+          dataSent: parsedSent,
+          headersSent: err.config?.headers,
+        });
+      } else {
+        console.error('Error updating order status:', err);
+      }
+
+      Alert.alert('Update failed', normalizeErrorMessage(err));
     } finally {
-      setUpdatingStatus(null);
+      if (isMountedRef.current) setUpdatingStatus(null);
     }
   };
 
   const showStatusPicker = (order: Order) => {
-    // Simple implementation - in production, use a proper picker component
-    const currentIndex = statusOptions.indexOf(order.status);
-    const nextIndex = (currentIndex + 1) % statusOptions.length;
-    const nextStatus = statusOptions[nextIndex];
-    updateOrderStatus(order.orderId, nextStatus);
+    const current = order.status as OrderStatus;
+
+    if (!statusOptions.includes(current)) {
+      Alert.alert('Cannot update', `Unknown order status: ${order.status}`);
+      return;
+    }
+
+    const nextList = allowedNextStatuses[current];
+    if (!nextList || nextList.length === 0) {
+      Alert.alert('Cannot update', `Order is already ${order.status}.`);
+      return;
+    }
+
+    Alert.alert(
+      'Update status',
+      `Current: "${order.status}"`,
+      [
+        ...nextList.map((s) => ({
+          text: s,
+          onPress: () => void updateOrderStatus(order.orderId, s),
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
   if (!isAuthenticated || !isVendor) {
@@ -202,7 +376,7 @@ export default function VendorOrdersScreen() {
   if (restaurants.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>You don't have any restaurants yet.</Text>
+        <Text style={styles.errorText}>You don&apos;t have any restaurants yet.</Text>
       </View>
     );
   }
@@ -222,28 +396,38 @@ export default function VendorOrdersScreen() {
       >
         <View style={styles.filterContainer}>
           <Text style={styles.filterLabel}>Filter by Restaurant:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.restaurantFilter}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.restaurantFilter}
+          >
             <TouchableOpacity
               style={[styles.filterChip, !selectedRestaurantId && styles.filterChipActive]}
               onPress={() => setSelectedRestaurantId(null)}
             >
-              <Text style={[styles.filterChipText, !selectedRestaurantId && styles.filterChipTextActive]}>
+              <Text
+                style={[
+                  styles.filterChipText,
+                  !selectedRestaurantId && styles.filterChipTextActive,
+                ]}
+              >
                 All
               </Text>
             </TouchableOpacity>
+
             {restaurants.map((restaurant) => (
               <TouchableOpacity
                 key={restaurant.restaurantId}
                 style={[
                   styles.filterChip,
-                  selectedRestaurantId === restaurant.restaurantId && styles.filterChipActive
+                  selectedRestaurantId === restaurant.restaurantId && styles.filterChipActive,
                 ]}
                 onPress={() => setSelectedRestaurantId(restaurant.restaurantId)}
               >
                 <Text
                   style={[
                     styles.filterChipText,
-                    selectedRestaurantId === restaurant.restaurantId && styles.filterChipTextActive
+                    selectedRestaurantId === restaurant.restaurantId && styles.filterChipTextActive,
                   ]}
                 >
                   {restaurant.name}
@@ -268,17 +452,15 @@ export default function VendorOrdersScreen() {
               key={order.orderId}
               style={styles.orderCard}
               onPress={() => router.push(`/orders/${order.orderId}`)}
+              activeOpacity={0.85}
             >
               <View style={styles.orderHeader}>
                 <View>
                   <Text style={styles.orderId}>Order #{order.orderId.substring(0, 8)}</Text>
-                  <Text style={styles.orderDate}>
-                    {new Date(order.createdAt).toLocaleString()}
-                  </Text>
+                  <Text style={styles.orderDate}>{new Date(order.createdAt).toLocaleString()}</Text>
                 </View>
-                <View
-                  style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}
-                >
+
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
                   <Text style={styles.statusText}>{order.status}</Text>
                 </View>
               </View>
@@ -297,14 +479,16 @@ export default function VendorOrdersScreen() {
 
               <View style={styles.orderFooter}>
                 <Text style={styles.orderTotal}>Total: ${order.total.toFixed(2)}</Text>
+
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
                     { backgroundColor: getStatusColor(order.status) },
-                    updatingStatus === order.orderId && styles.statusButtonDisabled
+                    updatingStatus === order.orderId && styles.statusButtonDisabled,
                   ]}
                   onPress={() => showStatusPicker(order)}
                   disabled={updatingStatus === order.orderId}
+                  activeOpacity={0.8}
                 >
                   {updatingStatus === order.orderId ? (
                     <ActivityIndicator size="small" color="white" />

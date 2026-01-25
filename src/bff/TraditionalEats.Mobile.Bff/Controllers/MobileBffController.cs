@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using TraditionalEats.BuildingBlocks.Redis;
 
@@ -41,7 +43,7 @@ public class MobileBffController : ControllerBase
         return sessionId;
     }
 
-        [HttpGet("restaurants")]
+    [HttpGet("restaurants")]
         public async Task<IActionResult> GetRestaurants(
             [FromQuery] string? location,
             [FromQuery] string? cuisineType,
@@ -49,10 +51,10 @@ public class MobileBffController : ControllerBase
             [FromQuery] double? longitude,
             [FromQuery] int skip = 0,
             [FromQuery] int take = 20)
+    {
+        try
         {
-            try
-            {
-                var client = _httpClientFactory.CreateClient("RestaurantService");
+            var client = _httpClientFactory.CreateClient("RestaurantService");
                 
                 // Build query string
                 var queryParams = new List<string>();
@@ -65,21 +67,21 @@ public class MobileBffController : ControllerBase
                 
                 var queryString = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
                 var response = await client.GetAsync($"/api/restaurant{queryString}");
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    var content = await response.Content.ReadAsStringAsync();
-                    return Content(content, "application/json");
-                }
-                
-                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-            }
-            catch (Exception ex)
+            
+            if (response.IsSuccessStatusCode)
             {
-                _logger.LogError(ex, "Error fetching restaurants");
-                return StatusCode(500, new { error = "Failed to fetch restaurants" });
+                var content = await response.Content.ReadAsStringAsync();
+                    return Content(content, "application/json");
             }
+            
+            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching restaurants");
+            return StatusCode(500, new { error = "Failed to fetch restaurants" });
+        }
+    }
 
     [HttpGet("restaurants/{id}")]
     public async Task<IActionResult> GetRestaurant(Guid id)
@@ -867,25 +869,67 @@ public class MobileBffController : ControllerBase
     {
         try
         {
+            _logger.LogInformation("UpdateOrderStatus: OrderId={OrderId}, Request={@Request}", orderId, request);
+            
+            if (request == null)
+            {
+                _logger.LogWarning("UpdateOrderStatus: Request body is null");
+                return BadRequest(new { error = "Request body is required" });
+            }
+            
+            if (string.IsNullOrWhiteSpace(request.Status))
+            {
+                _logger.LogWarning("UpdateOrderStatus: Status is null or empty");
+                return BadRequest(new { error = "Status is required" });
+            }
+            
             var client = _httpClientFactory.CreateClient("OrderService");
             
             // Forward Authorization header
             var authHeader = Request.Headers["Authorization"].FirstOrDefault();
             if (!string.IsNullOrEmpty(authHeader))
             {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+                var token = authHeader.Replace("Bearer ", "").Trim();
+                if (!string.IsNullOrEmpty(token))
+                {
+                    client.DefaultRequestHeaders.Authorization = 
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                    _logger.LogInformation("UpdateOrderStatus: Added Authorization header");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("UpdateOrderStatus: No Authorization header found in request");
             }
             
-            var response = await client.PutAsJsonAsync($"/api/Order/{orderId}/status", request);
+            // Normalize empty string to null for Notes
+            var normalizedRequest = new UpdateOrderStatusRequest(
+                request.Status,
+                string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes
+            );
+            
+            _logger.LogInformation("UpdateOrderStatus: Calling OrderService with normalized request: Status={Status}, Notes={Notes}", 
+                normalizedRequest.Status, normalizedRequest.Notes ?? "null");
+            
+            // Use PutAsJsonAsync which handles serialization correctly with camelCase
+            var response = await client.PutAsJsonAsync($"/api/Order/{orderId}/status", normalizedRequest);
             var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation("UpdateOrderStatus: OrderService response - StatusCode={StatusCode}, Content={Content}", 
+                response.StatusCode, content);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("UpdateOrderStatus: OrderService returned error - StatusCode={StatusCode}, Content={Content}", 
+                    response.StatusCode, content);
+            }
             
             return StatusCode((int)response.StatusCode, content);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating order status");
-            return StatusCode(500, new { error = "Failed to update order status" });
+            _logger.LogError(ex, "Error updating order status: OrderId={OrderId}, Exception={Exception}", orderId, ex.ToString());
+            return StatusCode(500, new { error = "Failed to update order status", message = ex.Message });
         }
     }
 

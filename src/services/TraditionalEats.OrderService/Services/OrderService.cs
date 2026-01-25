@@ -1237,54 +1237,100 @@ public class OrderService : IOrderService
 
     public async Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null)
     {
-        var order = await _context.Orders
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(o => o.OrderId == orderId);
+        Order? order = null;
+        string? oldStatus = null;
         
-        if (order == null)
-            return false;
-
-        var oldStatus = order.Status;
-        order.Status = newStatus;
-        order.StatusHistory.Add(new OrderStatusHistory
-        {
-            Id = Guid.NewGuid(),
-            OrderId = orderId,
-            Status = newStatus,
-            Notes = notes,
-            ChangedAt = DateTime.UtcNow
-        });
-
-        if (newStatus == "Delivered")
-        {
-            order.DeliveredAt = DateTime.UtcNow;
-        }
-
-        await _context.SaveChangesAsync();
-
-        // Publish order status changed event for notification service
         try
         {
-            var statusChangedEvent = new OrderStatusChangedEvent(
-                orderId,
-                order.CustomerId,
-                order.RestaurantId,
-                oldStatus,
-                newStatus,
-                notes,
-                DateTime.UtcNow
-            );
+            _logger.LogInformation("UpdateOrderStatusAsync: Starting - OrderId={OrderId}, NewStatus={NewStatus}, Notes={Notes}", 
+                orderId, newStatus, notes ?? "null");
+            
+            // Load order to get current status (no tracking to avoid concurrency issues)
+            order = await _context.Orders
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.OrderId == orderId);
+            
+            if (order == null)
+            {
+                _logger.LogWarning("UpdateOrderStatusAsync: Order not found - OrderId={OrderId}", orderId);
+                return false;
+            }
 
-            await _messagePublisher.PublishAsync("tradition-eats", "order.status.changed", statusChangedEvent);
-            _logger.LogInformation("UpdateOrderStatusAsync: Order status changed event published - OrderId={OrderId}, OldStatus={OldStatus}, NewStatus={NewStatus}", 
-                orderId, oldStatus, newStatus);
+            oldStatus = order.Status;
+            _logger.LogInformation("UpdateOrderStatusAsync: Order found - OrderId={OrderId}, CurrentStatus={CurrentStatus}, CustomerId={CustomerId}, RestaurantId={RestaurantId}",
+                orderId, oldStatus, order.CustomerId, order.RestaurantId);
+            
+            // Use ExecuteUpdateAsync for direct database update (avoids concurrency issues)
+            var rowsAffected = await _context.Orders
+                .Where(o => o.OrderId == orderId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(o => o.Status, newStatus));
+            
+            // Only update DeliveredAt if status is "Delivered"
+            if (newStatus == "Delivered" && rowsAffected > 0)
+            {
+                await _context.Orders
+                    .Where(o => o.OrderId == orderId)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(o => o.DeliveredAt, DateTime.UtcNow));
+            }
+            
+            if (rowsAffected == 0)
+            {
+                _logger.LogWarning("UpdateOrderStatusAsync: No rows affected - OrderId={OrderId} may have been deleted", orderId);
+                return false;
+            }
+            
+            _logger.LogInformation("UpdateOrderStatusAsync: Order status updated - RowsAffected={RowsAffected}", rowsAffected);
+            
+            // Create and add new status history entry directly to context
+            var statusHistory = new OrderStatusHistory
+            {
+                Id = Guid.NewGuid(),
+                OrderId = orderId,
+                Status = newStatus,
+                Notes = notes,
+                ChangedAt = DateTime.UtcNow
+            };
+            
+            // Add to context directly
+            await _context.OrderStatusHistory.AddAsync(statusHistory);
+
+            _logger.LogInformation("UpdateOrderStatusAsync: Saving status history to database");
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("UpdateOrderStatusAsync: Database changes saved successfully");
+            
+            // Publish order status changed event for notification service
+            try
+            {
+                if (order != null && !string.IsNullOrEmpty(oldStatus))
+                {
+                    var statusChangedEvent = new OrderStatusChangedEvent(
+                        orderId,
+                        order.CustomerId,
+                        order.RestaurantId,
+                        oldStatus,
+                        newStatus,
+                        notes,
+                        DateTime.UtcNow
+                    );
+
+                    await _messagePublisher.PublishAsync("tradition-eats", "order.status.changed", statusChangedEvent);
+                    _logger.LogInformation("UpdateOrderStatusAsync: Order status changed event published - OrderId={OrderId}, OldStatus={OldStatus}, NewStatus={NewStatus}", 
+                        orderId, oldStatus, newStatus);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "UpdateOrderStatusAsync: Failed to publish order status changed event, continuing anyway");
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "UpdateOrderStatusAsync: Failed to publish order status changed event, continuing anyway");
+            _logger.LogError(ex, "UpdateOrderStatusAsync: Exception occurred - OrderId={OrderId}, Exception={Exception}", 
+                orderId, ex.ToString());
+            throw; // Re-throw to let controller handle it
         }
-
-        return true;
     }
 
     private void RecalculateCartTotals(Cart cart)

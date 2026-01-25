@@ -478,29 +478,46 @@ public class OrderController : ControllerBase
     {
         try
         {
-            if (request == null || string.IsNullOrWhiteSpace(request.Status))
+            _logger.LogInformation("UpdateOrderStatus: OrderId={OrderId}, Request={@Request}", orderId, request);
+            
+            if (request == null)
             {
+                _logger.LogWarning("UpdateOrderStatus: Request body is null");
+                return BadRequest(new { message = "Request body is required" });
+            }
+            
+            if (string.IsNullOrWhiteSpace(request.Status))
+            {
+                _logger.LogWarning("UpdateOrderStatus: Status is null or empty");
                 return BadRequest(new { message = "Status is required" });
             }
 
             var order = await _orderService.GetOrderAsync(orderId);
             if (order == null)
             {
+                _logger.LogWarning("UpdateOrderStatus: Order not found - OrderId={OrderId}", orderId);
                 return NotFound(new { message = "Order not found" });
             }
+
+            _logger.LogInformation("UpdateOrderStatus: Updating order - OrderId={OrderId}, OldStatus={OldStatus}, NewStatus={NewStatus}, Notes={Notes}",
+                orderId, order.Status, request.Status, request.Notes ?? "null");
 
             var success = await _orderService.UpdateOrderStatusAsync(orderId, request.Status, request.Notes);
             if (!success)
             {
+                _logger.LogWarning("UpdateOrderStatus: UpdateOrderStatusAsync returned false - OrderId={OrderId}", orderId);
                 return BadRequest(new { message = "Failed to update order status" });
             }
 
+            _logger.LogInformation("UpdateOrderStatus: Successfully updated order status - OrderId={OrderId}, NewStatus={NewStatus}", 
+                orderId, request.Status);
             return Ok(new { message = "Order status updated successfully" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update order status");
-            return StatusCode(500, new { message = "Failed to update order status" });
+            _logger.LogError(ex, "UpdateOrderStatus: Exception occurred - OrderId={OrderId}, Exception={Exception}", 
+                orderId, ex.ToString());
+            return StatusCode(500, new { message = "Failed to update order status", error = ex.Message });
         }
     }
 }
