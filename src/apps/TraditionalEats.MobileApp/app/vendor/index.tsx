@@ -144,9 +144,14 @@ export default function VendorDashboardScreen() {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Restaurants</Text>
-        <TouchableOpacity onPress={handleCreateRestaurant} style={styles.addButton}>
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={() => router.push('/vendor/orders')} style={styles.ordersButton}>
+            <Ionicons name="receipt-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleCreateRestaurant} style={styles.addButton}>
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {restaurants.length === 0 ? (
@@ -194,6 +199,14 @@ export default function VendorDashboardScreen() {
                 >
                   <Ionicons name="restaurant-outline" size={18} color="#fff" />
                   <Text style={styles.menuButtonText}>Menu</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.ordersButton]}
+                  onPress={() => router.push(`/vendor/orders?restaurantId=${restaurant.restaurantId}`)}
+                >
+                  <Ionicons name="receipt-outline" size={18} color="#fff" />
+                  <Text style={styles.ordersButtonText}>Orders</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
@@ -249,6 +262,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     flex: 1,
     textAlign: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ordersButton: {
+    padding: 8,
   },
   addButton: {
     padding: 8,
@@ -376,6 +396,14 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: '#d32f2f',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  ordersButton: {
+    backgroundColor: '#4caf50',
+  },
+  ordersButtonText: {
+    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
   },

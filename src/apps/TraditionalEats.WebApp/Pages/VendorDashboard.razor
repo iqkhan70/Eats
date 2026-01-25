@@ -13,7 +13,10 @@
 <PageTitle>Vendor Dashboard - TraditionalEats</PageTitle>
 
 <RadzenStack Gap="1.5rem" Style="padding: 1rem; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box;">
-    <RadzenText TextStyle="TextStyle.H2">My Restaurants</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <RadzenText TextStyle="TextStyle.H2">My Restaurants</RadzenText>
+        <RadzenButton Text="View Orders" Icon="shopping_cart" Click="@(() => Navigation.NavigateTo("/vendor/orders"))" Variant="Variant.Outlined" />
+    </RadzenStack>
     
     @if (!isAuthenticated)
     {

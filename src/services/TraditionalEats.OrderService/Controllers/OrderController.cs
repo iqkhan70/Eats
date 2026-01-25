@@ -455,6 +455,54 @@ public class OrderController : ControllerBase
             return StatusCode(500, new { message = "Failed to get order" });
         }
     }
+
+    [HttpGet("vendor/restaurants/{restaurantId}/orders")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorOrders(Guid restaurantId)
+    {
+        try
+        {
+            var orders = await _orderService.GetOrdersByRestaurantAsync(restaurantId);
+            return Ok(orders);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get vendor orders");
+            return StatusCode(500, new { message = "Failed to get vendor orders" });
+        }
+    }
+
+    [HttpPut("{orderId}/status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
+    {
+        try
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Status))
+            {
+                return BadRequest(new { message = "Status is required" });
+            }
+
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { message = "Order not found" });
+            }
+
+            var success = await _orderService.UpdateOrderStatusAsync(orderId, request.Status, request.Notes);
+            if (!success)
+            {
+                return BadRequest(new { message = "Failed to update order status" });
+            }
+
+            return Ok(new { message = "Order status updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update order status");
+            return StatusCode(500, new { message = "Failed to update order status" });
+        }
+    }
 }
 
 public record CreateCartRequest(Guid? RestaurantId);
@@ -470,4 +518,8 @@ public record PlaceOrderRequest(
     Guid CartId,
     string DeliveryAddress,
     string? IdempotencyKey
+);
+public record UpdateOrderStatusRequest(
+    string Status,
+    string? Notes
 );

@@ -1,0 +1,341 @@
+@page "/vendor/orders"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject AuthService AuthService
+@inject ILogger<VendorOrders> Logger
+@inject NotificationService NotificationService
+
+<PageTitle>Vendor Orders - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem"
+    Style="padding: 1rem; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => Navigation.NavigateTo("/vendor"))" Variant="Variant.Flat"
+            Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H2">Vendor Orders</RadzenText>
+    </RadzenStack>
+
+    @if (!isAuthenticated || !isVendor)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Access Denied"
+            Text="You must be a vendor to access this page." />
+    }
+    else if (isLoadingRestaurants)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading restaurants...</RadzenText>
+        </RadzenStack>
+    }
+    else if (restaurants == null || !restaurants.Any())
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" Title="No Restaurants"
+            Text="You don't have any restaurants yet. Create a restaurant to start receiving orders." />
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenFormField Text="Filter by Restaurant">
+                    <RadzenDropDown Data="@restaurants" @bind-Value="@selectedRestaurantId" TextProperty="Name"
+                        ValueProperty="RestaurantId" Placeholder="All Restaurants" AllowClear="true"
+                        Change="@OnRestaurantFilterChanged" Style="width: 100%;" />
+                </RadzenFormField>
+            </RadzenStack>
+        </RadzenCard>
+
+        @if (isLoadingOrders)
+        {
+            <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                <RadzenText>Loading orders...</RadzenText>
+            </RadzenStack>
+        }
+        else if (orders == null || !orders.Any())
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" Title="No Orders"
+                Text="No orders found for the selected restaurant(s)." />
+        }
+        else
+        {
+            <RadzenStack Gap="1rem">
+                @foreach (var order in orders.OrderByDescending(o => o.CreatedAt))
+                {
+                    <RadzenCard>
+                        <RadzenStack Gap="1rem">
+                            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+                                AlignItems="AlignItems.Center">
+                                <RadzenStack Gap="0.25rem">
+                                    <RadzenText TextStyle="TextStyle.H6">Order #@order.OrderId.ToString().Substring(0, 8)
+                                    </RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                                        @order.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                                    </RadzenText>
+                                </RadzenStack>
+                                <RadzenBadge Text="@order.Status" Variant="Variant.Flat"
+                                    Style="@GetStatusBadgeStyle(order.Status)" />
+                            </RadzenStack>
+
+                            <RadzenDivider />
+
+                            <RadzenStack Gap="0.5rem">
+                                <RadzenText TextStyle="TextStyle.Body2"><strong>Items:</strong></RadzenText>
+                                @foreach (var item in order.Items ?? new List<OrderItemDto>())
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body2" Style="margin-left: 1rem;">
+                                        @item.Quantity x @item.Name - $@item.TotalPrice.ToString("F2")
+                                    </RadzenText>
+                                }
+                            </RadzenStack>
+
+                            <RadzenStack Gap="0.5rem">
+                                <RadzenText TextStyle="TextStyle.Body2"><strong>Delivery Address:</strong></RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2" Style="margin-left: 1rem;">@order.DeliveryAddress
+                                </RadzenText>
+                            </RadzenStack>
+
+                            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+                                AlignItems="AlignItems.Center">
+                                <RadzenText TextStyle="TextStyle.H6">Total: $@order.Total.ToString("F2")</RadzenText>
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenFormField Text="Status">
+                                        <RadzenDropDown TValue="string" Data="@statusOptions" @bind-Value="@order.Status"
+                                            Placeholder="Select Status"
+                                            Change="@( (object value) => UpdateOrderStatus(order.OrderId, value?.ToString() ?? order.Status) )"
+                                            Style="width: 200px;" />
+
+
+                                    </RadzenFormField>
+                                </RadzenStack>
+                            </RadzenStack>
+
+                            @if (order.StatusHistory != null && order.StatusHistory.Any())
+                            {
+                                <RadzenDivider />
+                                <RadzenStack Gap="0.5rem">
+                                    <RadzenText TextStyle="TextStyle.Body2"><strong>Status History:</strong></RadzenText>
+                                    @foreach (var history in order.StatusHistory.OrderByDescending(h => h.ChangedAt))
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Caption"
+                                            Style="margin-left: 1rem; color: var(--rz-text-secondary-color);">
+                                            @history.Status - @history.ChangedAt.ToString("MMM dd, yyyy HH:mm")
+                                            @if (!string.IsNullOrEmpty(history.Notes))
+                                            {
+                                                <span> (@history.Notes)</span>
+                                            }
+                                        </RadzenText>
+                                    }
+                                </RadzenStack>
+                            }
+                        </RadzenStack>
+                    </RadzenCard>
+                }
+            </RadzenStack>
+        }
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isVendor = false;
+    private bool isLoadingRestaurants = false;
+    private bool isLoadingOrders = false;
+    private List<RestaurantDto>? restaurants = new();
+    private List<OrderDto>? orders = new();
+    private Guid? selectedRestaurantId = null;
+    private List<string> statusOptions = new() { "Pending", "Preparing", "Ready", "Completed", "Cancelled" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        isVendor = await AuthService.IsVendorAsync();
+
+        if (isAuthenticated && isVendor)
+        {
+            await LoadRestaurants();
+        }
+    }
+
+    private async Task LoadRestaurants()
+    {
+        try
+        {
+            isLoadingRestaurants = true;
+            var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/vendor/my-restaurants");
+            restaurants = response ?? new();
+
+            if (restaurants.Any())
+            {
+                await LoadOrders();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading restaurants");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = "Failed to load restaurants"
+            });
+        }
+        finally
+        {
+            isLoadingRestaurants = false;
+        }
+    }
+
+    private async Task LoadOrders()
+    {
+        try
+        {
+            isLoadingOrders = true;
+            orders = new();
+
+            if (selectedRestaurantId.HasValue)
+            {
+                var response = await
+                Http.GetFromJsonAsync<List<OrderDto>>($"WebBff/vendor/restaurants/{selectedRestaurantId.Value}/orders");
+                orders = response ?? new();
+            }
+            else
+            {
+                // Load orders for all restaurants
+                var allOrders = new List<OrderDto>();
+                foreach (var restaurant in restaurants ?? new())
+                {
+                    try
+                    {
+                        var response = await
+                        Http.GetFromJsonAsync<List<OrderDto>>($"WebBff/vendor/restaurants/{restaurant.RestaurantId}/orders");
+                        if (response != null)
+                        {
+                            allOrders.AddRange(response);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Error loading orders for restaurant {RestaurantId}", restaurant.RestaurantId);
+                    }
+                }
+                orders = allOrders;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading orders");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = "Failed to load orders"
+            });
+        }
+        finally
+        {
+            isLoadingOrders = false;
+        }
+    }
+
+    private async Task OnRestaurantFilterChanged()
+    {
+        await LoadOrders();
+    }
+
+    private async Task UpdateOrderStatus(Guid orderId, string newStatus)
+    {
+        try
+        {
+            var request = new { Status = newStatus, Notes = (string?)null };
+            var response = await Http.PutAsJsonAsync($"WebBff/orders/{orderId}/status", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = $"Order status updated to {newStatus}"
+                });
+
+                // Reload orders to get updated status
+                await LoadOrders();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = $"Failed to update order status: {error}"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating order status");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = "Failed to update order status"
+            });
+        }
+    }
+
+    private string GetStatusBadgeStyle(string status)
+    {
+        return status switch
+        {
+            "Pending" => "background-color: var(--rz-warning); color: white;",
+            "Preparing" => "background-color: var(--rz-info); color: white;",
+            "Ready" => "background-color: var(--rz-success); color: white;",
+            "Completed" => "background-color: var(--rz-secondary); color: white;",
+            "Cancelled" => "background-color: var(--rz-danger); color: white;",
+            _ => "background-color: var(--rz-secondary); color: white;"
+        };
+    }
+
+    // DTOs
+    public class RestaurantDto
+    {
+        public Guid RestaurantId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string CuisineType { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+    }
+
+    public class OrderDto
+    {
+        public Guid OrderId { get; set; }
+        public Guid CustomerId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public string? DeliveryAddress { get; set; }
+        public decimal Total { get; set; }
+        public List<OrderItemDto> Items { get; set; } = new();
+        public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
+    }
+
+    public class OrderItemDto
+    {
+        public Guid OrderItemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+        public decimal TotalPrice { get; set; }
+    }
+
+    public class OrderStatusHistoryDto
+    {
+        public Guid Id { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+        public DateTime ChangedAt { get; set; }
+    }
+}

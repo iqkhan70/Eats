@@ -57,8 +57,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// HttpClient for external APIs (Vonage, Mailgun)
+builder.Services.AddHttpClient();
+
 // Application services
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
+
+// Background service for handling order status events
+builder.Services.AddHostedService<OrderStatusEventHandler>();
 
 var app = builder.Build();
 

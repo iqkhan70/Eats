@@ -20,6 +20,7 @@ public interface IOrderService
     Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string idempotencyKey);
     Task<Order?> GetOrderAsync(Guid orderId);
     Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId);
+    Task<List<Order>> GetOrdersByRestaurantAsync(Guid restaurantId);
     Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null);
 }
 
@@ -1218,12 +1219,32 @@ public class OrderService : IOrderService
         return orders;
     }
 
+    public async Task<List<Order>> GetOrdersByRestaurantAsync(Guid restaurantId)
+    {
+        _logger.LogInformation("GetOrdersByRestaurantAsync: RestaurantId={RestaurantId}", restaurantId);
+
+        var orders = await _context.Orders
+            .Include(o => o.Items)
+            .Include(o => o.StatusHistory)
+            .Where(o => o.RestaurantId == restaurantId)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+
+        _logger.LogInformation("GetOrdersByRestaurantAsync: Found {OrderCount} orders for RestaurantId={RestaurantId}", orders.Count, restaurantId);
+
+        return orders;
+    }
+
     public async Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null)
     {
-        var order = await _context.Orders.FindAsync(orderId);
+        var order = await _context.Orders
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.OrderId == orderId);
+        
         if (order == null)
             return false;
 
+        var oldStatus = order.Status;
         order.Status = newStatus;
         order.StatusHistory.Add(new OrderStatusHistory
         {
@@ -1240,6 +1261,29 @@ public class OrderService : IOrderService
         }
 
         await _context.SaveChangesAsync();
+
+        // Publish order status changed event for notification service
+        try
+        {
+            var statusChangedEvent = new OrderStatusChangedEvent(
+                orderId,
+                order.CustomerId,
+                order.RestaurantId,
+                oldStatus,
+                newStatus,
+                notes,
+                DateTime.UtcNow
+            );
+
+            await _messagePublisher.PublishAsync("tradition-eats", "order.status.changed", statusChangedEvent);
+            _logger.LogInformation("UpdateOrderStatusAsync: Order status changed event published - OrderId={OrderId}, OldStatus={OldStatus}, NewStatus={NewStatus}", 
+                orderId, oldStatus, newStatus);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "UpdateOrderStatusAsync: Failed to publish order status changed event, continuing anyway");
+        }
+
         return true;
     }
 

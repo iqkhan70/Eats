@@ -832,6 +832,63 @@ public class MobileBffController : ControllerBase
         return Ok(new { status = "healthy", service = "MobileBff" });
     }
 
+    // Vendor Orders endpoints
+    [HttpGet("vendor/restaurants/{restaurantId}/orders")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorOrders(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.GetAsync($"/api/Order/vendor/restaurants/{restaurantId}/orders");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor orders");
+            return StatusCode(500, new { error = "Failed to fetch vendor orders" });
+        }
+    }
+
+    [HttpPut("orders/{orderId}/status")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            
+            // Forward Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+            }
+            
+            var response = await client.PutAsJsonAsync($"/api/Order/{orderId}/status", request);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating order status");
+            return StatusCode(500, new { error = "Failed to update order status" });
+        }
+    }
+
     // Vendor endpoints
     [HttpGet("vendor/my-restaurants")]
     [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
@@ -1205,3 +1262,4 @@ public record PlaceOrderRequest(
 public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
+public record UpdateOrderStatusRequest(string Status, string? Notes);
