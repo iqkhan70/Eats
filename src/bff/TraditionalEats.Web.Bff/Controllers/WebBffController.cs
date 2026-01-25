@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using TraditionalEats.BuildingBlocks.Redis;
 using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Net.Http.Headers;
 
 namespace TraditionalEats.Web.Bff.Controllers;
 
@@ -15,7 +18,7 @@ public class WebBffController : ControllerBase
     private const string SESSION_COOKIE_NAME = "cart_session";
 
     public WebBffController(
-        IHttpClientFactory httpClientFactory, 
+        IHttpClientFactory httpClientFactory,
         ILogger<WebBffController> logger,
         ICartSessionService cartSessionService)
     {
@@ -24,9 +27,46 @@ public class WebBffController : ControllerBase
         _cartSessionService = cartSessionService;
     }
 
+    // ----------------------------
+    // Helpers
+    // ----------------------------
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private void ForwardBearerToken(HttpClient client)
+    {
+        var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(authHeader))
+        {
+            if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", authHeader["Bearer ".Length..].Trim());
+            }
+            else
+            {
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", authHeader.Trim());
+            }
+        }
+    }
+
+    private ContentResult JsonContent(string json, int statusCode)
+        => new ContentResult
+        {
+            Content = json,
+            ContentType = "application/json",
+            StatusCode = statusCode
+        };
+
     private async Task<string> GetOrCreateSessionIdAsync()
     {
-        // Try to get session ID from header first (for Blazor WebAssembly)
+        // Try header (Blazor WASM)
         string? existingSessionId = null;
         if (Request.Headers.TryGetValue("X-Cart-Session-Id", out var headerSessionId))
         {
@@ -36,24 +76,24 @@ public class WebBffController : ControllerBase
                 existingSessionId = headerValue;
             }
         }
-        
-        // Fallback to cookie (for server-side scenarios)
-        if (string.IsNullOrEmpty(existingSessionId) && Request.Cookies.TryGetValue(SESSION_COOKIE_NAME, out var cookieSessionId) && !string.IsNullOrEmpty(cookieSessionId))
+
+        // Fallback cookie (server-side)
+        if (string.IsNullOrEmpty(existingSessionId)
+            && Request.Cookies.TryGetValue(SESSION_COOKIE_NAME, out var cookieSessionId)
+            && !string.IsNullOrEmpty(cookieSessionId))
         {
             existingSessionId = cookieSessionId;
         }
 
-        // Get or create session ID using CartSessionService
         var sessionId = await _cartSessionService.GetOrCreateSessionIdAsync(existingSessionId);
 
-        // If we got a new session ID, set it in the cookie (for server-side scenarios)
-        // Note: For Blazor WebAssembly, the client manages the session ID in localStorage
+        // If new, set cookie (server-side)
         if (existingSessionId != sessionId && string.IsNullOrEmpty(existingSessionId))
         {
             Response.Cookies.Append(SESSION_COOKIE_NAME, sessionId, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false, // Set to true in production with HTTPS
+                Secure = false, // true in prod (HTTPS)
                 SameSite = SameSiteMode.Lax,
                 Expires = DateTimeOffset.UtcNow.AddDays(30)
             });
@@ -62,45 +102,43 @@ public class WebBffController : ControllerBase
         return sessionId;
     }
 
-        [HttpGet("restaurants")]
-        public async Task<IActionResult> GetRestaurants(
-            [FromQuery] string? location,
-            [FromQuery] string? cuisineType,
-            [FromQuery] double? latitude,
-            [FromQuery] double? longitude,
-            [FromQuery] int skip = 0,
-            [FromQuery] int take = 20)
+    // ----------------------------
+    // Restaurants
+    // ----------------------------
+
+    [HttpGet("restaurants")]
+    public async Task<IActionResult> GetRestaurants(
+        [FromQuery] string? location,
+        [FromQuery] string? cuisineType,
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20)
+    {
+        try
         {
-            try
-            {
-                var client = _httpClientFactory.CreateClient("RestaurantService");
-                
-                // Build query string
-                var queryParams = new List<string>();
-                if (!string.IsNullOrEmpty(location)) queryParams.Add($"location={Uri.EscapeDataString(location)}");
-                if (!string.IsNullOrEmpty(cuisineType)) queryParams.Add($"cuisineType={Uri.EscapeDataString(cuisineType)}");
-                if (latitude.HasValue) queryParams.Add($"latitude={latitude.Value}");
-                if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");
-                queryParams.Add($"skip={skip}");
-                queryParams.Add($"take={take}");
-                
-                var queryString = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
-                var response = await client.GetAsync($"/api/restaurant{queryString}");
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    var content = await response.Content.ReadAsStringAsync();
-                    return Content(content, "application/json");
-                }
-                
-                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error fetching restaurants");
-                return StatusCode(500, new { error = "Failed to fetch restaurants" });
-            }
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+
+            var queryParams = new List<string>();
+            if (!string.IsNullOrEmpty(location)) queryParams.Add($"location={Uri.EscapeDataString(location)}");
+            if (!string.IsNullOrEmpty(cuisineType)) queryParams.Add($"cuisineType={Uri.EscapeDataString(cuisineType)}");
+            if (latitude.HasValue) queryParams.Add($"latitude={latitude.Value}");
+            if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");
+            queryParams.Add($"skip={skip}");
+            queryParams.Add($"take={take}");
+
+            var queryString = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
+            var response = await client.GetAsync($"/api/restaurant{queryString}");
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching restaurants");
+            return StatusCode(500, new { error = "Failed to fetch restaurants" });
+        }
+    }
 
     [HttpGet("restaurants/{id}")]
     public async Task<IActionResult> GetRestaurant(Guid id)
@@ -109,14 +147,9 @@ public class WebBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("RestaurantService");
             var response = await client.GetAsync($"/api/restaurant/{id}");
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Ok(content);
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -125,36 +158,211 @@ public class WebBffController : ControllerBase
         }
     }
 
+    // ----------------------------
+    // Orders (OPTION A FIX)
+    // ----------------------------
+
+    /// <summary>
+    /// Grid-friendly orders endpoint:
+    /// /api/WebBff/orders?restaurantId=...&skip=0&take=20&orderBy=CreatedAt%20desc&q=...
+    /// Returns: { items: [...], totalCount: N }
+    /// </summary>
     [HttpGet("orders")]
-    public async Task<IActionResult> GetOrders()
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetOrders(
+        [FromQuery] Guid? restaurantId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? q = null
+    )
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Forward JWT token to OrderService
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order");
-            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            if (take <= 0) take = 20;
+            if (take > 200) take = 200;
+            if (skip < 0) skip = 0;
+
+            var isAdmin = User.IsInRole("Admin");
+
+            // Which restaurants can this user access?
+            var allowedRestaurantIds = await GetAllowedRestaurantIdsAsync(isAdmin);
+
+            if (allowedRestaurantIds.Count == 0)
             {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+                var empty = new PagedResult<OrderDto>(Array.Empty<OrderDto>(), 0);
+                return JsonContent(JsonSerializer.Serialize(empty, JsonOptions), 200);
             }
-            
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
+
+            // If restaurantId is provided, enforce it is allowed
+            if (restaurantId.HasValue && restaurantId.Value != Guid.Empty)
             {
-                return Ok(content);
+                if (!allowedRestaurantIds.Contains(restaurantId.Value))
+                {
+                    return Forbid();
+                }
             }
-            
-            return StatusCode((int)response.StatusCode, content);
+
+            // Decide which restaurants to fetch orders for
+            List<Guid> targetRestaurants;
+            if (restaurantId.HasValue && restaurantId.Value != Guid.Empty)
+            {
+                targetRestaurants = new List<Guid> { restaurantId.Value };
+            }
+            else
+            {
+                // Option A: allow "All Restaurants"
+                targetRestaurants = allowedRestaurantIds.ToList();
+            }
+
+            // Fetch orders per restaurant (upstream is per restaurant)
+            var allOrders = await FetchOrdersForRestaurantsAsync(targetRestaurants);
+
+            // Apply Option A search (header search textbox)
+            allOrders = ApplySearch(allOrders, q);
+
+            // Sorting support (CreatedAt/Total/Status)
+            allOrders = ApplyOrderBy(allOrders, orderBy);
+
+            var totalCount = allOrders.Count;
+            var page = allOrders.Skip(skip).Take(take).ToList();
+
+            var result = new PagedResult<OrderDto>(page, totalCount);
+            var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+
+            return JsonContent(resultJson, 200);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching orders");
+            _logger.LogError(ex, "Error fetching orders (paged)");
             return StatusCode(500, new { error = "Failed to fetch orders" });
         }
     }
+
+    private async Task<HashSet<Guid>> GetAllowedRestaurantIdsAsync(bool isAdmin)
+    {
+        var ids = new HashSet<Guid>();
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            if (isAdmin)
+            {
+                var resp = await client.GetAsync("/api/restaurant/admin/all?skip=0&take=5000");
+                var json = await resp.Content.ReadAsStringAsync();
+                if (!resp.IsSuccessStatusCode) return ids;
+
+                var restaurants = JsonSerializer.Deserialize<List<RestaurantLight>>(json, JsonOptions) ?? new();
+                foreach (var r in restaurants)
+                {
+                    if (r.RestaurantId != Guid.Empty) ids.Add(r.RestaurantId);
+                }
+                return ids;
+            }
+            else
+            {
+                var resp = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
+                var json = await resp.Content.ReadAsStringAsync();
+                if (!resp.IsSuccessStatusCode) return ids;
+
+                var restaurants = JsonSerializer.Deserialize<List<RestaurantLight>>(json, JsonOptions) ?? new();
+                foreach (var r in restaurants)
+                {
+                    if (r.RestaurantId != Guid.Empty) ids.Add(r.RestaurantId);
+                }
+                return ids;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resolving allowed restaurants");
+            return ids;
+        }
+    }
+
+    private async Task<List<OrderDto>> FetchOrdersForRestaurantsAsync(IEnumerable<Guid> restaurantIds)
+    {
+        var results = new List<OrderDto>();
+
+        var client = _httpClientFactory.CreateClient("OrderService");
+        ForwardBearerToken(client);
+
+        foreach (var rid in restaurantIds)
+        {
+            try
+            {
+                var upstreamUrl = $"/api/Order/vendor/restaurants/{rid}/orders";
+                var resp = await client.GetAsync(upstreamUrl);
+                var json = await resp.Content.ReadAsStringAsync();
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("OrderService returned {Status} for restaurant {RestaurantId}. Body: {Body}",
+                        (int)resp.StatusCode, rid, json);
+                    continue;
+                }
+
+                var list = JsonSerializer.Deserialize<List<OrderDto>>(json, JsonOptions) ?? new List<OrderDto>();
+                results.AddRange(list);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed fetching orders for restaurant {RestaurantId}", rid);
+            }
+        }
+
+        return results;
+    }
+
+    private static List<OrderDto> ApplySearch(List<OrderDto> orders, string? q)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return orders;
+
+        var term = q.Trim().ToLowerInvariant();
+
+        return orders.Where(o =>
+                o.OrderId.ToString().ToLowerInvariant().Contains(term) ||
+                (o.Status ?? "").ToLowerInvariant().Contains(term) ||
+                (o.DeliveryAddress ?? "").ToLowerInvariant().Contains(term) ||
+                (o.Items ?? new List<OrderItemDto>()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(term))
+            )
+            .ToList();
+    }
+
+    private static List<OrderDto> ApplyOrderBy(List<OrderDto> orders, string? orderBy)
+    {
+        if (string.IsNullOrWhiteSpace(orderBy))
+            return orders.OrderByDescending(o => o.CreatedAt).ToList();
+
+        var parts = orderBy.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var field = parts.Length > 0 ? parts[0] : "CreatedAt";
+        var desc = parts.Length > 1 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+        return field switch
+        {
+            "CreatedAt" => desc ? orders.OrderByDescending(o => o.CreatedAt).ToList()
+                                : orders.OrderBy(o => o.CreatedAt).ToList(),
+
+            "Total" => desc ? orders.OrderByDescending(o => o.Total).ToList()
+                            : orders.OrderBy(o => o.Total).ToList(),
+
+            "Status" => desc ? orders.OrderByDescending(o => o.Status).ToList()
+                             : orders.OrderBy(o => o.Status).ToList(),
+
+            _ => orders.OrderByDescending(o => o.CreatedAt).ToList()
+        };
+    }
+
+    private sealed class RestaurantLight
+    {
+        public Guid RestaurantId { get; set; }
+    }
+
+    // ----------------------------
+    // Search suggestions / Menu / Categories
+    // ----------------------------
 
     [HttpGet("search-suggestions")]
     public async Task<IActionResult> GetSearchSuggestions([FromQuery] string query, [FromQuery] int maxResults = 10)
@@ -163,14 +371,8 @@ public class WebBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("RestaurantService");
             var response = await client.GetAsync($"/api/restaurant/search-suggestions?query={Uri.EscapeDataString(query)}&maxResults={maxResults}");
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -187,14 +389,8 @@ public class WebBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("CatalogService");
             var queryString = categoryId.HasValue ? $"?categoryId={categoryId.Value}" : "";
             var response = await client.GetAsync($"/api/catalog/restaurants/{restaurantId}/menu-items{queryString}");
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -210,14 +406,8 @@ public class WebBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("CatalogService");
             var response = await client.GetAsync("/api/catalog/categories");
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -226,111 +416,621 @@ public class WebBffController : ControllerBase
         }
     }
 
-    // Menu Item Management (Vendor endpoints)
-    [HttpPost("restaurants/{restaurantId}/menu-items")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> CreateMenuItem(Guid restaurantId, [FromBody] object request)
+    // ----------------------------
+    // Cart
+    // ----------------------------
+
+    [HttpPost("cart")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CreateCart([FromBody] CreateCartRequest? request = null)
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("CatalogService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
+            Guid? customerId = null;
+            if (User.Identity?.IsAuthenticated == true)
             {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
+                {
+                    customerId = userId;
+                }
             }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PostAsync($"/api/catalog/restaurants/{restaurantId}/menu-items", content);
-            
+
+            var client = _httpClientFactory.CreateClient("OrderService");
+
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/cart");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+
+            var requestBody = new CreateCartRequest(request?.RestaurantId);
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(requestBody, options: jsonOptions);
+
+            _logger.LogInformation("CreateCart: Forwarding to OrderService - URL={Url}, RestaurantId={RestaurantId}",
+                httpRequestMessage.RequestUri, request?.RestaurantId);
+
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+
             if (response.IsSuccessStatusCode)
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
+                try
+                {
+                    var result = JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+                    if (result.TryGetProperty("cartId", out var cartIdElement))
+                    {
+                        if (Guid.TryParse(cartIdElement.GetString(), out var cartId))
+                        {
+                            var sessionId = await GetOrCreateSessionIdAsync();
+                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to parse cartId from response");
+                }
             }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            else
+            {
+                _logger.LogWarning("OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
+            }
+
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating menu item");
-            return StatusCode(500, new { error = "Failed to create menu item" });
+            _logger.LogError(ex, "Error creating cart: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
         }
     }
 
-    [HttpPut("menu-items/{menuItemId}")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> UpdateMenuItem(Guid menuItemId, [FromBody] object request)
+    [HttpGet("cart")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetCart()
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("CatalogService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
+            if (User.Identity?.IsAuthenticated == true)
             {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
+                var client = _httpClientFactory.CreateClient("OrderService");
+
+                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
+                if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                {
+                    httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+                }
+
+                var response = await client.SendAsync(httpRequestMessage);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                    return JsonContent(content, 200);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    return Ok((object?)null);
+
+                return JsonContent(content, (int)response.StatusCode);
             }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PutAsync($"/api/catalog/menu-items/{menuItemId}", content);
-            
-            if (response.IsSuccessStatusCode)
+
+            // guest user
+            try
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
+                var sessionId = await GetOrCreateSessionIdAsync();
+                var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+
+                if (cartId.HasValue)
+                {
+                    var client = _httpClientFactory.CreateClient("OrderService");
+                    var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
+                    var content = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                        return JsonContent(content, 200);
+
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        try { await _cartSessionService.ClearSessionCartAsync(sessionId); } catch { }
+                        return Ok((object?)null);
+                    }
+                }
             }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            catch (Exception redisEx)
+            {
+                _logger.LogWarning(redisEx, "Redis unavailable when getting cart, returning empty cart");
+                return Ok((object?)null);
+            }
+
+            return Ok((object?)null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating menu item");
-            return StatusCode(500, new { error = "Failed to update menu item" });
+            _logger.LogWarning(ex, "Error getting cart, returning empty cart: {Message}", ex.Message);
+            return Ok((object?)null);
         }
     }
 
-    [HttpPatch("menu-items/{menuItemId}/availability")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> ToggleMenuItemAvailability(Guid menuItemId, [FromBody] object request)
+    [HttpGet("cart/{cartId}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetCartById(Guid cartId)
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("CatalogService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PatchAsync($"/api/catalog/menu-items/{menuItemId}/availability", content);
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.GetAsync($"/api/order/cart/{cartId}");
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return Ok((object?)null);
+
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error toggling menu item availability");
-            return StatusCode(500, new { error = "Failed to toggle menu item availability" });
+            _logger.LogError(ex, "Error getting cart by ID: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Failed to get cart: {ex.Message}" });
         }
     }
+
+    [HttpPost("cart/{cartId}/items")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest request)
+    {
+        try
+        {
+            if (request == null)
+                return BadRequest(new { error = "Request body is required" });
+
+            var client = _httpClientFactory.CreateClient("OrderService");
+
+            var orderServiceRequest = new
+            {
+                MenuItemId = request.MenuItemId,
+                Name = request.Name,
+                Price = request.Price,
+                Quantity = request.Quantity,
+                Options = request.Options
+            };
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(orderServiceRequest, options: jsonOptions);
+
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                if (User.Identity?.IsAuthenticated != true)
+                {
+                    var sessionId = await GetOrCreateSessionIdAsync();
+                    var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+                    if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                    {
+                        await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                    }
+                }
+
+                return Ok(new { success = true, cartId });
+            }
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AddItemToCart error: {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
+        }
+    }
+
+    [HttpPut("cart/{cartId}/items/{cartItemId}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UpdateCartItem(Guid cartId, Guid cartItemId, [FromBody] UpdateCartItemRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.PutAsJsonAsync($"/api/order/cart/{cartId}/items/{cartItemId}", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating cart item");
+            return StatusCode(500, new { error = "Failed to update cart item" });
+        }
+    }
+
+    [HttpDelete("cart/{cartId}/items/{cartItemId}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RemoveCartItem(Guid cartId, Guid cartItemId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var response = await client.DeleteAsync($"/api/order/cart/{cartId}/items/{cartItemId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing cart item");
+            return StatusCode(500, new { error = "Failed to remove cart item" });
+        }
+    }
+
+    // ----------------------------
+    // Orders place / get order
+    // ----------------------------
+
+    [HttpPost("orders/place")]
+    public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
+
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error placing order");
+            return StatusCode(500, new { error = "Failed to place order" });
+        }
+    }
+
+    [HttpGet("orders/{orderId}")]
+    public async Task<IActionResult> GetOrder(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting order");
+            return StatusCode(500, new { error = "Failed to get order" });
+        }
+    }
+
+    [HttpGet("health")]
+    public IActionResult Health()
+    {
+        return Ok(new { status = "healthy", service = "WebBff" });
+    }
+
+    // ----------------------------
+    // Vendor restaurants
+    // ----------------------------
+
+    [HttpGet("vendor/my-restaurants")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetMyRestaurants()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor restaurants");
+            return StatusCode(500, new { error = "Failed to fetch vendor restaurants" });
+        }
+    }
+
+    [HttpPost("vendor/restaurants")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateRestaurant([FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/restaurant", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating restaurant");
+            return StatusCode(500, new { error = "Failed to create restaurant" });
+        }
+    }
+
+    [HttpPut("vendor/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateRestaurant(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/restaurant/{restaurantId}", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating restaurant");
+            return StatusCode(500, new { error = "Failed to update restaurant" });
+        }
+    }
+
+    [HttpDelete("vendor/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> DeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var response = await client.DeleteAsync($"/api/restaurant/vendor/{restaurantId}");
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting restaurant");
+            return StatusCode(500, new { error = "Failed to delete restaurant" });
+        }
+    }
+
+    // ----------------------------
+    // Admin restaurants
+    // ----------------------------
+
+    [HttpGet("admin/restaurants")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllRestaurants([FromQuery] int skip = 0, [FromQuery] int take = 100)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/restaurant/admin/all?skip={skip}&take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all restaurants");
+            return StatusCode(500, new { error = "Failed to fetch all restaurants" });
+        }
+    }
+
+    [HttpPut("admin/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminUpdateRestaurant(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/restaurant/admin/{restaurantId}", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to update restaurant" });
+        }
+    }
+
+    [HttpDelete("admin/restaurants/{restaurantId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminDeleteRestaurant(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var response = await client.DeleteAsync($"/api/restaurant/admin/{restaurantId}");
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to delete restaurant" });
+        }
+    }
+
+    [HttpPatch("admin/restaurants/{restaurantId}/status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminToggleRestaurantStatus(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PatchAsync($"/api/restaurant/admin/{restaurantId}/status", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling restaurant status (admin)");
+            return StatusCode(500, new { error = "Failed to toggle restaurant status" });
+        }
+    }
+
+    // ----------------------------
+    // Admin roles
+    // ----------------------------
+
+    [HttpPost("admin/users/assign-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AssignUserRole([FromBody] AssignRoleRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsJsonAsync("/api/auth/assign-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error assigning role");
+            return StatusCode(500, new { error = "Failed to assign role" });
+        }
+    }
+
+    [HttpPost("admin/users/revoke-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RevokeUserRole([FromBody] RevokeRoleRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsJsonAsync("/api/auth/revoke-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error revoking role");
+            return StatusCode(500, new { error = "Failed to revoke role" });
+        }
+    }
+
+    [HttpGet("admin/users/{email}/roles")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetUserRoles(string email)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/auth/user-roles/{Uri.EscapeDataString(email)}");
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user roles");
+            return StatusCode(500, new { error = "Failed to get user roles" });
+        }
+    }
+
+    // ----------------------------
+    // Vendor Orders passthrough (keep as-is)
+    // ----------------------------
+
+    [HttpGet("vendor/restaurants/{restaurantId}/orders")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorOrders(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/Order/vendor/restaurants/{restaurantId}/orders");
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor orders");
+            return StatusCode(500, new { error = "Failed to fetch vendor orders" });
+        }
+    }
+
+    [HttpPut("orders/{orderId}/status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
+
+            var response = await client.PutAsJsonAsync($"/api/Order/{orderId}/status", request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating order status");
+            return StatusCode(500, new { error = "Failed to update order status" });
+        }
+    }
+
+    // ----------------------------
+    // Auth passthrough
+    // ----------------------------
 
     [HttpPost("auth/register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -339,15 +1039,8 @@ public class WebBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/register", request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-
-            var errorContent = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, errorContent);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -362,62 +1055,48 @@ public class WebBffController : ControllerBase
         try
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
-            {
                 return BadRequest(new { error = "Email and password are required" });
-            }
 
-            // Get guest session ID before login (for cart merge)
             var guestSessionId = await GetOrCreateSessionIdAsync();
             var guestCartId = await _cartSessionService.GetCartIdForSessionAsync(guestSessionId);
 
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/login", request);
+            var content = await response.Content.ReadAsStringAsync();
 
             if (response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsStringAsync();
-                
-                // Parse the login response to get user ID and merge carts
+                // optional: merge carts (your existing logic kept)
                 try
                 {
-                    var loginResponse = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
+                    var loginResponse = JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
                     string? userIdString = null;
-                    
-                    // Try to get userId from various possible response formats
-                    if (loginResponse.TryGetProperty("userId", out var userIdElement))
-                    {
-                        userIdString = userIdElement.GetString();
-                    }
-                    else if (loginResponse.TryGetProperty("user", out var userElement) && 
-                             userElement.TryGetProperty("id", out var idElement))
-                    {
-                        userIdString = idElement.GetString();
-                    }
-                    else if (loginResponse.TryGetProperty("id", out var idElement2))
-                    {
-                        userIdString = idElement2.GetString();
-                    }
 
-                    // If we have a user ID and a guest cart, merge them
+                    if (loginResponse.TryGetProperty("userId", out var userIdElement))
+                        userIdString = userIdElement.GetString();
+                    else if (loginResponse.TryGetProperty("user", out var userElement) && userElement.TryGetProperty("id", out var idElement))
+                        userIdString = idElement.GetString();
+                    else if (loginResponse.TryGetProperty("id", out var idElement2))
+                        userIdString = idElement2.GetString();
+
                     if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var userId) && guestCartId.HasValue)
                     {
-                        _logger.LogInformation("Merging guest cart {GuestCartId} into user cart for user {UserId}", 
+                        _logger.LogInformation("Merging guest cart {GuestCartId} into user cart for user {UserId}",
                             guestCartId.Value, userId);
-                        
+
                         var userCartId = await _cartSessionService.GetCartIdForUserAsync(userId);
-                        
-                        // Call OrderService to merge carts
+
                         var orderClient = _httpClientFactory.CreateClient("OrderService");
                         var mergeUrl = userCartId.HasValue
                             ? $"/api/order/cart/merge?guestCartId={guestCartId.Value}&userCartId={userCartId.Value}"
                             : $"/api/order/cart/merge?guestCartId={guestCartId.Value}&userCartId={Guid.Empty}";
-                        
+
                         var mergeResponse = await orderClient.PostAsync(mergeUrl, null);
-                        
+
                         if (mergeResponse.IsSuccessStatusCode)
                         {
                             var mergeContent = await mergeResponse.Content.ReadAsStringAsync();
-                            var mergedCart = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(mergeContent);
+                            var mergedCart = JsonSerializer.Deserialize<JsonElement>(mergeContent, JsonOptions);
                             if (mergedCart.TryGetProperty("cartId", out var mergedCartIdElement))
                             {
                                 var finalCartId = Guid.Parse(mergedCartIdElement.GetString()!);
@@ -428,7 +1107,6 @@ public class WebBffController : ControllerBase
                         }
                         else
                         {
-                            // If merge fails, just transfer guest cart to user
                             await _cartSessionService.StoreCartIdForUserAsync(userId, guestCartId.Value);
                             await _cartSessionService.ClearSessionCartAsync(guestSessionId);
                             _logger.LogWarning("Cart merge failed, transferred guest cart to user");
@@ -439,12 +1117,9 @@ public class WebBffController : ControllerBase
                 {
                     _logger.LogWarning(ex, "Failed to parse login response or merge carts, continuing with login");
                 }
-                
-                return Content(content, "application/json");
             }
 
-            var errorContent = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, errorContent);
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (HttpRequestException ex)
         {
@@ -465,15 +1140,8 @@ public class WebBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/refresh", request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-
-            var errorContent = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, errorContent);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -489,15 +1157,8 @@ public class WebBffController : ControllerBase
         {
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/logout", request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-
-            var errorContent = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, errorContent);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
@@ -505,800 +1166,16 @@ public class WebBffController : ControllerBase
             return StatusCode(500, new { error = "Failed to logout" });
         }
     }
-
-    [HttpPost("cart")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<IActionResult> CreateCart([FromBody] CreateCartRequest? request = null)
-    {
-        try
-        {
-            // Extract customerId from JWT token if user is authenticated
-            Guid? customerId = null;
-            if (User.Identity?.IsAuthenticated == true)
-            {
-                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
-                {
-                    customerId = userId;
-                }
-            }
-
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Forward JWT token to OrderService if present
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/cart");
-            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-            {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-            }
-            
-            var requestBody = new CreateCartRequest(request?.RestaurantId);
-            
-            // Serialize with camelCase to match OrderService's JSON configuration
-            var jsonOptions = new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            };
-            
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(requestBody, options: jsonOptions);
-            
-            _logger.LogInformation("CreateCart: Forwarding to OrderService - URL={Url}, RestaurantId={RestaurantId}", 
-                httpRequestMessage.RequestUri, request?.RestaurantId);
-            
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
-            {
-                // Parse cartId from response and store in Redis session
-                try
-                {
-                    var result = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
-                    if (result.TryGetProperty("cartId", out var cartIdElement))
-                    {
-                        if (Guid.TryParse(cartIdElement.GetString(), out var cartId))
-                        {
-                            var sessionId = await GetOrCreateSessionIdAsync();
-                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to parse cartId from response");
-                }
-            }
-            else
-            {
-                _logger.LogWarning("OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
-            }
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating cart: {Message}, StackTrace: {StackTrace}", 
-                ex.Message, ex.StackTrace);
-            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
-        }
-    }
-
-    [HttpGet("cart")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<IActionResult> GetCart()
-    {
-        try
-        {
-            // For authenticated users, prioritize getting cart by customerId
-            if (User.Identity?.IsAuthenticated == true)
-            {
-                var client = _httpClientFactory.CreateClient("OrderService");
-                
-                // Forward JWT token to OrderService
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
-                if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-                {
-                    httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-                }
-                
-                var response = await client.SendAsync(httpRequestMessage);
-                var content = await response.Content.ReadAsStringAsync();
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    return Content(content, "application/json");
-                }
-                else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    return Ok((object?)null);
-                }
-                
-                return StatusCode((int)response.StatusCode, content);
-            }
-
-            // For guest users, try to get cartId from Redis session
-            try
-            {
-                var sessionId = await GetOrCreateSessionIdAsync();
-                var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-                
-                if (cartId.HasValue)
-                {
-                    var client = _httpClientFactory.CreateClient("OrderService");
-                    var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
-                    var content = await response.Content.ReadAsStringAsync();
-                    
-                    if (response.IsSuccessStatusCode)
-                    {
-                        return Content(content, "application/json");
-                    }
-                    else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    {
-                        // Cart doesn't exist anymore, clear session (if Redis is available)
-                        try
-                        {
-                            await _cartSessionService.ClearSessionCartAsync(sessionId);
-                        }
-                        catch
-                        {
-                            // Ignore Redis errors when clearing session
-                        }
-                        return Ok((object?)null);
-                    }
-                }
-            }
-            catch (Exception redisEx)
-            {
-                // If Redis is unavailable, just return empty cart instead of 500
-                // This prevents annoying console errors in the browser
-                _logger.LogWarning(redisEx, "Redis unavailable when getting cart, returning empty cart");
-                return Ok((object?)null);
-            }
-
-            // No cart found
-            return Ok((object?)null);
-        }
-        catch (Exception ex)
-        {
-            // For any other errors, return empty cart instead of 500 to avoid browser console errors
-            // This is acceptable since an empty cart is a valid state
-            _logger.LogWarning(ex, "Error getting cart, returning empty cart: {Message}", ex.Message);
-            return Ok((object?)null);
-        }
-    }
-
-    [HttpGet("cart/{cartId}")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<IActionResult> GetCartById(Guid cartId)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync($"/api/order/cart/{cartId}");
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                return Ok((object?)null);
-            }
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting cart by ID: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to get cart: {ex.Message}" });
-        }
-    }
-
-    [HttpPost("cart/{cartId}/items")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<IActionResult> AddItemToCart(Guid cartId, [FromBody] AddCartItemRequest request)
-    {
-        try
-        {
-            if (request == null)
-            {
-                _logger.LogWarning("AddItemToCart: Request body is null");
-                return BadRequest(new { error = "Request body is required" });
-            }
-
-            _logger.LogInformation("AddItemToCart: CartId={CartId}, MenuItemId={MenuItemId}, Quantity={Quantity}", 
-                cartId, request.MenuItemId, request.Quantity);
-
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Create request body matching OrderService's AddCartItemRequest (PascalCase properties)
-            var orderServiceRequest = new
-            {
-                MenuItemId = request.MenuItemId,
-                Name = request.Name,
-                Price = request.Price,
-                Quantity = request.Quantity,
-                Options = request.Options
-            };
-            
-            // Serialize with camelCase to match OrderService's JSON configuration
-            var jsonOptions = new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            };
-            
-            // Forward JWT token to OrderService if present
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/cart/{cartId}/items");
-            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-            {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-            }
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(orderServiceRequest, options: jsonOptions);
-            
-            // Log request details
-            var requestBody = System.Text.Json.JsonSerializer.Serialize(orderServiceRequest, jsonOptions);
-            _logger.LogInformation("AddItemToCart: Forwarding to OrderService - URL={Url}, Body={Body}", 
-                httpRequestMessage.RequestUri, requestBody);
-            
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("AddItemToCart: Successfully added item to cart {CartId}", cartId);
-                
-                // Ensure cartId is stored in Redis session for guest users
-                // This handles the case where cart was created but session wasn't set yet
-                if (User.Identity?.IsAuthenticated != true)
-                {
-                    var sessionId = await GetOrCreateSessionIdAsync();
-                    var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-                    if (!existingCartId.HasValue || existingCartId.Value != cartId)
-                    {
-                        await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
-                        _logger.LogInformation("AddItemToCart: Stored cartId {CartId} for session {SessionId}", cartId, sessionId);
-                    }
-                }
-                else
-                {
-                    // For authenticated users, store in user cart
-                    var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                    if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
-                    {
-                        var existingCartId = await _cartSessionService.GetCartIdForUserAsync(userId);
-                        if (!existingCartId.HasValue || existingCartId.Value != cartId)
-                        {
-                            await _cartSessionService.StoreCartIdForUserAsync(userId, cartId);
-                            _logger.LogInformation("AddItemToCart: Stored cartId {CartId} for user {UserId}", cartId, userId);
-                        }
-                    }
-                }
-                
-                // Return success response
-                return Ok(new { success = true, cartId = cartId });
-            }
-            else
-            {
-                _logger.LogWarning("AddItemToCart: OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
-                return StatusCode((int)response.StatusCode, content);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "AddItemToCart: Error adding item to cart: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
-        }
-    }
-
-    [HttpPut("cart/{cartId}/items/{cartItemId}")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<IActionResult> UpdateCartItem(Guid cartId, Guid cartItemId, [FromBody] UpdateCartItemRequest request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.PutAsJsonAsync($"/api/order/cart/{cartId}/items/{cartItemId}", request);
-            var content = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating cart item");
-            return StatusCode(500, new { error = "Failed to update cart item" });
-        }
-    }
-
-    [HttpDelete("cart/{cartId}/items/{cartItemId}")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    public async Task<IActionResult> RemoveCartItem(Guid cartId, Guid cartItemId)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.DeleteAsync($"/api/order/cart/{cartId}/items/{cartItemId}");
-            var content = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error removing cart item");
-            return StatusCode(500, new { error = "Failed to remove cart item" });
-        }
-    }
-
-    [HttpPost("orders/place")]
-    public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderRequest request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Forward JWT token to OrderService
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
-            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-            {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-            }
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
-            
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error placing order");
-            return StatusCode(500, new { error = "Failed to place order" });
-        }
-    }
-
-    [HttpGet("orders/{orderId}")]
-    public async Task<IActionResult> GetOrder(Guid orderId)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Forward JWT token to OrderService
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
-            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-            {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-            }
-            
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting order");
-            return StatusCode(500, new { error = "Failed to get order" });
-        }
-    }
-
-    [HttpGet("health")]
-    public IActionResult Health()
-    {
-        return Ok(new { status = "healthy", service = "WebBff" });
-    }
-
-    // Vendor endpoints
-    [HttpGet("vendor/my-restaurants")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> GetMyRestaurants()
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching vendor restaurants");
-            return StatusCode(500, new { error = "Failed to fetch vendor restaurants" });
-        }
-    }
-
-    [HttpPost("vendor/restaurants")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> CreateRestaurant([FromBody] object request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PostAsync("/api/restaurant", content);
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating restaurant");
-            return StatusCode(500, new { error = "Failed to create restaurant" });
-        }
-    }
-
-    [HttpPut("vendor/restaurants/{restaurantId}")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> UpdateRestaurant(Guid restaurantId, [FromBody] object request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PutAsync($"/api/restaurant/{restaurantId}", content);
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating restaurant");
-            return StatusCode(500, new { error = "Failed to update restaurant" });
-        }
-    }
-
-    [HttpDelete("vendor/restaurants/{restaurantId}")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> DeleteRestaurant(Guid restaurantId)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.DeleteAsync($"/api/restaurant/vendor/{restaurantId}");
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting restaurant");
-            return StatusCode(500, new { error = "Failed to delete restaurant" });
-        }
-    }
-
-    // Admin endpoints
-    [HttpGet("admin/restaurants")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetAllRestaurants([FromQuery] int skip = 0, [FromQuery] int take = 100)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.GetAsync($"/api/restaurant/admin/all?skip={skip}&take={take}");
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return Content(content, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching all restaurants");
-            return StatusCode(500, new { error = "Failed to fetch all restaurants" });
-        }
-    }
-
-    [HttpPut("admin/restaurants/{restaurantId}")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> AdminUpdateRestaurant(Guid restaurantId, [FromBody] object request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PutAsync($"/api/restaurant/admin/{restaurantId}", content);
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating restaurant (admin)");
-            return StatusCode(500, new { error = "Failed to update restaurant" });
-        }
-    }
-
-    [HttpDelete("admin/restaurants/{restaurantId}")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> AdminDeleteRestaurant(Guid restaurantId)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.DeleteAsync($"/api/restaurant/admin/{restaurantId}");
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting restaurant (admin)");
-            return StatusCode(500, new { error = "Failed to delete restaurant" });
-        }
-    }
-
-    [HttpPatch("admin/restaurants/{restaurantId}/status")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> AdminToggleRestaurantStatus(Guid restaurantId, [FromBody] object request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PatchAsync($"/api/restaurant/admin/{restaurantId}/status", content);
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return Content(responseContent, "application/json");
-            }
-            
-            return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error toggling restaurant status (admin)");
-            return StatusCode(500, new { error = "Failed to toggle restaurant status" });
-        }
-    }
-
-    [HttpPost("admin/users/assign-role")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> AssignUserRole([FromBody] AssignRoleRequest request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("IdentityService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.PostAsJsonAsync("/api/auth/assign-role", request);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error assigning role");
-            return StatusCode(500, new { error = "Failed to assign role" });
-        }
-    }
-
-    [HttpPost("admin/users/revoke-role")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> RevokeUserRole([FromBody] RevokeRoleRequest request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("IdentityService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.PostAsJsonAsync("/api/auth/revoke-role", request);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error revoking role");
-            return StatusCode(500, new { error = "Failed to revoke role" });
-        }
-    }
-
-    [HttpGet("admin/users/{email}/roles")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetUserRoles(string email)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("IdentityService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.GetAsync($"/api/auth/user-roles/{Uri.EscapeDataString(email)}");
-            var content = await response.Content.ReadAsStringAsync();
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting user roles");
-            return StatusCode(500, new { error = "Failed to get user roles" });
-        }
-    }
-
-    // Vendor Orders endpoints
-    [HttpGet("vendor/restaurants/{restaurantId}/orders")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> GetVendorOrders(Guid restaurantId)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.GetAsync($"/api/Order/vendor/restaurants/{restaurantId}/orders");
-            var content = await response.Content.ReadAsStringAsync();
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching vendor orders");
-            return StatusCode(500, new { error = "Failed to fetch vendor orders" });
-        }
-    }
-
-    [HttpPut("orders/{orderId}/status")]
-    [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("OrderService");
-            
-            // Forward Authorization header
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                client.DefaultRequestHeaders.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authHeader.Replace("Bearer ", ""));
-            }
-            
-            var response = await client.PutAsJsonAsync($"/api/Order/{orderId}/status", request);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating order status");
-            return StatusCode(500, new { error = "Failed to update order status" });
-        }
-    }
 }
 
+// ----------------------------
+// DTOs / Records
+// ----------------------------
+
+public record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount);
+
 public record CreateCartRequest(Guid? RestaurantId);
+
 public record AddCartItemRequest(
     Guid MenuItemId,
     string Name,
@@ -1306,7 +1183,9 @@ public record AddCartItemRequest(
     int Quantity,
     Dictionary<string, string>? Options
 );
+
 public record UpdateCartItemRequest(int Quantity);
+
 public record PlaceOrderRequest(
     Guid CartId,
     string DeliveryAddress,
@@ -1319,3 +1198,33 @@ public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
 public record UpdateOrderStatusRequest(string Status, string? Notes);
+
+// Keep this in BFF so it can page/filter/sort vendor orders
+public class OrderDto
+{
+    public Guid OrderId { get; set; }
+    public Guid CustomerId { get; set; }
+    public Guid RestaurantId { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public string? DeliveryAddress { get; set; }
+    public decimal Total { get; set; }
+    public List<OrderItemDto> Items { get; set; } = new();
+    public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
+}
+
+public class OrderItemDto
+{
+    public Guid OrderItemId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int Quantity { get; set; }
+    public decimal TotalPrice { get; set; }
+}
+
+public class OrderStatusHistoryDto
+{
+    public Guid Id { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public DateTime ChangedAt { get; set; }
+}
