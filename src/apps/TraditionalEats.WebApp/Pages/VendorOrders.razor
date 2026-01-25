@@ -107,8 +107,8 @@
                         @* Single expand arrow column *@
                         <RadzenDataGridExpandColumn TItem="OrderRowDto" Width="50px" />
 
-                        <RadzenDataGridColumn TItem="OrderRowDto" Title="Order #" Width="170px" Sortable="true"
-                            Filterable="true">
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="OrderShort" Title="Order #" Width="170px"
+                            Sortable="true" Filterable="true">
                             <Template Context="o">
                                 <RadzenText TextStyle="TextStyle.Body2">@o.OrderShort</RadzenText>
                                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
@@ -116,6 +116,7 @@
                                 </RadzenText>
                             </Template>
                         </RadzenDataGridColumn>
+
 
                         <RadzenDataGridColumn TItem="OrderRowDto" Property="RestaurantName" Title="Restaurant" Width="260px"
                             Filterable="true" />
@@ -342,9 +343,12 @@
             var orderBy = string.IsNullOrWhiteSpace(args.OrderBy) ? "CreatedAt desc" : args.OrderBy;
 
             var restaurantIdParam = selectedRestaurantId.HasValue ? $"&restaurantId={selectedRestaurantId.Value}" : "";
-            var statusParam = !string.IsNullOrWhiteSpace(selectedStatus) ? $"&status={Uri.EscapeDataString(selectedStatus.Trim())}"
+            var statusParam = !string.IsNullOrWhiteSpace(selectedStatus)
+            ? $"&status={Uri.EscapeDataString(selectedStatus.Trim())}"
             : "";
-            var qParam = !string.IsNullOrWhiteSpace(searchText) ? $"&q={Uri.EscapeDataString(searchText.Trim())}" : "";
+            var qParam = !string.IsNullOrWhiteSpace(searchText)
+            ? $"&q={Uri.EscapeDataString(searchText.Trim())}"
+            : "";
 
             var url =
             $"WebBff/orders?skip={skip}&take={take}&orderBy={Uri.EscapeDataString(orderBy)}{restaurantIdParam}{statusParam}{qParam}";
@@ -519,10 +523,12 @@
             if (string.IsNullOrWhiteSpace(filterValue)) continue;
 
             var propertyLower = property?.ToLowerInvariant();
+
             if (propertyLower == "status")
             {
                 list = list.Where(o =>
-                (o.Status ?? "").ToLowerInvariant().Contains(filterValue.ToLowerInvariant())).ToList();
+                (o.Status ?? "").ToLowerInvariant().Contains(filterValue.ToLowerInvariant())
+                ).ToList();
             }
             else if (propertyLower == "restaurantname")
             {
@@ -533,40 +539,37 @@
                     return restaurant?.Name?.ToLowerInvariant().Contains(filterLower) == true;
                 }).ToList();
             }
+            else if (propertyLower == "ordershort")
+            {
+                // Filter by OrderShort - simple contains like RestaurantName
+                var filterLower = filterValue.Trim().ToLowerInvariant();
+                // Remove # if present
+                if (filterLower.StartsWith("#")) filterLower = filterLower[1..];
+
+                list = list.Where(o =>
+                {
+                    // Get first 8 chars of OrderId (matching OrderShort format)
+                    var orderShort = o.OrderId.ToString().Substring(0, Math.Min(8, o.OrderId.ToString().Length)).ToLowerInvariant();
+                    return orderShort.Contains(filterLower);
+                }).ToList();
+            }
             else if (propertyLower == "total")
             {
-                list = ApplyNumericFilter(list, filterValue, filterOperator, o => o.Total);
+                list = ApplyNumericFilter(list, filter.FilterValue, filterOperator, o => o.Total);
             }
             else if (propertyLower == "itemssummary")
             {
                 var filterLower = filterValue.ToLowerInvariant();
                 list = list.Where(o =>
-                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant()
-                .Contains(filterLower))).ToList();
+                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(filterLower))
+                ).ToList();
             }
         }
+
         return list;
     }
 
-    @* private static List<OrderDto> ApplyNumericFilter(List<OrderDto> list, string filterValue, string? filterOperator,
-    Func<OrderDto, decimal> propertySelector)
-    {
-        if (!decimal.TryParse(filterValue, out var numericValue))
-            return list;
-
-        return filterOperator?.ToLowerInvariant() switch
-        {
-            "eq" or "equals" => list.Where(o => propertySelector(o) == numericValue).ToList(),
-            "gt" or "greaterthan" => list.Where(o => propertySelector(o) > numericValue).ToList(),
-            "lt" or "lessthan" => list.Where(o => propertySelector(o) < numericValue).ToList(),
-            "gte" or "greaterthanorequal" => list.Where(o => propertySelector(o) >= numericValue).ToList(),
-            "lte" or "lessthanorequal" => list.Where(o => propertySelector(o) <= numericValue).ToList(),
-            _ => list.Where(o => propertySelector(o).ToString().Contains(filterValue)).ToList()
-        };
-    } *@
-
-    // using Radzen;
-
+    // Numeric filter stays exactly as you had it
     private List<T> ApplyNumericFilter<T>(
     List<T> list,
     object? filterValue,
@@ -590,7 +593,6 @@
             _ => list
         };
     }
-
 
     private static List<OrderDto> ApplyOrderBy(List<OrderDto> list, string orderBy)
     {
