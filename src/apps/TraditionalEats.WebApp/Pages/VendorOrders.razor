@@ -19,7 +19,18 @@
         <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
     </RadzenStack>
 
-    @if (!isAuthenticated || (!isVendor && !isAdmin))
+    @* -------------------------
+       AUTH / LOADING GATES
+       ------------------------- *@
+    @if (!isAuthChecked)
+    {
+        @* Auth check in progress: DO NOT flash Access Denied *@
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading...</RadzenText>
+        </RadzenStack>
+    }
+    else if (!isAuthenticated || (!isVendor && !isAdmin))
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Access Denied"
             Text="You must be a Vendor or Admin to access this page." />
@@ -104,7 +115,6 @@
                     Class="vendor-orders-grid">
 
                     <Columns>
-                        @* Single expand arrow column *@
                         <RadzenDataGridExpandColumn TItem="OrderRowDto" Width="50px" />
 
                         <RadzenDataGridColumn TItem="OrderRowDto" Property="OrderShort" Title="Order #" Width="170px"
@@ -116,7 +126,6 @@
                                 </RadzenText>
                             </Template>
                         </RadzenDataGridColumn>
-
 
                         <RadzenDataGridColumn TItem="OrderRowDto" Property="RestaurantName" Title="Restaurant" Width="260px"
                             Filterable="true" />
@@ -149,7 +158,6 @@
                             Sortable="false" Filterable="true" />
                     </Columns>
 
-                    @* Expanded details right under the row *@
                     <Template Context="o">
                         <div style="padding: 0.75rem 0.75rem 0.95rem 0.75rem; border-left: 3px solid var(--rz-primary);">
                             <RadzenStack Gap="0.75rem">
@@ -220,6 +228,9 @@
     private bool isVendor;
     private bool isAdmin;
 
+    // NEW: prevents flashing Access Denied while auth is still being checked
+    private bool isAuthChecked = false;
+
     private bool isLoadingRestaurants;
     private string loadError = "";
 
@@ -246,7 +257,11 @@
 
     protected override async Task OnInitializedAsync()
     {
+        isAuthChecked = false;
+
         await CheckAuthenticationAndRoles();
+
+        isAuthChecked = true;
 
         if (isAuthenticated && (isVendor || isAdmin))
         {
@@ -339,7 +354,6 @@
             var skip = args.Skip ?? 0;
             var take = args.Top ?? 20;
 
-            // Radzen orderBy example: "CreatedAt desc"
             var orderBy = string.IsNullOrWhiteSpace(args.OrderBy) ? "CreatedAt desc" : args.OrderBy;
 
             var restaurantIdParam = selectedRestaurantId.HasValue ? $"&restaurantId={selectedRestaurantId.Value}" : "";
@@ -353,7 +367,6 @@
             var url =
             $"WebBff/orders?skip={skip}&take={take}&orderBy={Uri.EscapeDataString(orderBy)}{restaurantIdParam}{statusParam}{qParam}";
 
-            // IMPORTANT: don’t use GetFromJsonAsync here — we need to inspect raw payload
             var response = await Http.GetAsync(url);
             var raw = await response.Content.ReadAsStringAsync();
 
@@ -366,7 +379,6 @@
                 return;
             }
 
-            // If server returned JSON as a *string* (e.g. "\"[{...}]\""), unwrap it
             raw = UnwrapJsonStringIfNeeded(raw);
 
             var jsonOptions = new System.Text.Json.JsonSerializerOptions
@@ -374,31 +386,22 @@
                 PropertyNameCaseInsensitive = true
             };
 
-            // 1) Try PagedResult shape: { items: [...], totalCount: n }
             PagedResult<OrderDto>? paged = null;
-            try
-            {
-                paged = System.Text.Json.JsonSerializer.Deserialize<PagedResult<OrderDto>>(raw, jsonOptions);
-            }
-            catch
-            {
-                // ignore - we fallback below
-            }
+            try { paged = System.Text.Json.JsonSerializer.Deserialize<PagedResult<OrderDto>>(raw, jsonOptions); } catch { }
 
             if (paged?.Items != null)
             {
                 var items = paged.Items ?? new List<OrderDto>();
 
-                // Apply DataGrid column filters from args.Filters to paged results
                 if (args.Filters != null && args.Filters.Any())
                 {
                     items = ApplyDataGridFilters(items, args.Filters);
                 }
 
-                totalCount = items.Count; // Update count after filtering
+                totalCount = items.Count;
+
                 var mapped = items.Select(MapToRow).ToList();
 
-                // optional safety net for vendor role (should already be enforced server-side)
                 if (!isAdmin && restaurants.Any())
                 {
                     var allowed = restaurants.Select(r => r.RestaurantId).ToHashSet();
@@ -410,12 +413,8 @@
                 return;
             }
 
-            // 2) Fallback: plain list shape: [ ... ]
             List<OrderDto>? list = null;
-            try
-            {
-                list = System.Text.Json.JsonSerializer.Deserialize<List<OrderDto>>(raw, jsonOptions);
-            }
+            try { list = System.Text.Json.JsonSerializer.Deserialize<List<OrderDto>>(raw, jsonOptions); }
             catch (Exception ex)
             {
                 throw new Exception($"Orders payload was not PagedResult or List. First 250 chars: {raw[..Math.Min(250, raw.Length)]}",
@@ -424,21 +423,18 @@
 
             list ??= new List<OrderDto>();
 
-            // Apply DataGrid column filters from args.Filters
             if (args.Filters != null && args.Filters.Any())
             {
                 list = ApplyDataGridFilters(list, args.Filters);
             }
 
-            // If backend doesn't support q=, apply basic client-side search here (fallback only)
             if (!string.IsNullOrWhiteSpace(searchText))
             {
                 var q = searchText.Trim().ToLowerInvariant();
                 list = list.Where(o =>
                 o.OrderId.ToString().ToLowerInvariant().Contains(q) ||
                 (o.DeliveryAddress ?? "").ToLowerInvariant().Contains(q) ||
-                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(q))
-                )
+                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(q)))
                 .ToList();
             }
 
@@ -452,10 +448,8 @@
                 list = list.Where(o => (o.Status ?? "").Equals(selectedStatus, StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
-            // TEMP behavior: client-side paging (until backend paging exists)
             totalCount = list.Count;
 
-            // rudimentary sorting (Radzen passes strings like "CreatedAt desc")
             list = ApplyOrderBy(list, orderBy);
 
             var page = list.Skip(skip).Take(take).ToList();
@@ -493,8 +487,6 @@
     private static string UnwrapJsonStringIfNeeded(string raw)
     {
         raw = raw?.Trim() ?? "";
-
-        // If payload starts with a quote, it might be a JSON string that contains JSON
         if (raw.Length > 1 && raw[0] == '"' && raw[^1] == '"')
         {
             try
@@ -503,12 +495,8 @@
                 if (!string.IsNullOrWhiteSpace(unwrapped))
                     return unwrapped.Trim();
             }
-            catch
-            {
-                // ignore
-            }
+            catch { }
         }
-
         return raw;
     }
 
@@ -526,31 +514,28 @@
 
             if (propertyLower == "status")
             {
-                list = list.Where(o =>
-                (o.Status ?? "").ToLowerInvariant().Contains(filterValue.ToLowerInvariant())
-                ).ToList();
+                var v = filterValue.ToLowerInvariant();
+                list = list.Where(o => (o.Status ?? "").ToLowerInvariant().Contains(v)).ToList();
             }
             else if (propertyLower == "restaurantname")
             {
-                var filterLower = filterValue.ToLowerInvariant();
+                var v = filterValue.ToLowerInvariant();
                 list = list.Where(o =>
                 {
                     var restaurant = restaurants.FirstOrDefault(r => r.RestaurantId == o.RestaurantId);
-                    return restaurant?.Name?.ToLowerInvariant().Contains(filterLower) == true;
+                    return restaurant?.Name?.ToLowerInvariant().Contains(v) == true;
                 }).ToList();
             }
             else if (propertyLower == "ordershort")
             {
-                // Filter by OrderShort - simple contains like RestaurantName
-                var filterLower = filterValue.Trim().ToLowerInvariant();
-                // Remove # if present
-                if (filterLower.StartsWith("#")) filterLower = filterLower[1..];
+                var v = filterValue.Trim().ToLowerInvariant();
+                if (v.StartsWith("#")) v = v[1..];
 
                 list = list.Where(o =>
                 {
-                    // Get first 8 chars of OrderId (matching OrderShort format)
-                    var orderShort = o.OrderId.ToString().Substring(0, Math.Min(8, o.OrderId.ToString().Length)).ToLowerInvariant();
-                    return orderShort.Contains(filterLower);
+                    var s = o.OrderId.ToString();
+                    var shortId = s.Substring(0, Math.Min(8, s.Length)).ToLowerInvariant();
+                    return shortId.Contains(v);
                 }).ToList();
             }
             else if (propertyLower == "total")
@@ -559,17 +544,14 @@
             }
             else if (propertyLower == "itemssummary")
             {
-                var filterLower = filterValue.ToLowerInvariant();
-                list = list.Where(o =>
-                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(filterLower))
-                ).ToList();
+                var v = filterValue.ToLowerInvariant();
+                list = list.Where(o => (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(v))).ToList();
             }
         }
 
         return list;
     }
 
-    // Numeric filter stays exactly as you had it
     private List<T> ApplyNumericFilter<T>(
     List<T> list,
     object? filterValue,
@@ -596,21 +578,14 @@
 
     private static List<OrderDto> ApplyOrderBy(List<OrderDto> list, string orderBy)
     {
-        // Typical value: "CreatedAt desc" or "CreatedAt"
         var parts = (orderBy ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var field = parts.Length > 0 ? parts[0] : "CreatedAt";
         var desc = parts.Length > 1 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
 
         return field switch
         {
-            "CreatedAt" => desc
-            ? list.OrderByDescending(o => o.CreatedAt).ToList()
-            : list.OrderBy(o => o.CreatedAt).ToList(),
-
-            "Status" => desc
-            ? list.OrderByDescending(o => o.Status).ToList()
-            : list.OrderBy(o => o.Status).ToList(),
-
+            "CreatedAt" => desc ? list.OrderByDescending(o => o.CreatedAt).ToList() : list.OrderBy(o => o.CreatedAt).ToList(),
+            "Status" => desc ? list.OrderByDescending(o => o.Status).ToList() : list.OrderBy(o => o.Status).ToList(),
             _ => list.OrderByDescending(o => o.CreatedAt).ToList()
         };
     }
@@ -702,7 +677,6 @@
         };
     }
 
-    // ===== DTOs =====
     public class RestaurantDto
     {
         public Guid RestaurantId { get; set; }
@@ -741,7 +715,6 @@
         public DateTime ChangedAt { get; set; }
     }
 
-    // UI row model
     public class OrderRowDto
     {
         public Guid OrderId { get; set; }

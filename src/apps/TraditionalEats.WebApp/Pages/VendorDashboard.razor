@@ -14,6 +14,7 @@
 
 <RadzenStack Gap="1.5rem"
             Style="padding: 0.75rem; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
         <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
 
@@ -26,9 +27,24 @@
         </RadzenStack>
     </RadzenStack>
 
-    @if (!isAuthenticated)
+    @* -------------------------
+       AUTH / LOADING GATES
+       ------------------------- *@
+    @if (!isAuthChecked)
+    {
+        @* Auth check in progress: DO NOT flash "Authentication Required" *@
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading...</RadzenText>
+        </RadzenStack>
+    }
+    else if (!isAuthenticated)
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to access this page." />
+    }
+    else if (!(isVendor || isAdmin))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Access Denied" Text="Vendor or Admin role required." />
     }
     else if (isLoading)
     {
@@ -359,6 +375,9 @@
     private bool isVendor = false;
     private bool isAdmin = false;
 
+    // NEW: prevents flashing the unauthenticated alert while auth is still being checked
+    private bool isAuthChecked = false;
+
     private bool isLoading = true;
     private bool isSaving = false;
 
@@ -395,12 +414,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        isLoading = true;
+        isAuthChecked = false;
+
         await CheckAuthenticationAndRoles();
+
+        isAuthChecked = true;
 
         if (isAuthenticated && (isVendor || isAdmin))
         {
-            await LoadRestaurants();
-            await LoadCategories();
+            // Load in parallel to reduce waiting time
+            await Task.WhenAll(LoadRestaurants(), LoadCategories());
         }
 
         isLoading = false;
@@ -807,7 +831,7 @@
     public class RestaurantDto
     {
         public Guid RestaurantId { get; set; }
-        public Guid OwnerId { get; set; }  // still here in DTO; just not shown in UI
+        public Guid OwnerId { get; set; }
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string? CuisineType { get; set; }
