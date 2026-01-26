@@ -8,6 +8,10 @@ using TraditionalEats.BuildingBlocks.Messaging;
 using TraditionalEats.BuildingBlocks.Configuration;
 using TraditionalEats.OrderService.Data;
 using TraditionalEats.OrderService.Services;
+using Microsoft.AspNetCore.OData;
+using Microsoft.OData.Edm;
+using Microsoft.OData.ModelBuilder;
+using TraditionalEats.OrderService.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,7 +24,15 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-    });
+    })
+    .AddOData(options => options
+        .Select()
+        .Filter()
+        .OrderBy()
+        .Count()
+        .SetMaxTop(1000)
+        .AddRouteComponents("odata", GetEdmModel())
+    );
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -107,3 +119,29 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+/// <summary>
+/// Creates the Entity Data Model (EDM) for OData
+/// </summary>
+static IEdmModel GetEdmModel()
+{
+    var builder = new ODataConventionModelBuilder();
+
+    // Orders - main entity set
+    var orderSet = builder.EntitySet<Order>("Orders");
+    orderSet.EntityType.HasKey(o => o.OrderId);
+    
+    // Register related entity sets (needed for navigation properties)
+    var orderItemSet = builder.EntitySet<OrderItem>("OrderItems");
+    orderItemSet.EntityType.HasKey(oi => oi.OrderItemId);
+    
+    var orderStatusHistorySet = builder.EntitySet<OrderStatusHistory>("OrderStatusHistories");
+    orderStatusHistorySet.EntityType.HasKey(osh => osh.Id);
+    
+    // Configure navigation properties - OData will serialize them when using .Include()
+    // Note: We're not using $expand, but the data will be included via .Include() in the controller
+    orderSet.EntityType.HasMany(o => o.Items);
+    orderSet.EntityType.HasMany(o => o.StatusHistory);
+
+    return builder.GetEdmModel();
+}

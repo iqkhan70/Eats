@@ -174,7 +174,8 @@ public class WebBffController : ControllerBase
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
         [FromQuery] string? orderBy = null,
-        [FromQuery] string? q = null
+        [FromQuery] string? q = null,
+        [FromQuery] string? status = null
     )
     {
         try
@@ -203,34 +204,288 @@ public class WebBffController : ControllerBase
                 }
             }
 
-            // Decide which restaurants to fetch orders for
-            List<Guid> targetRestaurants;
+            // Build OData query string for server-side pagination, filtering, and sorting
+            var queryParams = new List<string>();
+            var filterParts = new List<string>();
+
+            // Filter by restaurantId if provided
             if (restaurantId.HasValue && restaurantId.Value != Guid.Empty)
             {
-                targetRestaurants = new List<Guid> { restaurantId.Value };
+                // OData GUID format: use the GUID string directly (more compatible)
+                filterParts.Add($"RestaurantId eq {restaurantId.Value}");
+            }
+            else if (!isAdmin)
+            {
+                // For vendors, filter by allowed restaurants
+                if (allowedRestaurantIds.Count > 0)
+                {
+                    var restaurantFilter = string.Join(" or ", allowedRestaurantIds.Select(id => $"RestaurantId eq {id}"));
+                    filterParts.Add($"({restaurantFilter})");
+                }
+                else
+                {
+                    // No allowed restaurants - return empty result
+                    filterParts.Add("1 eq 0"); // Always false filter
+                }
+            }
+
+            // Add status filter if provided
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                var statusValue = status.Trim().Replace("'", "''"); // Escape single quotes for OData
+                filterParts.Add($"Status eq '{statusValue}'");
+            }
+
+            // Add search query if provided (search in order ID or delivery address)
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var searchTerm = q.Trim().Replace("'", "''"); // Escape single quotes for OData
+                // OData search: contains on OrderId (first 8 chars) or DeliveryAddress
+                filterParts.Add($"(contains(tostring(OrderId), '{searchTerm}') or contains(DeliveryAddress, '{searchTerm}'))");
+            }
+
+            // Combine all filter parts with 'and'
+            if (filterParts.Count > 0)
+            {
+                var combinedFilter = string.Join(" and ", filterParts);
+                queryParams.Add($"$filter={Uri.EscapeDataString(combinedFilter)}");
+            }
+
+            // Add ordering - map DTO property names to entity property names
+            if (!string.IsNullOrWhiteSpace(orderBy))
+            {
+                // Convert "CreatedAt desc" to OData format
+                var orderParts = orderBy.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var field = orderParts[0];
+                var direction = orderParts.Length > 1 && orderParts[1].Equals("desc", StringComparison.OrdinalIgnoreCase) ? "desc" : "asc";
+
+                // Map DTO property names to entity property names
+                // OrderShort -> OrderId (OrderShort is a computed property in DTO)
+                // RestaurantName -> RestaurantId (RestaurantName is not on Order entity, use RestaurantId)
+                // Status, CreatedAt, Total are the same on both
+                var entityField = field switch
+                {
+                    "OrderShort" => "OrderId",
+                    "RestaurantName" => "RestaurantId", // Can't sort by name directly, use ID
+                    _ => field // Keep as-is for Status, CreatedAt, Total, etc.
+                };
+
+                queryParams.Add($"$orderby={Uri.EscapeDataString($"{entityField} {direction}")}");
             }
             else
             {
-                // Option A: allow "All Restaurants"
-                targetRestaurants = allowedRestaurantIds.ToList();
+                queryParams.Add($"$orderby={Uri.EscapeDataString("CreatedAt desc")}");
             }
 
-            // Fetch orders per restaurant (upstream is per restaurant)
-            var allOrders = await FetchOrdersForRestaurantsAsync(targetRestaurants);
+            // Add pagination
+            queryParams.Add($"$skip={skip}");
+            queryParams.Add($"$top={take}");
+            queryParams.Add("$count=true"); // Include total count
 
-            // Apply Option A search (header search textbox)
-            allOrders = ApplySearch(allOrders, q);
+            // Note: $expand removed - navigation properties are included via .Include() in the controller
+            // and will be serialized automatically by OData
 
-            // Sorting support (CreatedAt/Total/Status)
-            allOrders = ApplyOrderBy(allOrders, orderBy);
+            // Build OData URL
+            var odataUrl = $"/odata/Orders?{string.Join("&", queryParams)}";
 
-            var totalCount = allOrders.Count;
-            var page = allOrders.Skip(skip).Take(take).ToList();
+            _logger.LogInformation("OData URL: {ODataUrl}", odataUrl);
 
-            var result = new PagedResult<OrderDto>(page, totalCount);
-            var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+            // Call OrderService OData endpoint
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
 
-            return JsonContent(resultJson, 200);
+            var response = await client.GetAsync(odataUrl);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("OData request failed: {StatusCode} - URL: {Url} - Content: {Content}", response.StatusCode, odataUrl, content);
+
+                // Try to extract error message from OData response
+                string errorMessage = "Failed to fetch orders from OData endpoint";
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+                    if (errorResponse.TryGetProperty("error", out var errorProp))
+                    {
+                        if (errorProp.ValueKind == JsonValueKind.Object && errorProp.TryGetProperty("message", out var messageProp))
+                        {
+                            errorMessage = messageProp.GetString() ?? errorMessage;
+                        }
+                        else if (errorProp.ValueKind == JsonValueKind.String)
+                        {
+                            errorMessage = errorProp.GetString() ?? errorMessage;
+                        }
+                    }
+                    else if (errorResponse.TryGetProperty("message", out var msgProp))
+                    {
+                        errorMessage = msgProp.GetString() ?? errorMessage;
+                    }
+                }
+                catch
+                {
+                    // If parsing fails, use default message
+                }
+
+                return StatusCode((int)response.StatusCode, new { error = errorMessage, details = content });
+            }
+
+            // OData returns the data in a specific format
+            // We need to parse it and return in our expected format
+            try
+            {
+                var odataResponse = JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+
+                // OData response structure: { "@odata.context": "...", "value": [...], "@odata.count": N }
+                var orders = new List<OrderDto>();
+                var totalCount = 0;
+
+                if (odataResponse.TryGetProperty("value", out var valueArray))
+                {
+                    // Try to deserialize directly first (simpler and faster)
+                    try
+                    {
+                        orders = JsonSerializer.Deserialize<List<OrderDto>>(valueArray.GetRawText(), JsonOptions) ?? new();
+                        _logger.LogInformation("Successfully deserialized orders directly from OData value array");
+                    }
+                    catch (Exception directDeserializeEx)
+                    {
+                        _logger.LogWarning(directDeserializeEx, "Direct deserialization failed, falling back to manual parsing");
+
+                        // Fallback: Parse each order individually to ensure navigation properties are included
+                        // OData may return properties in PascalCase or camelCase depending on serialization settings
+                        foreach (var orderElement in valueArray.EnumerateArray())
+                        {
+                            try
+                            {
+                                // Helper to get property value (tries both camelCase and PascalCase)
+                                string? GetString(JsonElement element, params string[] propertyNames)
+                                {
+                                    foreach (var propName in propertyNames)
+                                    {
+                                        if (element.TryGetProperty(propName, out var prop))
+                                            return prop.GetString();
+                                    }
+                                    return null;
+                                }
+
+                                Guid GetGuid(JsonElement element, params string[] propertyNames)
+                                {
+                                    var str = GetString(element, propertyNames);
+                                    return Guid.TryParse(str, out var guid) ? guid : Guid.Empty;
+                                }
+
+                                DateTime GetDateTime(JsonElement element, params string[] propertyNames)
+                                {
+                                    foreach (var propName in propertyNames)
+                                    {
+                                        if (element.TryGetProperty(propName, out var prop))
+                                            return prop.GetDateTime();
+                                    }
+                                    return DateTime.UtcNow;
+                                }
+
+                                decimal GetDecimal(JsonElement element, params string[] propertyNames)
+                                {
+                                    foreach (var propName in propertyNames)
+                                    {
+                                        if (element.TryGetProperty(propName, out var prop))
+                                            return prop.GetDecimal();
+                                    }
+                                    return 0m;
+                                }
+
+                                int GetInt32(JsonElement element, params string[] propertyNames)
+                                {
+                                    foreach (var propName in propertyNames)
+                                    {
+                                        if (element.TryGetProperty(propName, out var prop))
+                                            return prop.GetInt32();
+                                    }
+                                    return 0;
+                                }
+
+                                var order = new OrderDto
+                                {
+                                    OrderId = GetGuid(orderElement, "orderId", "OrderId"),
+                                    CustomerId = GetGuid(orderElement, "customerId", "CustomerId"),
+                                    RestaurantId = GetGuid(orderElement, "restaurantId", "RestaurantId"),
+                                    Status = GetString(orderElement, "status", "Status") ?? "Pending",
+                                    CreatedAt = GetDateTime(orderElement, "createdAt", "CreatedAt"),
+                                    DeliveryAddress = GetString(orderElement, "deliveryAddress", "DeliveryAddress"),
+                                    Total = GetDecimal(orderElement, "total", "Total"),
+                                    Items = new List<OrderItemDto>(),
+                                    StatusHistory = new List<OrderStatusHistoryDto>()
+                                };
+
+                                // Parse Items (expanded navigation property) - try both camelCase and PascalCase
+                                JsonElement itemsArray;
+                                if (orderElement.TryGetProperty("items", out itemsArray) || orderElement.TryGetProperty("Items", out itemsArray))
+                                {
+                                    foreach (var itemElement in itemsArray.EnumerateArray())
+                                    {
+                                        order.Items.Add(new OrderItemDto
+                                        {
+                                            OrderItemId = GetGuid(itemElement, "orderItemId", "OrderItemId"),
+                                            Name = GetString(itemElement, "name", "Name") ?? "",
+                                            Quantity = GetInt32(itemElement, "quantity", "Quantity"),
+                                            TotalPrice = GetDecimal(itemElement, "totalPrice", "TotalPrice")
+                                        });
+                                    }
+                                }
+
+                                // Parse StatusHistory (expanded navigation property) - try both camelCase and PascalCase
+                                JsonElement historyArray;
+                                if (orderElement.TryGetProperty("statusHistory", out historyArray) || orderElement.TryGetProperty("StatusHistory", out historyArray))
+                                {
+                                    foreach (var historyElement in historyArray.EnumerateArray())
+                                    {
+                                        order.StatusHistory.Add(new OrderStatusHistoryDto
+                                        {
+                                            Id = GetGuid(historyElement, "id", "Id"),
+                                            Status = GetString(historyElement, "status", "Status") ?? "",
+                                            Notes = GetString(historyElement, "notes", "Notes"),
+                                            ChangedAt = GetDateTime(historyElement, "changedAt", "ChangedAt")
+                                        });
+                                    }
+                                }
+
+                                orders.Add(order);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Error parsing individual order from OData response");
+                            }
+                        }
+                    }
+                }
+
+                if (odataResponse.TryGetProperty("@odata.count", out var countElement))
+                {
+                    totalCount = countElement.GetInt32();
+                }
+                else
+                {
+                    totalCount = orders.Count; // Fallback if count not available
+                }
+
+                _logger.LogInformation("OData response parsed: {OrderCount} orders, {TotalCount} total", orders.Count, totalCount);
+                if (orders.Any())
+                {
+                    var firstOrder = orders.First();
+                    _logger.LogInformation("First order sample: OrderId={OrderId}, Items.Count={ItemCount}, StatusHistory.Count={HistoryCount}",
+                        firstOrder.OrderId, firstOrder.Items?.Count ?? 0, firstOrder.StatusHistory?.Count ?? 0);
+                }
+
+                var result = new PagedResult<OrderDto>(orders, totalCount);
+                return JsonContent(JsonSerializer.Serialize(result, JsonOptions), 200);
+            }
+            catch (Exception parseEx)
+            {
+                _logger.LogError(parseEx, "Error parsing OData response. Content: {Content}", content.Substring(0, Math.Min(500, content.Length)));
+                // Fallback: return the raw OData response
+                return Content(content, "application/json");
+            }
         }
         catch (Exception ex)
         {
