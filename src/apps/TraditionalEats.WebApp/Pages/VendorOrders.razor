@@ -1,0 +1,766 @@
+@page "/vendor/orders"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject AuthService AuthService
+@inject ILogger<VendorOrders> Logger
+@inject NotificationService NotificationService
+
+<PageTitle>@PageTitleText</PageTitle>
+
+<RadzenStack Gap="1.25rem"
+    Style="padding: 0.75rem; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => Navigation.NavigateTo("/vendor"))" Variant="Variant.Flat"
+            Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
+    </RadzenStack>
+
+    @if (!isAuthenticated || (!isVendor && !isAdmin))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Access Denied"
+            Text="You must be a Vendor or Admin to access this page." />
+    }
+    else if (isLoadingRestaurants)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading restaurants...</RadzenText>
+        </RadzenStack>
+    }
+    else if (restaurants == null || !restaurants.Any())
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" Title="No Restaurants" Text="@NoRestaurantsText" />
+    }
+    else
+    {
+        <RadzenCard Style="width: 100%;">
+            <RadzenStack Gap="0.75rem">
+
+                @* ===== Header filter bar (same UX pattern as /vendor) ===== *@
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+                    AlignItems="AlignItems.Center" Gap="0.75rem" Style="flex-wrap: wrap;">
+
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center"
+                        Style="flex-wrap: wrap;">
+
+                        <RadzenFormField Text="Restaurant">
+                            <RadzenDropDown Data="@restaurants" @bind-Value="@selectedRestaurantId" TextProperty="Name"
+                                ValueProperty="RestaurantId" Placeholder="All Restaurants" AllowClear="true"
+                                Change="@OnFiltersChanged" Style="width: 360px;" />
+                        </RadzenFormField>
+
+                        <RadzenFormField Text="Status">
+                            <RadzenDropDown Data="@statusOptions" @bind-Value="@selectedStatus" Placeholder="All Statuses"
+                                AllowClear="true" Change="@OnFiltersChanged" Style="width: 200px;" />
+                        </RadzenFormField>
+
+                        <RadzenFormField Text="Search">
+                            <RadzenTextBox @bind-Value="@searchText" Placeholder="Search order #, address, item..."
+                                Style="width: 380px;" Change="@OnFiltersChanged" />
+                        </RadzenFormField>
+
+                        @if (!string.IsNullOrWhiteSpace(searchText) || !string.IsNullOrWhiteSpace(selectedStatus))
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption"
+                                Style="color: var(--rz-text-secondary-color); margin-left: 0.25rem;">
+                                @if (!string.IsNullOrWhiteSpace(searchText))
+                                {
+                                    <span>Search: <strong>@searchText</strong></span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(selectedStatus))
+                                {
+                                    @if (!string.IsNullOrWhiteSpace(searchText))
+                                    {
+                                        <span> | </span>
+                                    }
+                                    <span>Status: <strong>@selectedStatus</strong></span>
+                                }
+                            </RadzenText>
+                        }
+                    </RadzenStack>
+
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                        <RadzenButton Text="Refresh" Icon="refresh" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                            Click="@RefreshGrid" />
+                        <RadzenButton Text="Clear" Icon="close" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                            Disabled="@IsClearDisabled" Click="@ClearFilters" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                @if (!string.IsNullOrWhiteSpace(loadError))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@loadError" />
+                }
+
+                <RadzenDataGrid @ref="ordersGrid" TItem="OrderRowDto" Data="@orders" Count="@totalCount"
+                    LoadData="@LoadOrdersPaged" AllowPaging="true" AllowSorting="true" AllowFiltering="true"
+                    FilterMode="FilterMode.Advanced" PageSize="20" ShowPagingSummary="true" AllowColumnResize="true"
+                    GridLines="DataGridGridLines.Both" PagerHorizontalAlign="HorizontalAlign.Left" Responsive="true"
+                    ExpandMode="DataGridExpandMode.Single" Style="width: 100%; min-width: 1250px;"
+                    Class="vendor-orders-grid">
+
+                    <Columns>
+                        @* Single expand arrow column *@
+                        <RadzenDataGridExpandColumn TItem="OrderRowDto" Width="50px" />
+
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="OrderShort" Title="Order #" Width="170px"
+                            Sortable="true" Filterable="true">
+                            <Template Context="o">
+                                <RadzenText TextStyle="TextStyle.Body2">@o.OrderShort</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                                    @o.CreatedAtLocal.ToString("MMM dd, yyyy HH:mm")
+                                </RadzenText>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="RestaurantName" Title="Restaurant" Width="260px"
+                            Filterable="true" />
+
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="Status" Title="Status" Width="170px"
+                            Sortable="true" Filterable="true">
+                            <Template Context="o">
+                                <RadzenBadge Text="@o.Status" Variant="Variant.Flat"
+                                    Style="@GetStatusBadgeStyle(o.Status)" />
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="OrderRowDto" Title="Update Status" Width="260px" Sortable="false"
+                            Filterable="false">
+                            <Template Context="o">
+                                <RadzenDropDown TValue="string" Data="@statusOptions" Value="@o.Status"
+                                    Change="@((object value) => UpdateOrderStatus(o.OrderId, value?.ToString() ?? o.Status))"
+                                    Style="width: 240px;" />
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="Total" Title="Total" Width="120px"
+                            Sortable="true" Filterable="true">
+                            <Template Context="o">
+                                <RadzenText TextStyle="TextStyle.Body2">$@o.Total.ToString("F2")</RadzenText>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="ItemsSummary" Title="Items" Width="620px"
+                            Sortable="false" Filterable="true" />
+                    </Columns>
+
+                    @* Expanded details right under the row *@
+                    <Template Context="o">
+                        <div style="padding: 0.75rem 0.75rem 0.95rem 0.75rem; border-left: 3px solid var(--rz-primary);">
+                            <RadzenStack Gap="0.75rem">
+
+                                <RadzenStack Orientation="Orientation.Horizontal"
+                                    JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center"
+                                    Style="flex-wrap: wrap;">
+                                    <RadzenText TextStyle="TextStyle.Body1"><strong>Details</strong></RadzenText>
+
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem"
+                                        AlignItems="AlignItems.Center">
+                                        <RadzenBadge Text="@o.Status" Variant="Variant.Flat"
+                                            Style="@GetStatusBadgeStyle(o.Status)" />
+                                        <RadzenText TextStyle="TextStyle.Body2"
+                                            Style="color: var(--rz-text-secondary-color);">
+                                            Created: @o.CreatedAtLocal.ToString("MMM dd, yyyy HH:mm")
+                                        </RadzenText>
+                                    </RadzenStack>
+                                </RadzenStack>
+
+                                <RadzenStack Gap="0.25rem">
+                                    <RadzenText TextStyle="TextStyle.Body2"><strong>Delivery Address</strong></RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                        @(string.IsNullOrWhiteSpace(o.DeliveryAddress) ? "—" : o.DeliveryAddress)
+                                    </RadzenText>
+                                </RadzenStack>
+
+                                <RadzenStack Gap="0.25rem">
+                                    <RadzenText TextStyle="TextStyle.Body2"><strong>Status History</strong></RadzenText>
+
+                                    @if (o.StatusHistory?.Any() == true)
+                                    {
+                                        <RadzenStack Gap="0.25rem" Style="margin-top: 0.25rem;">
+                                            @foreach (var h in o.StatusHistory.OrderByDescending(x => x.ChangedAt))
+                                            {
+                                                <RadzenText TextStyle="TextStyle.Caption"
+                                                    Style="color: var(--rz-text-secondary-color);">
+                                                    @h.Status - @h.ChangedAt.ToLocalTime().ToString("MMM dd, yyyy HH:mm")
+                                                    @if (!string.IsNullOrWhiteSpace(h.Notes))
+                                                    {
+                                                        <span> (@h.Notes)</span>
+                                                    }
+                                                </RadzenText>
+                                            }
+                                        </RadzenStack>
+                                    }
+                                    else
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Caption"
+                                            Style="color: var(--rz-text-secondary-color);">
+                                            — No history yet
+                                        </RadzenText>
+                                    }
+                                </RadzenStack>
+
+                            </RadzenStack>
+                        </div>
+                    </Template>
+
+                </RadzenDataGrid>
+            </RadzenStack>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthenticated;
+    private bool isVendor;
+    private bool isAdmin;
+
+    private bool isLoadingRestaurants;
+    private string loadError = "";
+
+    private List<RestaurantDto> restaurants = new();
+    private Guid? selectedRestaurantId = null;
+    private string? selectedStatus = null;
+    private string searchText = "";
+
+    private RadzenDataGrid<OrderRowDto>? ordersGrid;
+
+    private List<OrderRowDto> orders = new();
+    private int totalCount = 0;
+
+    private readonly List<string> statusOptions = new() { "Pending", "Preparing", "Ready", "Completed", "Cancelled" };
+
+    private string HeaderText => isAdmin ? "All Orders" : "Vendor Orders";
+    private string PageTitleText => isAdmin ? "Admin Orders - TraditionalEats" : "Vendor Orders - TraditionalEats";
+    private string NoRestaurantsText => isAdmin
+    ? "No restaurants exist yet."
+    : "You don't have any restaurants yet. Create a restaurant to start receiving orders.";
+
+    private bool IsClearDisabled =>
+    selectedRestaurantId == null && string.IsNullOrWhiteSpace(searchText) && string.IsNullOrWhiteSpace(selectedStatus);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthenticationAndRoles();
+
+        if (isAuthenticated && (isVendor || isAdmin))
+        {
+            await LoadRestaurants();
+        }
+    }
+
+    private async Task CheckAuthenticationAndRoles()
+    {
+        try
+        {
+            isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (!isAuthenticated) return;
+
+            isVendor = await AuthService.IsVendorAsync();
+            isAdmin = await AuthService.IsAdminAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error checking authentication/roles");
+            isAuthenticated = false;
+            isVendor = false;
+            isAdmin = false;
+        }
+    }
+
+    private async Task LoadRestaurants()
+    {
+        isLoadingRestaurants = true;
+        loadError = "";
+
+        try
+        {
+            if (isAdmin)
+            {
+                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/admin/restaurants?skip=0&take=2000");
+                restaurants = response ?? new List<RestaurantDto>();
+            }
+            else
+            {
+                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/vendor/my-restaurants");
+                restaurants = response ?? new List<RestaurantDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading restaurants");
+            loadError = "Failed to load restaurants.";
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = loadError,
+                Duration = 4000
+            });
+        }
+        finally
+        {
+            isLoadingRestaurants = false;
+        }
+    }
+
+    private async Task OnFiltersChanged(object? _ = null)
+    {
+        await RefreshGrid();
+    }
+
+    private async Task RefreshGrid()
+    {
+        if (ordersGrid != null)
+        {
+            await ordersGrid.FirstPage(true);
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        selectedRestaurantId = null;
+        selectedStatus = null;
+        searchText = "";
+        await RefreshGrid();
+    }
+
+    private async Task LoadOrdersPaged(LoadDataArgs args)
+    {
+        loadError = "";
+
+        try
+        {
+            var skip = args.Skip ?? 0;
+            var take = args.Top ?? 20;
+
+            // Radzen orderBy example: "CreatedAt desc"
+            var orderBy = string.IsNullOrWhiteSpace(args.OrderBy) ? "CreatedAt desc" : args.OrderBy;
+
+            var restaurantIdParam = selectedRestaurantId.HasValue ? $"&restaurantId={selectedRestaurantId.Value}" : "";
+            var statusParam = !string.IsNullOrWhiteSpace(selectedStatus)
+            ? $"&status={Uri.EscapeDataString(selectedStatus.Trim())}"
+            : "";
+            var qParam = !string.IsNullOrWhiteSpace(searchText)
+            ? $"&q={Uri.EscapeDataString(searchText.Trim())}"
+            : "";
+
+            var url =
+            $"WebBff/orders?skip={skip}&take={take}&orderBy={Uri.EscapeDataString(orderBy)}{restaurantIdParam}{statusParam}{qParam}";
+
+            // IMPORTANT: don’t use GetFromJsonAsync here — we need to inspect raw payload
+            var response = await Http.GetAsync(url);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                loadError = $"Failed to load orders: {(int)response.StatusCode} {response.ReasonPhrase} - {raw}";
+                orders = new();
+                totalCount = 0;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            // If server returned JSON as a *string* (e.g. "\"[{...}]\""), unwrap it
+            raw = UnwrapJsonStringIfNeeded(raw);
+
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            // 1) Try PagedResult shape: { items: [...], totalCount: n }
+            PagedResult<OrderDto>? paged = null;
+            try
+            {
+                paged = System.Text.Json.JsonSerializer.Deserialize<PagedResult<OrderDto>>(raw, jsonOptions);
+            }
+            catch
+            {
+                // ignore - we fallback below
+            }
+
+            if (paged?.Items != null)
+            {
+                var items = paged.Items ?? new List<OrderDto>();
+
+                // Apply DataGrid column filters from args.Filters to paged results
+                if (args.Filters != null && args.Filters.Any())
+                {
+                    items = ApplyDataGridFilters(items, args.Filters);
+                }
+
+                totalCount = items.Count; // Update count after filtering
+                var mapped = items.Select(MapToRow).ToList();
+
+                // optional safety net for vendor role (should already be enforced server-side)
+                if (!isAdmin && restaurants.Any())
+                {
+                    var allowed = restaurants.Select(r => r.RestaurantId).ToHashSet();
+                    mapped = mapped.Where(o => allowed.Contains(o.RestaurantId)).ToList();
+                }
+
+                orders = mapped;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            // 2) Fallback: plain list shape: [ ... ]
+            List<OrderDto>? list = null;
+            try
+            {
+                list = System.Text.Json.JsonSerializer.Deserialize<List<OrderDto>>(raw, jsonOptions);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Orders payload was not PagedResult or List. First 250 chars: {raw[..Math.Min(250, raw.Length)]}",
+                ex);
+            }
+
+            list ??= new List<OrderDto>();
+
+            // Apply DataGrid column filters from args.Filters
+            if (args.Filters != null && args.Filters.Any())
+            {
+                list = ApplyDataGridFilters(list, args.Filters);
+            }
+
+            // If backend doesn't support q=, apply basic client-side search here (fallback only)
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                var q = searchText.Trim().ToLowerInvariant();
+                list = list.Where(o =>
+                o.OrderId.ToString().ToLowerInvariant().Contains(q) ||
+                (o.DeliveryAddress ?? "").ToLowerInvariant().Contains(q) ||
+                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(q))
+                )
+                .ToList();
+            }
+
+            if (selectedRestaurantId.HasValue)
+            {
+                list = list.Where(o => o.RestaurantId == selectedRestaurantId.Value).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedStatus))
+            {
+                list = list.Where(o => (o.Status ?? "").Equals(selectedStatus, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            // TEMP behavior: client-side paging (until backend paging exists)
+            totalCount = list.Count;
+
+            // rudimentary sorting (Radzen passes strings like "CreatedAt desc")
+            list = ApplyOrderBy(list, orderBy);
+
+            var page = list.Skip(skip).Take(take).ToList();
+            var mappedPage = page.Select(MapToRow).ToList();
+
+            if (!isAdmin && restaurants.Any())
+            {
+                var allowed = restaurants.Select(r => r.RestaurantId).ToHashSet();
+                mappedPage = mappedPage.Where(o => allowed.Contains(o.RestaurantId)).ToList();
+            }
+
+            orders = mappedPage;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading orders");
+            loadError = "Failed to load orders.";
+            orders = new();
+            totalCount = 0;
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = $"{loadError} ({ex.Message})",
+                Duration = 5000
+            });
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string UnwrapJsonStringIfNeeded(string raw)
+    {
+        raw = raw?.Trim() ?? "";
+
+        // If payload starts with a quote, it might be a JSON string that contains JSON
+        if (raw.Length > 1 && raw[0] == '"' && raw[^1] == '"')
+        {
+            try
+            {
+                var unwrapped = System.Text.Json.JsonSerializer.Deserialize<string>(raw);
+                if (!string.IsNullOrWhiteSpace(unwrapped))
+                    return unwrapped.Trim();
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        return raw;
+    }
+
+    private List<OrderDto> ApplyDataGridFilters(List<OrderDto> list, IEnumerable<Radzen.FilterDescriptor> filters)
+    {
+        foreach (var filter in filters)
+        {
+            var property = filter.Property;
+            var filterValue = filter.FilterValue?.ToString() ?? "";
+            var filterOperator = filter.FilterOperator;
+
+            if (string.IsNullOrWhiteSpace(filterValue)) continue;
+
+            var propertyLower = property?.ToLowerInvariant();
+
+            if (propertyLower == "status")
+            {
+                list = list.Where(o =>
+                (o.Status ?? "").ToLowerInvariant().Contains(filterValue.ToLowerInvariant())
+                ).ToList();
+            }
+            else if (propertyLower == "restaurantname")
+            {
+                var filterLower = filterValue.ToLowerInvariant();
+                list = list.Where(o =>
+                {
+                    var restaurant = restaurants.FirstOrDefault(r => r.RestaurantId == o.RestaurantId);
+                    return restaurant?.Name?.ToLowerInvariant().Contains(filterLower) == true;
+                }).ToList();
+            }
+            else if (propertyLower == "ordershort")
+            {
+                // Filter by OrderShort - simple contains like RestaurantName
+                var filterLower = filterValue.Trim().ToLowerInvariant();
+                // Remove # if present
+                if (filterLower.StartsWith("#")) filterLower = filterLower[1..];
+
+                list = list.Where(o =>
+                {
+                    // Get first 8 chars of OrderId (matching OrderShort format)
+                    var orderShort = o.OrderId.ToString().Substring(0, Math.Min(8, o.OrderId.ToString().Length)).ToLowerInvariant();
+                    return orderShort.Contains(filterLower);
+                }).ToList();
+            }
+            else if (propertyLower == "total")
+            {
+                list = ApplyNumericFilter(list, filter.FilterValue, filterOperator, o => o.Total);
+            }
+            else if (propertyLower == "itemssummary")
+            {
+                var filterLower = filterValue.ToLowerInvariant();
+                list = list.Where(o =>
+                (o.Items ?? new()).Any(i => (i.Name ?? "").ToLowerInvariant().Contains(filterLower))
+                ).ToList();
+            }
+        }
+
+        return list;
+    }
+
+    // Numeric filter stays exactly as you had it
+    private List<T> ApplyNumericFilter<T>(
+    List<T> list,
+    object? filterValue,
+    FilterOperator? filterOperator,
+    Func<T, decimal?> selector)
+    {
+        if (filterValue == null || filterOperator == null)
+            return list;
+
+        if (!decimal.TryParse(filterValue.ToString(), out var v))
+            return list;
+
+        return filterOperator switch
+        {
+            FilterOperator.Equals => list.Where(x => selector(x) == v).ToList(),
+            FilterOperator.NotEquals => list.Where(x => selector(x) != v).ToList(),
+            FilterOperator.GreaterThan => list.Where(x => (selector(x) ?? 0m) > v).ToList(),
+            FilterOperator.GreaterThanOrEquals => list.Where(x => (selector(x) ?? 0m) >= v).ToList(),
+            FilterOperator.LessThan => list.Where(x => (selector(x) ?? 0m) < v).ToList(),
+            FilterOperator.LessThanOrEquals => list.Where(x => (selector(x) ?? 0m) <= v).ToList(),
+            _ => list
+        };
+    }
+
+    private static List<OrderDto> ApplyOrderBy(List<OrderDto> list, string orderBy)
+    {
+        // Typical value: "CreatedAt desc" or "CreatedAt"
+        var parts = (orderBy ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var field = parts.Length > 0 ? parts[0] : "CreatedAt";
+        var desc = parts.Length > 1 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+        return field switch
+        {
+            "CreatedAt" => desc
+            ? list.OrderByDescending(o => o.CreatedAt).ToList()
+            : list.OrderBy(o => o.CreatedAt).ToList(),
+
+            "Status" => desc
+            ? list.OrderByDescending(o => o.Status).ToList()
+            : list.OrderBy(o => o.Status).ToList(),
+
+            _ => list.OrderByDescending(o => o.CreatedAt).ToList()
+        };
+    }
+
+    private OrderRowDto MapToRow(OrderDto o)
+    {
+        var restaurantName =
+        restaurants.FirstOrDefault(r => r.RestaurantId == o.RestaurantId)?.Name
+        ?? o.RestaurantId.ToString();
+
+        var itemsSummary = (o.Items ?? new List<OrderItemDto>())
+        .Select(i => $"{i.Quantity}x {i.Name}")
+        .Take(6)
+        .ToList();
+
+        var moreCount = Math.Max(0, (o.Items?.Count ?? 0) - itemsSummary.Count);
+        var summary = string.Join(", ", itemsSummary);
+        if (moreCount > 0) summary += $" (+{moreCount} more)";
+
+        return new OrderRowDto
+        {
+            OrderId = o.OrderId,
+            RestaurantId = o.RestaurantId,
+            RestaurantName = restaurantName,
+            Status = o.Status,
+            CreatedAt = o.CreatedAt,
+            CreatedAtLocal = o.CreatedAt.ToLocalTime(),
+            DeliveryAddress = o.DeliveryAddress,
+            Total = o.Total,
+            ItemsSummary = summary,
+            StatusHistory = o.StatusHistory ?? new List<OrderStatusHistoryDto>()
+        };
+    }
+
+    private async Task UpdateOrderStatus(Guid orderId, string newStatus)
+    {
+        try
+        {
+            var request = new { Status = newStatus, Notes = (string?)null };
+            var response = await Http.PutAsJsonAsync($"WebBff/orders/{orderId}/status", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = $"Order status updated to {newStatus}",
+                    Duration = 2500
+                });
+
+                await RefreshGrid();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = $"Failed to update order status: {error}",
+                    Duration = 4500
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating order status");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = "Failed to update order status",
+                Duration = 4500
+            });
+        }
+    }
+
+    private string GetStatusBadgeStyle(string status)
+    {
+        return status switch
+        {
+            "Pending" => "background-color: var(--rz-warning); color: white;",
+            "Preparing" => "background-color: var(--rz-info); color: white;",
+            "Ready" => "background-color: var(--rz-success); color: white;",
+            "Completed" => "background-color: var(--rz-secondary); color: white;",
+            "Cancelled" => "background-color: var(--rz-danger); color: white;",
+            _ => "background-color: var(--rz-secondary); color: white;"
+        };
+    }
+
+    // ===== DTOs =====
+    public class RestaurantDto
+    {
+        public Guid RestaurantId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string CuisineType { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+    }
+
+    public class OrderDto
+    {
+        public Guid OrderId { get; set; }
+        public Guid CustomerId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public string? DeliveryAddress { get; set; }
+        public decimal Total { get; set; }
+        public List<OrderItemDto> Items { get; set; } = new();
+        public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
+    }
+
+    public class OrderItemDto
+    {
+        public Guid OrderItemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+        public decimal TotalPrice { get; set; }
+    }
+
+    public class OrderStatusHistoryDto
+    {
+        public Guid Id { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+        public DateTime ChangedAt { get; set; }
+    }
+
+    // UI row model
+    public class OrderRowDto
+    {
+        public Guid OrderId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public string RestaurantName { get; set; } = "";
+        public string Status { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
+        public DateTime CreatedAtLocal { get; set; }
+        public string? DeliveryAddress { get; set; }
+        public decimal Total { get; set; }
+        public string ItemsSummary { get; set; } = "";
+        public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
+
+        public string OrderShort => $"#{OrderId.ToString().Substring(0, 8)}";
+    }
+
+    public class PagedResult<T>
+    {
+        public List<T> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+}

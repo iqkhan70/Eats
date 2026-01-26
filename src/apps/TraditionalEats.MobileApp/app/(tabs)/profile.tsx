@@ -1,9 +1,99 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { authService } from '../../services/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
+
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isVendor, setIsVendor] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Refresh whenever screen becomes active (after login/logout, switching tabs, etc.)
+  useFocusEffect(
+    useCallback(() => {
+      checkAuthStatus();
+    }, [])
+  );
+
+  const checkAuthStatus = async () => {
+    try {
+      const authenticated = await authService.isAuthenticated();
+      setIsAuthenticated(authenticated);
+
+      if (authenticated) {
+        setIsVendor(await authService.isVendor());
+        setIsAdmin(await authService.isAdmin());
+
+        // ✅ IMPORTANT: set user email
+        // Preferred: implement authService.getUserEmail()
+        let email: string | null = null;
+
+        if (typeof (authService as any).getUserEmail === 'function') {
+          email = await (authService as any).getUserEmail();
+        } else if (typeof (authService as any).getCurrentUser === 'function') {
+          const u = await (authService as any).getCurrentUser();
+          email = u?.email ?? u?.userEmail ?? null;
+        }
+
+        setUserEmail(email);
+      } else {
+        setIsVendor(false);
+        setIsAdmin(false);
+        setUserEmail(null);
+      }
+    } catch (e) {
+      // If anything fails, treat as not authenticated
+      setIsAuthenticated(false);
+      setIsVendor(false);
+      setIsAdmin(false);
+      setUserEmail(null);
+    }
+  };
+
+  /**
+   * ✅ Guard any action that requires auth.
+   * If no session, redirect to login first.
+   */
+  const requireAuth = (action: () => void) => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Sign in required',
+        'Please sign in to access your profile.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/login') },
+        ]
+      );
+      return;
+    }
+    action();
+  };
+
+  const handleLogout = async () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await authService.logout();
+            setIsAuthenticated(false);
+            setUserEmail(null);
+            setIsVendor(false);
+            setIsAdmin(false);
+            Alert.alert('Success', 'You have been signed out');
+          } catch (error: any) {
+            Alert.alert('Error', 'Failed to sign out');
+          }
+        },
+      },
+    ]);
+  };
 
   const menuItems = [
     { icon: 'person-outline', label: 'Personal Information', route: '/profile/personal' },
@@ -20,38 +110,98 @@ export default function ProfileScreen() {
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={48} color="#fff" />
         </View>
-        <Text style={styles.userName}>John Doe</Text>
-        <Text style={styles.userEmail}>john.doe@example.com</Text>
+
+        {isAuthenticated ? (
+          <>
+            <Text style={styles.userName}>Welcome</Text>
+            {/* ✅ show actual email */}
+            <Text style={styles.userEmail}>{userEmail ?? '—'}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.userName}>Guest</Text>
+            <Text style={styles.userEmail}>Sign in to access your account</Text>
+          </>
+        )}
       </View>
 
-      <View style={styles.menuSection}>
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.menuItem}
-            onPress={() => router.push(item.route as any)}
-          >
-            <View style={styles.menuItemLeft}>
-              <Ionicons name={item.icon as any} size={24} color="#333" />
-              <Text style={styles.menuItemLabel}>{item.label}</Text>
+      {isAuthenticated ? (
+        <>
+          {(isVendor || isAdmin) && (
+            <View style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>Business</Text>
+
+              {isVendor && (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => requireAuth(() => router.push('/vendor'))}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="restaurant" size={24} color="#6200ee" />
+                    <Text style={styles.menuItemLabel}>Vendor Dashboard</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
+
+              {isAdmin && (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => requireAuth(() => router.push('/admin'))}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="shield-checkmark" size={24} color="#d32f2f" />
+                    <Text style={[styles.menuItemLabel, { color: '#d32f2f' }]}>Admin Dashboard</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-        ))}
-      </View>
+          )}
 
-      <TouchableOpacity style={styles.logoutButton}>
-        <Text style={styles.logoutButtonText}>Sign Out</Text>
-      </TouchableOpacity>
+          <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>Account</Text>
+
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.menuItem}
+                onPress={() => requireAuth(() => router.push(item.route as any))}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name={item.icon as any} size={24} color="#333" />
+                  <Text style={styles.menuItemLabel}>{item.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.menuSection}>
+          {/* ✅ Optional: make the whole menu list still visible but guarded.
+              For now, just show sign in/up actions. */}
+          <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/login')}>
+            <Ionicons name="log-in-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.loginButtonText}>Sign In</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.registerButton} onPress={() => router.push('/register')}>
+            <Text style={styles.registerButtonText}>Don't have an account? Sign Up</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+
   header: {
     backgroundColor: '#6200ee',
     padding: 32,
@@ -67,21 +217,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  menuSection: {
-    backgroundColor: '#fff',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
+  userName: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
+  userEmail: { fontSize: 14, color: 'rgba(255, 255, 255, 0.85)' },
+
+  menuSection: { backgroundColor: '#fff', marginTop: 16, paddingVertical: 8 },
+
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -90,15 +230,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
+  menuItemLabel: { fontSize: 16, color: '#333', marginLeft: 16 },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    textTransform: 'uppercase',
   },
-  menuItemLabel: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 16,
-  },
+
   logoutButton: {
     margin: 16,
     padding: 16,
@@ -108,9 +252,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  logoutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#d32f2f',
+  logoutButtonText: { fontSize: 16, fontWeight: '600', color: '#d32f2f' },
+
+  loginButton: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#6200ee',
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
+  loginButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+
+  registerButton: { margin: 16, marginTop: 0, padding: 16, alignItems: 'center' },
+  registerButtonText: { fontSize: 14, color: '#666' },
 });

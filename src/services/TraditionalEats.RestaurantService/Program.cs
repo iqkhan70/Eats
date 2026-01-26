@@ -37,6 +37,9 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -46,13 +49,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
 
 builder.Services.AddAuthorization();
+
+// Geocoding
+builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Geocoding.IZipCodeLookupService, TraditionalEats.RestaurantService.Services.ZipCodeLookupService>();
+builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Geocoding.IGeocodingService, TraditionalEats.BuildingBlocks.Geocoding.GeocodingService>();
 
 // Application services
 builder.Services.AddScoped<IRestaurantService, RestaurantService>();
@@ -70,11 +77,14 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created
+// Ensure database is created and seed data
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RestaurantDbContext>();
     db.Database.EnsureCreated();
+    
+    // Seed initial data
+    await SeedData.SeedAsync(db);
 }
 
 app.Run();

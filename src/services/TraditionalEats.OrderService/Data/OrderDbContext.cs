@@ -28,6 +28,12 @@ public class OrderDbContext : DbContext
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.IdempotencyKey);
             entity.Property(e => e.Status).HasMaxLength(50);
+            
+            // Configure relationship with OrderStatusHistory
+            entity.HasMany(o => o.StatusHistory)
+                .WithOne(h => h.Order)
+                .HasForeignKey(h => h.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<OrderItem>(entity =>
@@ -53,6 +59,9 @@ public class OrderDbContext : DbContext
         {
             entity.HasKey(e => e.CartItemId);
             entity.HasIndex(e => e.CartId);
+            // Add unique constraint on CartId + MenuItemId to prevent duplicate items
+            entity.HasIndex(e => new { e.CartId, e.MenuItemId })
+                .IsUnique();
         });
 
         modelBuilder.Entity<OrderIdempotencyKey>(entity =>

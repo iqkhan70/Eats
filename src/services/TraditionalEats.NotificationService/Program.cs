@@ -37,6 +37,9 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -46,16 +49,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
 
 builder.Services.AddAuthorization();
 
+// HttpClient for external APIs (Vonage, Mailgun)
+builder.Services.AddHttpClient();
+
 // Application services
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
+
+// Background service for handling order status events
+builder.Services.AddHostedService<OrderStatusEventHandler>();
 
 var app = builder.Build();
 

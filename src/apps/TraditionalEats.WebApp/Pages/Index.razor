@@ -2,7 +2,9 @@
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
 @inject NavigationManager NavigationManager
+@inject HttpClient Http
 
 <PageTitle>TraditionalEats - Traditional Food Delivery</PageTitle>
 
@@ -15,9 +17,32 @@
     <RadzenCard Style="margin-top: 1rem;">
         <RadzenStack Gap="1rem">
             <RadzenText TextStyle="TextStyle.H3">Find Restaurants Near You</RadzenText>
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.End" Class="search-container">
-                <RadzenFormField Text="Enter your location" class="w-100" Style="flex: 1;">
-                    <RadzenTextBox @ref="searchTextBox" @bind-Value="@searchLocation" Placeholder="Enter your address or location" />
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.End" Class="search-container" Style="position: relative;">
+                <RadzenFormField Text="Enter your location" class="w-100" Style="flex: 1; position: relative;">
+                    <RadzenTextBox @ref="searchTextBox" 
+                                   @bind-value="@searchLocation" 
+                                   Placeholder="Enter your address or location"
+                                   @oninput="@HandleInput"
+                                   @onkeypress="@HandleKeyPress"
+                                   Style="width: 100%;" />
+                    @if (showSuggestions && suggestions.Any())
+                    {
+                        <div class="suggestions-dropdown" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            @foreach (var suggestion in suggestions)
+                            {
+                                <div class="suggestion-item" 
+                                     style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; @(hoveredSuggestion == suggestion ? "background-color: #f5f5f5;" : "")" 
+                                     @onclick="@(() => SelectSuggestion(suggestion))"
+                                     @onmouseover="@(() => hoveredSuggestion = suggestion)"
+                                     @onmouseout="@(() => hoveredSuggestion = null)">
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                        <RadzenIcon Icon="location_on" Style="font-size: 16px; color: #666;" />
+                                        <RadzenText TextStyle="TextStyle.Body2">@suggestion</RadzenText>
+                                    </RadzenStack>
+                                </div>
+                            }
+                        </div>
+                    }
                 </RadzenFormField>
                 <RadzenButton Text="Search" Icon="search" Click="@SearchRestaurants" Variant="Variant.Flat" />
             </RadzenStack>
@@ -30,11 +55,13 @@
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="flex-wrap: wrap; width: 100%;" Class="categories-stack">
                 @foreach (var category in displayedCategories)
                 {
-                    <RadzenCard Style="cursor: pointer;" Class="category-card" Click="@(() => NavigateToCategory(category))">
-                        <RadzenStack Gap="0.5rem" Style="align-items: center; text-align: center;">
-                            <RadzenIcon Icon="@category.Icon" Style="font-size: 48px; color: var(--rz-primary);" />
-                            <RadzenText TextStyle="TextStyle.Body1">@category.Name</RadzenText>
-                        </RadzenStack>
+                    <RadzenCard Style="cursor: pointer;" Class="category-card">
+                        <div @onclick="@(() => NavigateToCategory(category))" style="width: 100%; height: 100%;">
+                            <RadzenStack Gap="0.5rem" Style="align-items: center; text-align: center;">
+                                <RadzenIcon Icon="@category.Icon" Style="font-size: 48px; color: var(--rz-primary);" />
+                                <RadzenText TextStyle="TextStyle.Body1">@category.Name</RadzenText>
+                            </RadzenStack>
+                        </div>
                     </RadzenCard>
                 }
             </RadzenStack>
@@ -56,8 +83,12 @@
 @code {
     private RadzenTextBox? searchTextBox;
     private string searchLocation = string.Empty;
+    private List<string> suggestions = new();
+    private bool showSuggestions = false;
+    private string? hoveredSuggestion = null;
     private bool showAllCategories = false;
     private const int initialCategoryCount = 6;
+    private System.Threading.CancellationTokenSource? _debounceCts;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -65,6 +96,59 @@
         {
             await searchTextBox.FocusAsync();
         }
+    }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? string.Empty;
+        searchLocation = value;
+        await LoadSuggestions(value);
+    }
+
+    private async Task LoadSuggestions(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            suggestions = new List<string>();
+            showSuggestions = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Debounce the API call
+        _debounceCts?.Cancel();
+        _debounceCts = new System.Threading.CancellationTokenSource();
+        
+        try
+        {
+            await Task.Delay(300, _debounceCts.Token); // Wait 300ms after user stops typing
+            
+            var response = await Http.GetFromJsonAsync<List<string>>(
+                $"WebBff/search-suggestions?query={Uri.EscapeDataString(query)}&maxResults=10",
+                _debounceCts.Token);
+            
+            suggestions = response ?? new List<string>();
+            showSuggestions = suggestions.Any();
+            StateHasChanged();
+        }
+        catch (System.Threading.Tasks.TaskCanceledException)
+        {
+            // Debounce cancelled, ignore
+        }
+        catch (Exception)
+        {
+            suggestions = new List<string>();
+            showSuggestions = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SelectSuggestion(string suggestion)
+    {
+        searchLocation = suggestion;
+        showSuggestions = false;
+        suggestions = new List<string>();
+        StateHasChanged();
     }
 
     private List<CategoryItem> categories = new()
@@ -85,17 +169,25 @@
         ? categories 
         : categories.Take(initialCategoryCount).ToList();
 
-    private void SearchRestaurants()
-    {
-        if (!string.IsNullOrEmpty(searchLocation))
+        private void SearchRestaurants()
         {
-            NavigationManager.NavigateTo($"/restaurants?location={Uri.EscapeDataString(searchLocation)}");
+            if (!string.IsNullOrEmpty(searchLocation))
+            {
+                NavigationManager.NavigateTo($"/restaurants?location={Uri.EscapeDataString(searchLocation)}");
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/restaurants");
+            }
         }
-        else
+
+        private void HandleKeyPress(KeyboardEventArgs e)
         {
-            NavigationManager.NavigateTo("/restaurants");
+            if (e.Key == "Enter")
+            {
+                SearchRestaurants();
+            }
         }
-    }
 
     private void NavigateToCategory(CategoryItem category)
     {

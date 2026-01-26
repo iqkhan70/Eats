@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TraditionalEats.BuildingBlocks.Redis;
@@ -16,6 +17,9 @@ public interface IAuthService
     Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken);
     Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
+    Task<bool> AssignRoleAsync(string email, string role);
+    Task<bool> RemoveRoleAsync(string email, string role);
+    Task<List<string>> GetUserRolesAsync(string email);
 }
 
 public class AuthService : IAuthService
@@ -24,6 +28,7 @@ public class AuthService : IAuthService
     private readonly IRedisService _redis;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthService> _logger;
+    private readonly IPasswordHasher<User> _passwordHasher;
 
     public AuthService(
         IdentityDbContext context,
@@ -35,19 +40,74 @@ public class AuthService : IAuthService
         _redis = redis;
         _configuration = configuration;
         _logger = logger;
+        _passwordHasher = new PasswordHasher<User>();
     }
 
     public async Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password, string? ipAddress)
     {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            await RecordLoginAttemptAsync(null, email, ipAddress, false, "Email or password is empty");
+            throw new UnauthorizedAccessException("Email and password are required");
+        }
+
+        // Case-insensitive email lookup
+        // Try direct lookup first (for users registered with lowercase email)
+        var normalizedEmail = email.ToLower().Trim();
         var user = await _context.Users
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Email == email);
-
-        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        
+        // If not found, try case-insensitive search (for backward compatibility)
+        if (user == null)
         {
-            await RecordLoginAttemptAsync(null, email, ipAddress, false, "Invalid credentials");
+            var allUsers = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .ToListAsync();
+            user = allUsers.FirstOrDefault(u => 
+                u.Email.ToLower() == normalizedEmail || 
+                u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (user == null)
+        {
+            await RecordLoginAttemptAsync(null, email, ipAddress, false, "User not found");
             throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        // Check if password hash exists
+        if (string.IsNullOrEmpty(user.PasswordHash))
+        {
+            await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password hash is empty");
+            throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        // Use ASP.NET Identity PasswordHasher (same as Mental Health app)
+        PasswordVerificationResult verificationResult;
+        try
+        {
+            verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception during password verification for user {UserId}", user.Id);
+            await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password verification exception");
+            throw new UnauthorizedAccessException("Invalid email or password");
+        }
+        
+        if (verificationResult == PasswordVerificationResult.Failed)
+        {
+            await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password verification failed");
+            throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        // If rehash is needed (e.g., password was hashed with older algorithm), update it
+        if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.PasswordHash = _passwordHasher.HashPassword(user, password);
+            await _context.SaveChangesAsync();
         }
 
         if (user.Status != "Active" || (user.LockedUntil.HasValue && user.LockedUntil > DateTime.UtcNow))
@@ -94,7 +154,8 @@ public class AuthService : IAuthService
 
     public async Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer")
     {
-        if (await _context.Users.AnyAsync(u => u.Email == email))
+        // Case-insensitive email check
+        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == email.ToLower()))
         {
             return false;
         }
@@ -102,12 +163,14 @@ public class AuthService : IAuthService
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Email = email,
+            Email = email.ToLower(), // Store email in lowercase for consistency
             PhoneNumber = phoneNumber,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Status = "Active",
             CreatedAt = DateTime.UtcNow
         };
+
+        // Use ASP.NET Identity PasswordHasher (same as Mental Health app)
+        user.PasswordHash = _passwordHasher.HashPassword(user, password);
 
         _context.Users.Add(user);
 
@@ -141,6 +204,96 @@ public class AuthService : IAuthService
         }
     }
 
+    public async Task<bool> AssignRoleAsync(string email, string role)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user == null)
+        {
+            return false;
+        }
+
+        // Check if user already has this role
+        if (user.UserRoles.Any(ur => ur.Role.Name == role))
+        {
+            return true; // Already has the role
+        }
+
+        // Get or create the role
+        var roleEntity = await _context.Roles.FirstOrDefaultAsync(r => r.Name == role);
+        if (roleEntity == null)
+        {
+            roleEntity = new Role { Id = Guid.NewGuid(), Name = role };
+            _context.Roles.Add(roleEntity);
+            await _context.SaveChangesAsync();
+        }
+
+        // Add the role to the user
+        _context.UserRoles.Add(new UserRole
+        {
+            UserId = user.Id,
+            RoleId = roleEntity.Id
+        });
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveRoleAsync(string email, string role)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user == null)
+        {
+            return false;
+        }
+
+        // Find the user role to remove
+        var userRole = user.UserRoles.FirstOrDefault(ur => ur.Role.Name == role);
+        if (userRole == null)
+        {
+            return true; // User doesn't have this role, consider it successful
+        }
+
+        // Don't allow removing the last role (user must have at least one role)
+        if (user.UserRoles.Count == 1)
+        {
+            _logger.LogWarning("Cannot remove last role from user {Email}. User must have at least one role.", email);
+            return false;
+        }
+
+        // Remove the role
+        _context.UserRoles.Remove(userRole);
+        await _context.SaveChangesAsync();
+        
+        _logger.LogInformation("Role '{Role}' removed from user {Email}", role, email);
+        return true;
+    }
+
+    public async Task<List<string>> GetUserRolesAsync(string email)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user == null)
+        {
+            return new List<string>();
+        }
+
+        return user.UserRoles.Select(ur => ur.Role.Name).ToList();
+    }
+
     private string GenerateAccessToken(User user)
     {
         var claims = new List<Claim>
@@ -154,13 +307,26 @@ public class AuthService : IAuthService
             claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
         }
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-            _configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret not configured")));
+        // Get JWT secret with fallback
+        var jwtSecret = _configuration["Jwt:Secret"] 
+            ?? _configuration["Jwt:Key"]
+            ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
+        
+        if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
+        {
+            jwtSecret = "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
+        }
+        
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        // Get JWT issuer and audience with fallbacks
+        var jwtIssuer = _configuration["Jwt:Issuer"] ?? "TraditionalEats";
+        var jwtAudience = _configuration["Jwt:Audience"] ?? "TraditionalEats";
+
         var token = new JwtSecurityToken(
-            issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            issuer: jwtIssuer,
+            audience: jwtAudience,
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: creds);

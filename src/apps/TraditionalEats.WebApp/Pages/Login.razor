@@ -1,0 +1,120 @@
+@page "/login"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Services
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject AuthService AuthService
+
+<PageTitle>Login - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; max-width: 400px; margin: 2rem auto; width: 100%; box-sizing: border-box;">
+    <RadzenText TextStyle="TextStyle.H1">Login</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body1">Sign in to your TraditionalEats account</RadzenText>
+
+    <RadzenCard>
+        <RadzenStack Gap="1rem">
+            <RadzenFormField Text="Email" class="w-100">
+                <RadzenTextBox @bind-Value="@email" Placeholder="Enter your email" Style="width: 100%;" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Password" class="w-100">
+                <RadzenPassword @bind-Value="@password" Placeholder="Enter your password" Style="width: 100%;" />
+            </RadzenFormField>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+            }
+
+            <RadzenButton Text="Login" Icon="login" Click="@HandleLogin" Variant="Variant.Filled" Style="width: 100%;" IsBusy="@loading" />
+
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.Body2">Don't have an account?</RadzenText>
+                <RadzenButton Text="Register" Click="@(() => NavigationManager.NavigateTo("/register"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+</RadzenStack>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? SessionExpired { get; set; }
+
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool loading = false;
+
+    protected override void OnInitialized()
+    {
+        // Show session expired message if redirected from expired session
+        if (SessionExpired == "true")
+        {
+            errorMessage = "Your session has expired. Please login again.";
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Please enter both email and password";
+            return;
+        }
+
+        try
+        {
+            loading = true;
+            errorMessage = string.Empty;
+
+            var request = new { Email = email, Password = password };
+            var response = await Http.PostAsJsonAsync("WebBff/auth/login", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                if (result != null)
+                {
+                    // Store tokens in localStorage
+                    await StoreTokens(result.AccessToken, result.RefreshToken);
+                    
+                    // Refresh the page to update auth state
+                    NavigationManager.NavigateTo("/", forceLoad: true);
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = error?.Message ?? "Login failed. Please check your credentials.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task StoreTokens(string accessToken, string refreshToken)
+    {
+        await AuthService.StoreTokensAsync(accessToken, refreshToken);
+    }
+
+    private class LoginResponse
+    {
+        public string AccessToken { get; set; } = string.Empty;
+        public string RefreshToken { get; set; } = string.Empty;
+        public int ExpiresIn { get; set; }
+    }
+
+    private class ErrorResponse
+    {
+        public string Message { get; set; } = string.Empty;
+    }
+}

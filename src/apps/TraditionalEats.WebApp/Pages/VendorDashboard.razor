@@ -1,0 +1,854 @@
+@page "/vendor"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject AuthService AuthService
+@inject ILogger<VendorDashboard> Logger
+@inject IJSRuntime JSRuntime
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>@PageTitleText</PageTitle>
+
+<RadzenStack Gap="1.5rem"
+            Style="padding: 0.75rem; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+            <RadzenButton Text="View Orders" Icon="shopping_cart" Click="@(() => Navigation.NavigateTo("/vendor/orders"))" Variant="Variant.Outlined" />
+            @if (CanCreateRestaurants)
+            {
+                <RadzenButton Text="+ Add Restaurant" Icon="add" Click="ShowCreateForm" Variant="Variant.Filled" />
+            }
+        </RadzenStack>
+    </RadzenStack>
+
+    @if (!isAuthenticated)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to access this page." />
+    }
+    else if (isLoading)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading restaurants...</RadzenText>
+        </RadzenStack>
+    }
+    else if (restaurants == null || !restaurants.Any())
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText>@EmptyStateText</RadzenText>
+                @if (CanCreateRestaurants)
+                {
+                    <RadzenButton Text="@CreateButtonText" Icon="add" Click="ShowCreateForm" Variant="Variant.Filled" />
+                }
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        @* ===== ADMIN VIEW: GRID ===== *@
+        @if (isAdmin)
+        {
+            <RadzenCard Style="width: 100%;">
+                <RadzenStack Gap="0.75rem">
+                    <RadzenStack Orientation="Orientation.Horizontal"
+                                 JustifyContent="JustifyContent.SpaceBetween"
+                                 AlignItems="AlignItems.Center"
+                                 Gap="0.75rem"
+                                 Style="flex-wrap: wrap;">
+                        <RadzenText TextStyle="TextStyle.Body1">@restaurants.Count restaurant(s)</RadzenText>
+
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
+                            <RadzenTextBox @bind-Value="adminSearch"
+                                           Placeholder="Search name / cuisine / address"
+                                           Style="width: 360px;"
+                                           Change="@(args => ApplyAdminSearch())" />
+                            <RadzenButton Text="Clear" Icon="close" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                                          Click="ClearAdminSearch" Disabled="@string.IsNullOrWhiteSpace(adminSearch)" />
+                        </RadzenStack>
+                    </RadzenStack>
+
+                    <RadzenDataGrid @ref="adminGrid"
+                                    Data="@adminRestaurantsFiltered"
+                                    TItem="RestaurantDto"
+                                    AllowPaging="true"
+                                    PageSize="15"
+                                    AllowSorting="true"
+                                    AllowFiltering="true"
+                                    FilterMode="FilterMode.Advanced"
+                                    FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                    AllowColumnResize="true"
+                                    GridLines="DataGridGridLines.Both"
+                                    ShowPagingSummary="true"
+                                    PagerHorizontalAlign="HorizontalAlign.Left"
+                                    Responsive="true"
+                                    Style="width: 100%; min-width: 1100px;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="RestaurantDto" Property="Name" Title="Name" Width="260px" />
+                            <RadzenDataGridColumn TItem="RestaurantDto" Property="CuisineType" Title="Cuisine" Width="180px" />
+                            <RadzenDataGridColumn TItem="RestaurantDto" Property="Address" Title="Address" Width="420px" />
+
+                            <RadzenDataGridColumn TItem="RestaurantDto" Title="Status" Width="140px" Filterable="true" Sortable="true">
+                                <Template Context="r">
+                                    <RadzenBadge Text="@(r.IsActive ? "Active" : "Inactive")"
+                                                 Variant="Variant.Flat"
+                                                 Style="@(r.IsActive ? "background-color: var(--rz-success); color: white;" : "background-color: var(--rz-secondary); color: white;")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+
+                            <RadzenDataGridColumn TItem="RestaurantDto" Title="Actions" Width="240px" Sortable="false" Filterable="false" TextAlign="TextAlign.Center">
+                                <Template Context="r">
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.35rem" JustifyContent="JustifyContent.Center">
+                                        <RadzenButton Icon="restaurant_menu" Size="ButtonSize.Small" Variant="Variant.Outlined"
+                                                      Click="@(() => ManageMenuItems(r.RestaurantId))" Title="Manage Menu Items" />
+                                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Variant="Variant.Flat"
+                                                      Click="@(() => EditRestaurant(r))" Title="Edit Restaurant" />
+                                        <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Danger"
+                                                      Click="@(() => DeleteRestaurant(r.RestaurantId))" Title="Delete Restaurant" />
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </RadzenStack>
+            </RadzenCard>
+        }
+        @* ===== VENDOR VIEW: CARDS ===== *@
+        else
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                <RadzenText TextStyle="TextStyle.Body1">@restaurants.Count restaurant(s)</RadzenText>
+            </RadzenStack>
+
+            <RadzenRow Gap="1rem">
+                @foreach (var restaurant in restaurants)
+                {
+                    <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                        <RadzenCard Style="height: 100%;">
+                            @if (!string.IsNullOrEmpty(restaurant.ImageUrl))
+                            {
+                                <img src="@restaurant.ImageUrl" alt="@restaurant.Name" style="width: 100%; height: 200px; object-fit: cover; border-radius: 4px 4px 0 0;" />
+                            }
+                            <RadzenStack Gap="0.75rem" Style="padding: 1rem;">
+                                <RadzenText TextStyle="TextStyle.H5">@restaurant.Name</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">@restaurant.CuisineType</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption">@restaurant.Address</RadzenText>
+
+                                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <RadzenBadge Text="@(restaurant.IsActive ? "Active" : "Inactive")"
+                                                 Variant="Variant.Flat"
+                                                 Style="@(restaurant.IsActive ? "background-color: var(--rz-success); color: white;" : "background-color: var(--rz-secondary); color: white;")" />
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                        <RadzenButton Icon="edit" Size="ButtonSize.Small" Variant="Variant.Flat"
+                                                      Click="@(() => EditRestaurant(restaurant))" />
+                                        <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat"
+                                                      Click="@(() => DeleteRestaurant(restaurant.RestaurantId))" />
+                                    </RadzenStack>
+                                </RadzenStack>
+
+                                <RadzenButton Text="Manage Menu Items" Icon="restaurant_menu"
+                                              Variant="Variant.Outlined" Size="ButtonSize.Small"
+                                              Click="@(() => ManageMenuItems(restaurant.RestaurantId))"
+                                              Style="width: 100%;" />
+                            </RadzenStack>
+                        </RadzenCard>
+                    </RadzenColumn>
+                }
+            </RadzenRow>
+        }
+    }
+</RadzenStack>
+
+@* Restaurant Create/Edit Modal *@
+@if (showCreateForm || editingRestaurant != null)
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <RadzenCard Style="max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3">@(editingRestaurant != null ? "Edit Restaurant" : "Create Restaurant")</RadzenText>
+                    <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseForm" />
+                </RadzenStack>
+
+                <RadzenFormField Text="Restaurant Name *" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.Name" Placeholder="Enter restaurant name" Style="width: 100%;" />
+                    @if (string.IsNullOrWhiteSpace(restaurantForm.Name))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Restaurant name is required</RadzenText>
+                    }
+                </RadzenFormField>
+
+                <RadzenFormField Text="Description" class="w-100">
+                    <RadzenTextArea @bind-Value="restaurantForm.Description" Placeholder="Enter description" Rows="3" Style="width: 100%;" />
+                </RadzenFormField>
+
+                <RadzenFormField Text="Cuisine Type" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.CuisineType" Placeholder="e.g., Italian, Mexican, Chinese" Style="width: 100%;" />
+                </RadzenFormField>
+
+                <RadzenFormField Text="Address *" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.Address" Placeholder="e.g., 123 Main St, New York, NY 10001" Style="width: 100%;" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">Address will be geocoded automatically</RadzenText>
+                    @if (string.IsNullOrWhiteSpace(restaurantForm.Address))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Address is required</RadzenText>
+                    }
+                </RadzenFormField>
+
+                <RadzenFormField Text="Phone Number" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.PhoneNumber" Placeholder="Enter phone number" Style="width: 100%;" />
+                </RadzenFormField>
+
+                <RadzenFormField Text="Email" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.Email" Placeholder="Enter email" Type="email" Style="width: 100%;" />
+                </RadzenFormField>
+
+                <RadzenFormField Text="Image URL" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.ImageUrl" Placeholder="Enter image URL" Style="width: 100%;" />
+                </RadzenFormField>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+                }
+
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+                    <RadzenButton Text="Cancel" Click="CloseForm" Variant="Variant.Flat" />
+                    <RadzenButton Text="@(isSaving ? "Saving..." : "Save")" Icon="save" Click="SaveRestaurant"
+                                  Variant="Variant.Filled" IsBusy="@isSaving"
+                                  Disabled="@(isSaving || string.IsNullOrWhiteSpace(restaurantForm.Name) || string.IsNullOrWhiteSpace(restaurantForm.Address))" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+    </div>
+}
+
+@* Menu Items Management Modal *@
+@if (showMenuItemsModal)
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <RadzenCard Style="max-width: 1100px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1001;">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3">Manage Menu Items - @GetRestaurantName(currentRestaurantId)</RadzenText>
+                    <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseMenuItemsModal" />
+                </RadzenStack>
+
+                <RadzenButton Text="+ Add Menu Item" Icon="add" Click="ShowCreateMenuItemForm" Variant="Variant.Filled" Size="ButtonSize.Small" />
+
+                @if (menuItemsLoading)
+                {
+                    <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+                        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                        <RadzenText>Loading menu items...</RadzenText>
+                    </RadzenStack>
+                }
+                else if (menuItems == null || !menuItems.Any())
+                {
+                    <RadzenCard>
+                        <RadzenStack Gap="1rem" AlignItems="AlignItems.Center">
+                            <RadzenText Style="text-align: center; color: var(--rz-text-secondary-color);">No menu items yet. Add your first item!</RadzenText>
+                        </RadzenStack>
+                    </RadzenCard>
+                }
+                else
+                {
+                    <RadzenDataGrid Data="@menuItems" TItem="MenuItemDto" AllowPaging="true" PageSize="10" AllowSorting="true" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="Name" Title="Name" Width="220px" />
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="CategoryName" Title="Category" Width="180px" />
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="Price" Title="Price" Width="120px">
+                                <Template Context="item">
+                                    <RadzenText>$@item.Price.ToString("F2")</RadzenText>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="MenuItemDto" Property="IsAvailable" Title="Status" Width="140px">
+                                <Template Context="item">
+                                    <RadzenBadge Text="@(item.IsAvailable ? "Available" : "Unavailable")"
+                                                 Variant="Variant.Flat"
+                                                 Style="@(item.IsAvailable ? "background-color: var(--rz-success); color: white;" : "background-color: var(--rz-secondary); color: white;")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="MenuItemDto" Title="Actions" Width="200px" Sortable="false" Filterable="false">
+                                <Template Context="item">
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                        <RadzenButton Icon="edit" Size="ButtonSize.ExtraSmall" Variant="Variant.Flat"
+                                                      Click="@(() => EditMenuItem(item))" />
+                                        <RadzenButton Icon="@(item.IsAvailable ? "visibility_off" : "visibility")"
+                                                      Size="ButtonSize.ExtraSmall" Variant="Variant.Flat"
+                                                      Click="@(() => ToggleMenuItemAvailability(item))"
+                                                      Title="@(item.IsAvailable ? "Disable" : "Enable")" />
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                }
+            </RadzenStack>
+        </RadzenCard>
+    </div>
+}
+
+@* Menu Item Create/Edit Form *@
+@if (showMenuItemForm)
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 1002; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <RadzenCard Style="max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1003;">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3">@(editingMenuItem != null ? "Edit Menu Item" : "Create Menu Item")</RadzenText>
+                    <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseMenuItemForm" />
+                </RadzenStack>
+
+                <RadzenFormField Text="Category *" class="w-100">
+                    <RadzenDropDown @bind-Value="menuItemForm.CategoryId" Data="@categories" TextProperty="Name" ValueProperty="CategoryId"
+                                    Placeholder="Select a category" Style="width: 100%;" />
+                    @if (menuItemForm.CategoryId == null || menuItemForm.CategoryId == Guid.Empty)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Category is required</RadzenText>
+                    }
+                </RadzenFormField>
+
+                <RadzenFormField Text="Item Name *" class="w-100">
+                    <RadzenTextBox @bind-Value="menuItemForm.Name" Placeholder="Enter menu item name" Style="width: 100%;" />
+                    @if (string.IsNullOrWhiteSpace(menuItemForm.Name))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Item name is required</RadzenText>
+                    }
+                </RadzenFormField>
+
+                <RadzenFormField Text="Description" class="w-100">
+                    <RadzenTextArea @bind-Value="menuItemForm.Description" Placeholder="Enter description" Rows="3" Style="width: 100%;" />
+                </RadzenFormField>
+
+                <RadzenFormField Text="Price *" class="w-100">
+                    <RadzenNumeric @bind-Value="menuItemForm.Price" Format="C" Min="0" Step="0.01" Style="width: 100%;" />
+                    @if (menuItemForm.Price <= 0)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Price must be greater than 0</RadzenText>
+                    }
+                </RadzenFormField>
+
+                <RadzenFormField Text="Image URL" class="w-100">
+                    <RadzenTextBox @bind-Value="menuItemForm.ImageUrl" Placeholder="Enter image URL" Style="width: 100%;" />
+                </RadzenFormField>
+
+                @if (!string.IsNullOrEmpty(menuItemErrorMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@menuItemErrorMessage" />
+                }
+
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+                    <RadzenButton Text="Cancel" Click="CloseMenuItemForm" Variant="Variant.Flat" />
+                    <RadzenButton Text="@(isSavingMenuItem ? "Saving..." : "Save")" Icon="save" Click="SaveMenuItem"
+                                  Variant="Variant.Filled" IsBusy="@isSavingMenuItem"
+                                  Disabled="@(isSavingMenuItem || string.IsNullOrWhiteSpace(menuItemForm.Name) || menuItemForm.CategoryId == null || menuItemForm.CategoryId == Guid.Empty || menuItemForm.Price <= 0)" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+    </div>
+}
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isVendor = false;
+    private bool isAdmin = false;
+
+    private bool isLoading = true;
+    private bool isSaving = false;
+
+    private bool showCreateForm = false;
+    private List<RestaurantDto>? restaurants;
+    private RestaurantDto? editingRestaurant;
+    private RestaurantForm restaurantForm = new();
+
+    // Admin grid
+    private RadzenDataGrid<RestaurantDto>? adminGrid;
+    private string adminSearch = "";
+    private List<RestaurantDto> adminRestaurantsFiltered = new();
+
+    // Menu Items Management
+    private bool showMenuItemsModal = false;
+    private bool menuItemsLoading = false;
+    private bool showMenuItemForm = false;
+    private bool isSavingMenuItem = false;
+    private Guid? currentRestaurantId = null;
+    private List<MenuItemDto>? menuItems;
+    private MenuItemDto? editingMenuItem;
+    private List<CategoryDto> categories = new();
+
+    private MenuItemForm menuItemForm = new();
+    private string menuItemErrorMessage = string.Empty;
+
+    private string errorMessage = string.Empty;
+
+    private string HeaderText => isAdmin ? "All Restaurants" : "My Restaurants";
+    private string PageTitleText => isAdmin ? "Admin Restaurants - TraditionalEats" : "Vendor Dashboard - TraditionalEats";
+    private string EmptyStateText => isAdmin ? "No restaurants exist yet." : "You don't have any restaurants yet.";
+    private string CreateButtonText => isAdmin ? "Create Restaurant" : "Create Your First Restaurant";
+    private bool CanCreateRestaurants => isVendor || isAdmin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthenticationAndRoles();
+
+        if (isAuthenticated && (isVendor || isAdmin))
+        {
+            await LoadRestaurants();
+            await LoadCategories();
+        }
+
+        isLoading = false;
+    }
+
+    private async Task CheckAuthenticationAndRoles()
+    {
+        try
+        {
+            isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (!isAuthenticated) return;
+
+            isVendor = await AuthService.IsVendorAsync();
+            isAdmin = await AuthService.IsAdminAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error checking authentication/roles");
+            isAuthenticated = false;
+            isVendor = false;
+            isAdmin = false;
+        }
+    }
+
+    private async Task LoadRestaurants()
+    {
+        try
+        {
+            if (isAdmin)
+            {
+                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/admin/restaurants?skip=0&take=2000");
+                restaurants = response ?? new List<RestaurantDto>();
+            }
+            else
+            {
+                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/vendor/my-restaurants");
+                restaurants = response ?? new List<RestaurantDto>();
+            }
+
+            adminRestaurantsFiltered = restaurants?.ToList() ?? new List<RestaurantDto>();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading restaurants");
+            restaurants = new List<RestaurantDto>();
+            adminRestaurantsFiltered = new List<RestaurantDto>();
+        }
+    }
+
+    private void ApplyAdminSearch()
+    {
+        if (!isAdmin) return;
+
+        var q = (adminSearch ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            adminRestaurantsFiltered = restaurants?.ToList() ?? new List<RestaurantDto>();
+        }
+        else
+        {
+            q = q.ToLowerInvariant();
+            adminRestaurantsFiltered = (restaurants ?? new List<RestaurantDto>())
+                .Where(r =>
+                    (!string.IsNullOrWhiteSpace(r.Name) && r.Name.ToLowerInvariant().Contains(q)) ||
+                    (!string.IsNullOrWhiteSpace(r.CuisineType) && r.CuisineType.ToLowerInvariant().Contains(q)) ||
+                    (!string.IsNullOrWhiteSpace(r.Address) && r.Address.ToLowerInvariant().Contains(q))
+                )
+                .ToList();
+        }
+
+        adminGrid?.FirstPage();
+        StateHasChanged();
+    }
+
+    private void ClearAdminSearch()
+    {
+        adminSearch = "";
+        ApplyAdminSearch();
+    }
+
+    private async Task LoadCategories()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<List<CategoryDto>>("WebBff/categories");
+            categories = response ?? new List<CategoryDto>();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading categories");
+            categories = new List<CategoryDto>();
+        }
+    }
+
+    private string GetRestaurantName(Guid? restaurantId)
+        => restaurants?.FirstOrDefault(r => r.RestaurantId == restaurantId)?.Name ?? "Unknown";
+
+    private async Task ManageMenuItems(Guid restaurantId)
+    {
+        currentRestaurantId = restaurantId;
+        showMenuItemsModal = true;
+        await LoadMenuItems(restaurantId);
+    }
+
+    private void CloseMenuItemsModal()
+    {
+        showMenuItemsModal = false;
+        currentRestaurantId = null;
+        menuItems = null;
+    }
+
+    private async Task LoadMenuItems(Guid restaurantId)
+    {
+        menuItemsLoading = true;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<List<MenuItemDto>>($"WebBff/restaurants/{restaurantId}/menu");
+            menuItems = response ?? new List<MenuItemDto>();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading menu items");
+            menuItems = new List<MenuItemDto>();
+        }
+        finally
+        {
+            menuItemsLoading = false;
+        }
+    }
+
+    private void ShowCreateMenuItemForm()
+    {
+        menuItemForm = new MenuItemForm();
+        editingMenuItem = null;
+        showMenuItemForm = true;
+    }
+
+    private void EditMenuItem(MenuItemDto item)
+    {
+        editingMenuItem = item;
+        menuItemForm = new MenuItemForm
+        {
+            CategoryId = item.CategoryId,
+            Name = item.Name,
+            Description = item.Description ?? "",
+            Price = item.Price,
+            ImageUrl = item.ImageUrl ?? ""
+        };
+        showMenuItemForm = true;
+    }
+
+    private void CloseMenuItemForm()
+    {
+        showMenuItemForm = false;
+        editingMenuItem = null;
+        menuItemForm = new MenuItemForm();
+        menuItemErrorMessage = string.Empty;
+    }
+
+    private async Task SaveMenuItem()
+    {
+        if (!currentRestaurantId.HasValue) return;
+        if (menuItemForm.CategoryId == null || menuItemForm.CategoryId == Guid.Empty) return;
+
+        isSavingMenuItem = true;
+        menuItemErrorMessage = string.Empty;
+
+        try
+        {
+            var request = new
+            {
+                CategoryId = menuItemForm.CategoryId.Value,
+                Name = menuItemForm.Name,
+                Description = string.IsNullOrWhiteSpace(menuItemForm.Description) ? null : menuItemForm.Description,
+                Price = menuItemForm.Price,
+                ImageUrl = string.IsNullOrWhiteSpace(menuItemForm.ImageUrl) ? null : menuItemForm.ImageUrl,
+                DietaryTags = (List<string>?)null
+            };
+
+            HttpResponseMessage response;
+
+            if (editingMenuItem != null)
+            {
+                var updateRequest = new
+                {
+                    Name = menuItemForm.Name,
+                    Description = string.IsNullOrWhiteSpace(menuItemForm.Description) ? null : menuItemForm.Description,
+                    Price = (decimal?)menuItemForm.Price,
+                    ImageUrl = string.IsNullOrWhiteSpace(menuItemForm.ImageUrl) ? null : menuItemForm.ImageUrl,
+                    CategoryId = menuItemForm.CategoryId,
+                    DietaryTags = (List<string>?)null
+                };
+
+                response = await Http.PutAsJsonAsync($"WebBff/menu-items/{editingMenuItem.MenuItemId}", updateRequest);
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync($"WebBff/restaurants/{currentRestaurantId.Value}/menu-items", request);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = editingMenuItem != null ? "Menu item updated successfully" : "Menu item created successfully",
+                    Duration = 3000
+                });
+
+                CloseMenuItemForm();
+                await LoadMenuItems(currentRestaurantId.Value);
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                menuItemErrorMessage = $"Failed to save menu item: {response.StatusCode}";
+                Logger.LogError("SaveMenuItem failed: {Status} {Body}", response.StatusCode, errorContent);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = menuItemErrorMessage,
+                    Duration = 4000
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving menu item");
+            menuItemErrorMessage = $"An error occurred: {ex.Message}";
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = menuItemErrorMessage });
+        }
+        finally
+        {
+            isSavingMenuItem = false;
+        }
+    }
+
+    private async Task ToggleMenuItemAvailability(MenuItemDto item)
+    {
+        try
+        {
+            var request = new { IsAvailable = !item.IsAvailable };
+            var response = await Http.PatchAsJsonAsync($"WebBff/menu-items/{item.MenuItemId}/availability", request);
+
+            if (response.IsSuccessStatusCode && currentRestaurantId.HasValue)
+            {
+                await LoadMenuItems(currentRestaurantId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling menu item availability");
+        }
+    }
+
+    private void ShowCreateForm()
+    {
+        if (!CanCreateRestaurants) return;
+
+        restaurantForm = new RestaurantForm();
+        editingRestaurant = null;
+        showCreateForm = true;
+    }
+
+    private void EditRestaurant(RestaurantDto restaurant)
+    {
+        editingRestaurant = restaurant;
+        restaurantForm = new RestaurantForm
+        {
+            Name = restaurant.Name,
+            Description = restaurant.Description ?? "",
+            CuisineType = restaurant.CuisineType ?? "",
+            Address = restaurant.Address,
+            PhoneNumber = restaurant.PhoneNumber ?? "",
+            Email = restaurant.Email ?? "",
+            ImageUrl = restaurant.ImageUrl ?? ""
+        };
+        showCreateForm = true;
+    }
+
+    private void CloseForm()
+    {
+        showCreateForm = false;
+        editingRestaurant = null;
+        restaurantForm = new RestaurantForm();
+        errorMessage = string.Empty;
+    }
+
+    private async Task SaveRestaurant()
+    {
+        if (!CanCreateRestaurants)
+        {
+            errorMessage = "You do not have permission to create/update restaurants.";
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Not Allowed", Detail = errorMessage });
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(restaurantForm.Name))
+        {
+            errorMessage = "Restaurant name is required";
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Validation Error", Detail = errorMessage });
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(restaurantForm.Address))
+        {
+            errorMessage = "Address is required";
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Validation Error", Detail = errorMessage });
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            HttpResponseMessage response;
+
+            if (editingRestaurant != null)
+            {
+                response = await Http.PutAsJsonAsync($"WebBff/vendor/restaurants/{editingRestaurant.RestaurantId}", restaurantForm);
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync("WebBff/vendor/restaurants", restaurantForm);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = $"Restaurant {(editingRestaurant != null ? "updated" : "created")} successfully",
+                    Duration = 3000
+                });
+
+                CloseForm();
+                await LoadRestaurants();
+                ApplyAdminSearch();
+                StateHasChanged();
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Logger.LogError("Failed to save restaurant: {StatusCode} - {Error}", response.StatusCode, errorContent);
+                errorMessage = $"Failed to save restaurant: {response.StatusCode}";
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = errorMessage });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving restaurant");
+            errorMessage = $"An error occurred: {ex.Message}";
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = errorMessage });
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteRestaurant(Guid restaurantId)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this restaurant?"))
+            return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"WebBff/vendor/restaurants/{restaurantId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadRestaurants();
+                ApplyAdminSearch();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Logger.LogError("Delete failed: {Status} {Body}", response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting restaurant");
+        }
+    }
+
+    // ===== DTOs / Forms =====
+    public class RestaurantForm
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string CuisineType { get; set; } = "";
+        public string Address { get; set; } = "";
+        public string PhoneNumber { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string ImageUrl { get; set; } = "";
+    }
+
+    public class RestaurantDto
+    {
+        public Guid RestaurantId { get; set; }
+        public Guid OwnerId { get; set; }  // still here in DTO; just not shown in UI
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string? CuisineType { get; set; }
+        public string? ImageUrl { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string Address { get; set; } = "";
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    public class MenuItemForm
+    {
+        public Guid? CategoryId { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public decimal Price { get; set; }
+        public string ImageUrl { get; set; } = "";
+    }
+
+    public class MenuItemDto
+    {
+        public Guid MenuItemId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public Guid CategoryId { get; set; }
+        public string? CategoryName { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal Price { get; set; }
+        public string? ImageUrl { get; set; }
+        public bool IsAvailable { get; set; }
+        public List<string> DietaryTags { get; set; } = new();
+    }
+
+    public class CategoryDto
+    {
+        public Guid CategoryId { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public int DisplayOrder { get; set; }
+    }
+}

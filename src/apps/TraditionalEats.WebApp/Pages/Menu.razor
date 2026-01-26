@@ -1,0 +1,283 @@
+@page "/restaurants/{restaurantId:guid}/menu"
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Services
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject CartService CartService
+@inject NotificationService NotificationService
+@inject ILogger<Menu> _logger
+
+<PageTitle>Menu - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">Menu</RadzenText>
+    </RadzenStack>
+
+    @if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (menuItems.Any())
+    {
+        @if (categories.Any())
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap; margin-bottom: 1rem;">
+                <RadzenButton Text="All" 
+                              Variant="@(selectedCategoryId == null ? Variant.Filled : Variant.Flat)"
+                              Click="@(() => FilterByCategory(null))"
+                              Size="ButtonSize.Small" />
+                @foreach (var category in categories)
+                {
+                    <RadzenButton Text="@category.Name" 
+                                  Variant="@(selectedCategoryId == category.CategoryId ? Variant.Filled : Variant.Flat)"
+                                  Click="@(() => FilterByCategory(category.CategoryId))"
+                                  Size="ButtonSize.Small" />
+                }
+            </RadzenStack>
+        }
+
+        @foreach (var categoryGroup in menuItemsByCategory)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H3">@categoryGroup.Key</RadzenText>
+                    <RadzenStack Gap="1rem">
+                        @foreach (var item in categoryGroup)
+                        {
+                            <RadzenCard Style="cursor: pointer;" Click="@(() => ViewItemDetails(item))">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Start">
+                                    <RadzenIcon Icon="restaurant_menu" Style="font-size: 48px; color: var(--rz-primary);" />
+                                    <RadzenStack Gap="0.5rem" Style="flex: 1;">
+                                        <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: bold;">@item.Name</RadzenText>
+                                        @if (!string.IsNullOrEmpty(item.Description))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">@item.Description</RadzenText>
+                                        }
+                                        @if (item.DietaryTags.Any())
+                                        {
+                                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
+                                                @foreach (var tag in item.DietaryTags)
+                                                {
+                                                    <RadzenBadge Text="@tag" Size="BadgeSize.Small" Style="background-color: #e3f2fd; color: #1976d2;" />
+                                                }
+                                            </RadzenStack>
+                                        }
+                                        <RadzenText TextStyle="TextStyle.H4" Style="color: var(--rz-primary);">$@item.Price.ToString("F2")</RadzenText>
+                                    </RadzenStack>
+                                    @if (item.IsAvailable)
+                                    {
+                                        <RadzenButton Text="Add" Icon="add_shopping_cart" Click="@(() => AddToCart(item))" 
+                                                     Variant="Variant.Flat" Size="ButtonSize.Small" 
+                                                     IsLoading="@(isAddingToCart && addingItemId == item.MenuItemId)" 
+                                                     Disabled="@(isAddingToCart)" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenBadge Text="Unavailable" Style="background-color: #ffebee; color: #c62828;" />
+                                    }
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+        }
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenText>No menu items found.</RadzenText>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter] public Guid RestaurantId { get; set; }
+
+    private bool loading = true;
+    private List<MenuItemDto> menuItems = new();
+    private List<CategoryDto> categories = new();
+    private Guid? selectedCategoryId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Reset cart ID when navigating to a new restaurant
+        currentCartId = null;
+        await LoadMenu();
+        await LoadCategories();
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reset cart ID when restaurant changes
+        currentCartId = null;
+        await base.OnParametersSetAsync();
+    }
+
+    private async Task LoadMenu()
+    {
+        try
+        {
+            loading = true;
+            var queryString = selectedCategoryId.HasValue ? $"?categoryId={selectedCategoryId.Value}" : "";
+            var response = await Http.GetFromJsonAsync<List<MenuItemDto>>($"WebBff/restaurants/{RestaurantId}/menu{queryString}");
+            menuItems = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading menu: {ex.Message}");
+            menuItems = new();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadCategories()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<List<CategoryDto>>("WebBff/categories");
+            categories = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading categories: {ex.Message}");
+            categories = new();
+        }
+    }
+
+    private async Task FilterByCategory(Guid? categoryId)
+    {
+        selectedCategoryId = categoryId;
+        await LoadMenu();
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/restaurants");
+    }
+
+    private void ViewItemDetails(MenuItemDto item)
+    {
+        // TODO: Navigate to item details page
+    }
+
+    private Guid? currentCartId = null;
+    private Guid? addingItemId = null;
+    private bool isAddingToCart = false;
+
+    private async Task AddToCart(MenuItemDto item)
+    {
+        // Prevent double-clicking or concurrent adds
+        if (isAddingToCart || addingItemId == item.MenuItemId)
+        {
+            return;
+        }
+
+        try
+        {
+            isAddingToCart = true;
+            addingItemId = item.MenuItemId;
+
+            // Always get the current cart to ensure we're using the correct one
+            // This is especially important for authenticated users who might have a user cart
+            var cart = await CartService.GetCartAsync();
+            Guid cartIdToUse;
+            
+            if (cart == null)
+            {
+                // No cart exists, create a new one
+                cartIdToUse = await CartService.CreateCartAsync(RestaurantId);
+                if (cartIdToUse == Guid.Empty)
+                {
+                    throw new Exception("Failed to create cart");
+                }
+                currentCartId = cartIdToUse;
+            }
+            else
+            {
+                cartIdToUse = cart.CartId;
+                currentCartId = cartIdToUse;
+                
+                // If cart is for a different restaurant, create a new one
+                if (cart.RestaurantId.HasValue && cart.RestaurantId != RestaurantId)
+                {
+                    cartIdToUse = await CartService.CreateCartAsync(RestaurantId);
+                    if (cartIdToUse == Guid.Empty)
+                    {
+                        throw new Exception("Failed to create cart");
+                    }
+                    currentCartId = cartIdToUse;
+                }
+            }
+
+            var response = await CartService.AddItemToCartAsync(cartIdToUse, item.MenuItemId, item.Name, item.Price, 1);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Server error: {errorContent}");
+            }
+            
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Success, 
+                Summary = "Added to Cart", 
+                Detail = $"{item.Name} added to cart" 
+            });
+            
+            // Trigger navigation to refresh cart count in MainLayout
+            // Use a small delay to ensure the item is saved before refreshing
+            await Task.Delay(200);
+            NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding item to cart: {ex.Message}");
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = $"Failed to add item to cart: {ex.Message}" 
+            });
+        }
+        finally
+        {
+            // Reset flags after a delay to prevent rapid double-clicks
+            await Task.Delay(500);
+            addingItemId = null;
+            isAddingToCart = false;
+        }
+    }
+
+    private IEnumerable<IGrouping<string, MenuItemDto>> menuItemsByCategory =>
+        menuItems
+            .GroupBy(m => m.CategoryName ?? "Other")
+            .OrderBy(g => g.Key);
+
+    public class MenuItemDto
+    {
+        public Guid MenuItemId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public Guid CategoryId { get; set; }
+        public string? CategoryName { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public decimal Price { get; set; }
+        public string? ImageUrl { get; set; }
+        public bool IsAvailable { get; set; }
+        public List<string> DietaryTags { get; set; } = new();
+    }
+
+    public class CategoryDto
+    {
+        public Guid CategoryId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+}

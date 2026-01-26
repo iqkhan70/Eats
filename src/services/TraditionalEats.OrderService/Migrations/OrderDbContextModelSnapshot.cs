@@ -85,6 +85,9 @@ namespace TraditionalEats.OrderService.Migrations
 
                     b.HasIndex("CartId");
 
+                    b.HasIndex("CartId", "MenuItemId")
+                        .IsUnique();
+
                     b.ToTable("CartItems");
                 });
 

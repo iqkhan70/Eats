@@ -1,0 +1,298 @@
+@page "/admin/users"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>User Management - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo("/admin"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">User Management</RadzenText>
+    </RadzenStack>
+
+    @if (!isAuthenticated || !isAdmin)
+    {
+        <RadzenCard>
+            <RadzenText>Access denied. Admin role required.</RadzenText>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.H3">Manage User Roles</RadzenText>
+                <RadzenFormField Text="User Email">
+                    <RadzenTextBox @bind-Value="@userEmail" Placeholder="Enter user email" />
+                </RadzenFormField>
+                <RadzenButton Text="Load User Roles" Icon="search" Click="@LoadUserRoles" IsLoading="@loadingRoles" />
+            </RadzenStack>
+        </RadzenCard>
+
+        @if (currentUserRoles != null)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H4">Roles for: @userEmail</RadzenText>
+                    
+                    @if (currentUserRoles.Any())
+                    {
+                        <RadzenStack Gap="0.5rem">
+                            @foreach (var role in currentUserRoles)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+                                    <RadzenBadge Text="@role" Style="background-color: var(--rz-primary); color: white;" />
+                                    <RadzenButton Text="Revoke" Icon="close" Variant="Variant.Flat" Size="ButtonSize.Small" 
+                                                 Click="@(() => RevokeRole(role))" 
+                                                 IsLoading="@(revokingRole == role)" />
+                                </RadzenStack>
+                            }
+                        </RadzenStack>
+                    }
+                    else
+                    {
+                        <RadzenText Style="color: var(--rz-text-secondary-color);">No roles assigned</RadzenText>
+                    }
+                </RadzenStack>
+            </RadzenCard>
+
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H4">Assign New Role</RadzenText>
+                    <RadzenFormField Text="Role">
+                        <RadzenDropDown @bind-Value="@selectedRole" Data="@availableRoles" Placeholder="Select role" />
+                    </RadzenFormField>
+                    <RadzenButton Text="Assign Role" Icon="add" Click="@AssignRole" 
+                                 IsLoading="@assigningRole" 
+                                 Disabled="@(string.IsNullOrEmpty(selectedRole))" />
+                </RadzenStack>
+            </RadzenCard>
+        }
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <RadzenCard Style="background-color: #ffebee;">
+                <RadzenText Style="color: #c62828;">@errorMessage</RadzenText>
+            </RadzenCard>
+        }
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private string userEmail = "";
+    private List<string>? currentUserRoles = null;
+    private string? selectedRole = null;
+    private string? revokingRole = null;
+    private bool assigningRole = false;
+    private bool loadingRoles = false;
+    private string errorMessage = "";
+
+    private readonly List<string> availableRoles = new() { "Customer", "Vendor", "Admin", "Driver" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isAdmin = await AuthService.IsAdminAsync();
+        }
+    }
+
+    private async Task LoadUserRoles()
+    {
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            errorMessage = "Please enter a user email";
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Warning, 
+                Summary = "Validation Error", 
+                Detail = "Please enter a user email" 
+            });
+            return;
+        }
+
+        try
+        {
+            loadingRoles = true;
+            errorMessage = "";
+            currentUserRoles = null;
+
+            var response = await Http.GetFromJsonAsync<UserRolesResponse>($"WebBff/admin/users/{Uri.EscapeDataString(userEmail)}/roles");
+            if (response != null)
+            {
+                currentUserRoles = response.Roles ?? new List<string>();
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Success, 
+                    Summary = "Success", 
+                    Detail = $"Loaded roles for {userEmail}" 
+                });
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            // Session expired - redirect to login
+            currentUserRoles = null;
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("401") || ex.Message.Contains("Unauthorized") || ex.Message.Contains("Session expired"))
+        {
+            // Session expired - redirect to login
+            currentUserRoles = null;
+            await AuthService.ClearTokensAsync();
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load user roles: {ex.Message}";
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = errorMessage 
+            });
+        }
+        finally
+        {
+            loadingRoles = false;
+        }
+    }
+
+    private async Task AssignRole()
+    {
+        if (string.IsNullOrWhiteSpace(userEmail) || string.IsNullOrEmpty(selectedRole))
+        {
+            return;
+        }
+
+        try
+        {
+            assigningRole = true;
+            errorMessage = "";
+
+            var request = new { Email = userEmail, Role = selectedRole };
+            var response = await Http.PostAsJsonAsync("WebBff/admin/users/assign-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Success, 
+                    Summary = "Success", 
+                    Detail = $"Role '{selectedRole}' assigned to {userEmail}" 
+                });
+                
+                // Reload roles
+                await LoadUserRoles();
+                selectedRole = null;
+            }
+            else
+            {
+                errorMessage = content;
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = errorMessage 
+                });
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            // Session expired - redirect to login
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to assign role: {ex.Message}";
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = errorMessage 
+            });
+        }
+        finally
+        {
+            assigningRole = false;
+        }
+    }
+
+    private async Task RevokeRole(string role)
+    {
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            return;
+        }
+
+        try
+        {
+            revokingRole = role;
+            errorMessage = "";
+
+            var request = new { Email = userEmail, Role = role };
+            var response = await Http.PostAsJsonAsync("WebBff/admin/users/revoke-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Success, 
+                    Summary = "Success", 
+                    Detail = $"Role '{role}' revoked from {userEmail}" 
+                });
+                
+                // Reload roles
+                await LoadUserRoles();
+            }
+            else
+            {
+                errorMessage = content;
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = errorMessage 
+                });
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            // Session expired - redirect to login
+            NavigationManager.NavigateTo("/login?sessionExpired=true", forceLoad: true);
+            return;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to revoke role: {ex.Message}";
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = errorMessage 
+            });
+        }
+        finally
+        {
+            revokingRole = null;
+        }
+    }
+
+    private class UserRolesResponse
+    {
+        public string Email { get; set; } = "";
+        public List<string> Roles { get; set; } = new();
+    }
+}

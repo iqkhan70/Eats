@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TraditionalEats.BuildingBlocks.Redis;
+using TraditionalEats.BuildingBlocks.Geocoding;
 using TraditionalEats.RestaurantService.Data;
 using TraditionalEats.RestaurantService.Entities;
 
@@ -9,34 +10,68 @@ public interface IRestaurantService
 {
     Task<Guid> CreateRestaurantAsync(Guid ownerId, CreateRestaurantDto dto);
     Task<RestaurantDto?> GetRestaurantAsync(Guid restaurantId);
-    Task<List<RestaurantDto>> GetRestaurantsAsync(double? latitude, double? longitude, int skip = 0, int take = 20);
+    Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, int skip = 0, int take = 20);
     Task<bool> UpdateRestaurantAsync(Guid restaurantId, Guid ownerId, UpdateRestaurantDto dto);
     Task<Guid> AddDeliveryZoneAsync(Guid restaurantId, Guid ownerId, CreateDeliveryZoneDto dto);
     Task<List<DeliveryZoneDto>> GetDeliveryZonesAsync(Guid restaurantId);
     Task<bool> SetRestaurantHoursAsync(Guid restaurantId, Guid ownerId, List<RestaurantHoursDto> hours);
     Task<List<RestaurantHoursDto>> GetRestaurantHoursAsync(Guid restaurantId);
     Task<bool> IsRestaurantOpenAsync(Guid restaurantId);
+    Task<List<string>> GetSearchSuggestionsAsync(string query, int maxResults = 10);
+    
+    // Vendor endpoints
+    Task<List<RestaurantDto>> GetVendorRestaurantsAsync(Guid vendorId);
+    Task<bool> DeleteRestaurantAsync(Guid restaurantId, Guid vendorId);
+    
+    // Admin endpoints
+    Task<List<RestaurantDto>> GetAllRestaurantsAsync(int skip = 0, int take = 100);
+    Task<bool> AdminUpdateRestaurantAsync(Guid restaurantId, UpdateRestaurantDto dto);
+    Task<bool> AdminDeleteRestaurantAsync(Guid restaurantId);
+    Task<bool> AdminToggleRestaurantStatusAsync(Guid restaurantId, bool isActive);
 }
 
 public class RestaurantService : IRestaurantService
 {
     private readonly RestaurantDbContext _context;
     private readonly IRedisService _redis;
+    private readonly IGeocodingService _geocoding;
     private readonly ILogger<RestaurantService> _logger;
 
     public RestaurantService(
         RestaurantDbContext context,
         IRedisService redis,
+        IGeocodingService geocoding,
         ILogger<RestaurantService> logger)
     {
         _context = context;
         _redis = redis;
+        _geocoding = geocoding;
         _logger = logger;
     }
 
     public async Task<Guid> CreateRestaurantAsync(Guid ownerId, CreateRestaurantDto dto)
     {
         var restaurantId = Guid.NewGuid();
+
+        // Geocode address if lat/long not provided
+        double latitude = dto.Latitude ?? 0;
+        double longitude = dto.Longitude ?? 0;
+        
+        if ((dto.Latitude == null || dto.Longitude == null) && !string.IsNullOrWhiteSpace(dto.Address))
+        {
+            var geocodeResult = await _geocoding.GeocodeAddressAsync(dto.Address);
+            if (geocodeResult.HasValue)
+            {
+                latitude = geocodeResult.Value.Latitude;
+                longitude = geocodeResult.Value.Longitude;
+                _logger.LogInformation("Geocoded address '{Address}' to lat={Latitude}, lon={Longitude}", 
+                    dto.Address, latitude, longitude);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to geocode address '{Address}'. Using default coordinates (0,0).", dto.Address);
+            }
+        }
 
         var restaurant = new Restaurant
         {
@@ -49,8 +84,8 @@ public class RestaurantService : IRestaurantService
             PhoneNumber = dto.PhoneNumber,
             Email = dto.Email,
             Address = dto.Address,
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
+            Latitude = latitude,
+            Longitude = longitude,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -93,7 +128,7 @@ public class RestaurantService : IRestaurantService
         return dto;
     }
 
-    public async Task<List<RestaurantDto>> GetRestaurantsAsync(double? latitude, double? longitude, int skip = 0, int take = 20)
+    public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, int skip = 0, int take = 20)
     {
         var query = _context.Restaurants
             .Where(r => r.IsActive)
@@ -101,11 +136,28 @@ public class RestaurantService : IRestaurantService
             .Include(r => r.Hours)
             .AsQueryable();
 
+        // Filter by location (address contains location string)
+        if (!string.IsNullOrWhiteSpace(location))
+        {
+            query = query.Where(r => r.Address.Contains(location) || r.Name.Contains(location));
+        }
+
+        // Filter by cuisine type
+        if (!string.IsNullOrWhiteSpace(cuisineType))
+        {
+            query = query.Where(r => r.CuisineType != null && r.CuisineType.Contains(cuisineType));
+        }
+
         // If coordinates provided, order by distance (simple approximation)
         if (latitude.HasValue && longitude.HasValue)
         {
             query = query.OrderBy(r => 
                 Math.Abs(r.Latitude - latitude.Value) + Math.Abs(r.Longitude - longitude.Value));
+        }
+        else
+        {
+            // Default ordering by name
+            query = query.OrderBy(r => r.Name);
         }
 
         var restaurants = await query
@@ -275,6 +327,166 @@ public class RestaurantService : IRestaurantService
         return currentTime >= hours.OpenTime && currentTime <= hours.CloseTime;
     }
 
+    public async Task<List<string>> GetSearchSuggestionsAsync(string query, int maxResults = 10)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return new List<string>();
+        }
+
+        var searchTerm = query.ToLower().Trim();
+
+        // Get unique addresses and restaurant names that match the query
+        var addresses = await _context.Restaurants
+            .Where(r => r.IsActive && r.Address.ToLower().Contains(searchTerm))
+            .Select(r => r.Address)
+            .Distinct()
+            .Take(maxResults)
+            .ToListAsync();
+
+        var restaurantNames = await _context.Restaurants
+            .Where(r => r.IsActive && r.Name.ToLower().Contains(searchTerm))
+            .Select(r => r.Name)
+            .Distinct()
+            .Take(maxResults)
+            .ToListAsync();
+
+        // Combine and deduplicate, prioritizing addresses
+        var suggestions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        foreach (var address in addresses)
+        {
+            if (suggestions.Count >= maxResults) break;
+            suggestions.Add(address);
+        }
+
+        foreach (var name in restaurantNames)
+        {
+            if (suggestions.Count >= maxResults) break;
+            suggestions.Add(name);
+        }
+
+        return suggestions.Take(maxResults).ToList();
+    }
+
+    // Vendor endpoints
+    public async Task<List<RestaurantDto>> GetVendorRestaurantsAsync(Guid vendorId)
+    {
+        var restaurants = await _context.Restaurants
+            .Include(r => r.DeliveryZones)
+            .Include(r => r.Hours)
+            .Where(r => r.OwnerId == vendorId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        return restaurants.Select(MapToDto).ToList();
+    }
+
+    public async Task<bool> DeleteRestaurantAsync(Guid restaurantId, Guid vendorId)
+    {
+        var restaurant = await _context.Restaurants
+            .FirstOrDefaultAsync(r => r.RestaurantId == restaurantId && r.OwnerId == vendorId);
+
+        if (restaurant == null)
+            return false;
+
+        // Soft delete - set IsActive to false
+        restaurant.IsActive = false;
+        restaurant.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        // Invalidate cache
+        await _redis.DeleteAsync($"restaurant:{restaurantId}");
+        await _redis.DeleteAsync($"restaurant:dto:{restaurantId}");
+
+        _logger.LogInformation("Vendor {VendorId} deleted restaurant {RestaurantId}", vendorId, restaurantId);
+        return true;
+    }
+
+    // Admin endpoints
+    public async Task<List<RestaurantDto>> GetAllRestaurantsAsync(int skip = 0, int take = 100)
+    {
+        var restaurants = await _context.Restaurants
+            .Include(r => r.DeliveryZones)
+            .Include(r => r.Hours)
+            .OrderByDescending(r => r.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+
+        return restaurants.Select(MapToDto).ToList();
+    }
+
+    public async Task<bool> AdminUpdateRestaurantAsync(Guid restaurantId, UpdateRestaurantDto dto)
+    {
+        var restaurant = await _context.Restaurants
+            .FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
+
+        if (restaurant == null)
+            return false;
+
+        if (dto.Name != null) restaurant.Name = dto.Name;
+        if (dto.Description != null) restaurant.Description = dto.Description;
+        if (dto.CuisineType != null) restaurant.CuisineType = dto.CuisineType;
+        if (dto.ImageUrl != null) restaurant.ImageUrl = dto.ImageUrl;
+        if (dto.PhoneNumber != null) restaurant.PhoneNumber = dto.PhoneNumber;
+        if (dto.Email != null) restaurant.Email = dto.Email;
+        if (dto.Address != null) restaurant.Address = dto.Address;
+        if (dto.Latitude.HasValue) restaurant.Latitude = dto.Latitude.Value;
+        if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
+        if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
+        restaurant.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Invalidate cache
+        await _redis.DeleteAsync($"restaurant:{restaurantId}");
+        await _redis.DeleteAsync($"restaurant:dto:{restaurantId}");
+
+        _logger.LogInformation("Admin updated restaurant {RestaurantId}", restaurantId);
+        return true;
+    }
+
+    public async Task<bool> AdminDeleteRestaurantAsync(Guid restaurantId)
+    {
+        var restaurant = await _context.Restaurants
+            .FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
+
+        if (restaurant == null)
+            return false;
+
+        // Hard delete for admin
+        _context.Restaurants.Remove(restaurant);
+        await _context.SaveChangesAsync();
+
+        // Invalidate cache
+        await _redis.DeleteAsync($"restaurant:{restaurantId}");
+        await _redis.DeleteAsync($"restaurant:dto:{restaurantId}");
+
+        _logger.LogInformation("Admin deleted restaurant {RestaurantId}", restaurantId);
+        return true;
+    }
+
+    public async Task<bool> AdminToggleRestaurantStatusAsync(Guid restaurantId, bool isActive)
+    {
+        var restaurant = await _context.Restaurants
+            .FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
+
+        if (restaurant == null)
+            return false;
+
+        restaurant.IsActive = isActive;
+        restaurant.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        // Invalidate cache
+        await _redis.DeleteAsync($"restaurant:{restaurantId}");
+        await _redis.DeleteAsync($"restaurant:dto:{restaurantId}");
+
+        _logger.LogInformation("Admin toggled restaurant {RestaurantId} status to {IsActive}", restaurantId, isActive);
+        return true;
+    }
+
     private RestaurantDto MapToDto(Restaurant restaurant)
     {
         return new RestaurantDto
@@ -324,8 +536,8 @@ public record CreateRestaurantDto(
     string? PhoneNumber,
     string? Email,
     string Address,
-    double Latitude,
-    double Longitude);
+    double? Latitude,
+    double? Longitude);
 
 public record UpdateRestaurantDto(
     string? Name,

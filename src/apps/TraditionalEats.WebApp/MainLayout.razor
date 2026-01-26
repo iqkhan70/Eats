@@ -1,7 +1,11 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Services
+@inject AuthService AuthService
+@inject CartService CartService
 
 <RadzenLayout>
     <RadzenHeader>
@@ -13,8 +17,32 @@
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Class="desktop-nav">
                 <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
                 <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <div style="position: relative;">
+                    <RadzenButton Text="Cart" Icon="shopping_cart" Click="@(() => NavigationManager.NavigateTo("/cart"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    @if (cartItemCount > 0)
+                    {
+                        <RadzenBadge Text="@cartItemCount.ToString()" Size="BadgeSize.Small" Style="position: absolute; top: -8px; right: -8px; background-color: var(--rz-danger); color: white; min-width: 20px; text-align: center;" />
+                    }
+                </div>
+                @if (isAuthenticated)
+                {
+                    <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    @if (isVendor || isAdmin)
+                    {
+                        <RadzenButton Text="Vendor Dashboard" Click="@(() => NavigationManager.NavigateTo("/vendor"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    }
+                    @if (isAdmin)
+                    {
+                        <RadzenButton Text="Admin" Click="@(() => NavigationManager.NavigateTo("/admin"))" Variant="Variant.Flat" Size="ButtonSize.Small" Style="background-color: #dc3545; color: white;" />
+                    }
+                    <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    <RadzenButton Text="Logout" Icon="logout" Click="@HandleLogout" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                }
+                else
+                {
+                    <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    <RadzenButton Text="Register" Click="@(() => NavigationManager.NavigateTo("/register"))" Variant="Variant.Outlined" Size="ButtonSize.Small" />
+                }
             </RadzenStack>
             <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small" Class="mobile-menu-btn" Style="display: none;" />
         </RadzenStack>
@@ -39,6 +67,89 @@
     private NavigationManager NavigationManager { get; set; } = default!;
     
     private bool sidebarExpanded = false;
+    private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private bool isVendor = false;
+    private int cartItemCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthStatus();
+        await LoadCartCount();
+        
+        // Subscribe to navigation events to refresh cart count
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await CheckAuthStatus();
+            await LoadCartCount();
+            StateHasChanged();
+        }
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        // Refresh cart count when navigating
+        await LoadCartCount();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+
+    private async Task CheckAuthStatus()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isAdmin = await AuthService.IsAdminAsync();
+            isVendor = await AuthService.IsVendorAsync();
+        }
+        else
+        {
+            isAdmin = false;
+            isVendor = false;
+        }
+    }
+
+    private async Task LoadCartCount()
+    {
+        // Only try to load cart if user is authenticated or might have a guest cart
+        // Skip if we know services are unavailable to avoid console errors
+        try
+        {
+            var cart = await CartService.GetCartAsync();
+            cartItemCount = cart?.Items?.Sum(i => i.Quantity) ?? 0;
+        }
+        catch (HttpRequestException)
+        {
+            // Silently handle HTTP errors (e.g., Redis connection issues)
+            // Don't set cartItemCount to avoid unnecessary state changes
+            return;
+        }
+        catch
+        {
+            // Silently handle other errors
+            cartItemCount = 0;
+        }
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.ClearTokensAsync();
+        isAuthenticated = false;
+        isAdmin = false;
+        isVendor = false;
+        cartItemCount = 0;
+        NavigationManager.NavigateTo("/");
+        StateHasChanged();
+    }
 
     private void ToggleSidebar()
     {
