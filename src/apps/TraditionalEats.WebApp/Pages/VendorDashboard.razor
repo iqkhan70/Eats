@@ -14,6 +14,7 @@
 
 <RadzenStack Gap="1.5rem"
             Style="padding: 0.75rem; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
         <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
 
@@ -26,9 +27,24 @@
         </RadzenStack>
     </RadzenStack>
 
-    @if (!isAuthenticated)
+    @* -------------------------
+       AUTH / LOADING GATES
+       ------------------------- *@
+    @if (!isAuthChecked)
+    {
+        @* Auth check in progress: DO NOT flash "Authentication Required" *@
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading...</RadzenText>
+        </RadzenStack>
+    }
+    else if (!isAuthenticated)
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to access this page." />
+    }
+    else if (!(isVendor || isAdmin))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Access Denied" Text="Vendor or Admin role required." />
     }
     else if (isLoading)
     {
@@ -359,6 +375,9 @@
     private bool isVendor = false;
     private bool isAdmin = false;
 
+    // NEW: prevents flashing the unauthenticated alert while auth is still being checked
+    private bool isAuthChecked = false;
+
     private bool isLoading = true;
     private bool isSaving = false;
 
@@ -395,12 +414,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        isLoading = true;
+        isAuthChecked = false;
+
         await CheckAuthenticationAndRoles();
+
+        isAuthChecked = true;
 
         if (isAuthenticated && (isVendor || isAdmin))
         {
-            await LoadRestaurants();
-            await LoadCategories();
+            // Load in parallel to reduce waiting time
+            await Task.WhenAll(LoadRestaurants(), LoadCategories());
         }
 
         isLoading = false;
@@ -697,21 +721,36 @@
         if (!CanCreateRestaurants)
         {
             errorMessage = "You do not have permission to create/update restaurants.";
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Not Allowed", Detail = errorMessage });
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Not Allowed",
+                Detail = errorMessage
+            });
             return;
         }
 
         if (string.IsNullOrWhiteSpace(restaurantForm.Name))
         {
             errorMessage = "Restaurant name is required";
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Validation Error", Detail = errorMessage });
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Validation Error",
+                Detail = errorMessage
+            });
             return;
         }
 
         if (string.IsNullOrWhiteSpace(restaurantForm.Address))
         {
             errorMessage = "Address is required";
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Validation Error", Detail = errorMessage });
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Validation Error",
+                Detail = errorMessage
+            });
             return;
         }
 
@@ -722,13 +761,19 @@
         {
             HttpResponseMessage response;
 
+            // Decide endpoints based on role (Admin must use admin endpoints)
+            var createUrl = isAdmin ? "WebBff/admin/restaurants" : "WebBff/vendor/restaurants";
+            var updateUrl = isAdmin
+                ? $"WebBff/admin/restaurants/{editingRestaurant!.RestaurantId}"
+                : $"WebBff/vendor/restaurants/{editingRestaurant!.RestaurantId}";
+
             if (editingRestaurant != null)
             {
-                response = await Http.PutAsJsonAsync($"WebBff/vendor/restaurants/{editingRestaurant.RestaurantId}", restaurantForm);
+                response = await Http.PutAsJsonAsync(updateUrl, restaurantForm);
             }
             else
             {
-                response = await Http.PostAsJsonAsync("WebBff/vendor/restaurants", restaurantForm);
+                response = await Http.PostAsJsonAsync(createUrl, restaurantForm);
             }
 
             if (response.IsSuccessStatusCode)
@@ -748,17 +793,29 @@
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Logger.LogError("Failed to save restaurant: {StatusCode} - {Error}", response.StatusCode, errorContent);
+                var body = await response.Content.ReadAsStringAsync();
+                Logger.LogError("Failed to save restaurant: {StatusCode} - {Body}", response.StatusCode, body);
+
                 errorMessage = $"Failed to save restaurant: {response.StatusCode}";
-                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = errorMessage });
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = $"{errorMessage}. {body}",
+                    Duration = 5000
+                });
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error saving restaurant");
             errorMessage = $"An error occurred: {ex.Message}";
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = errorMessage });
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = errorMessage
+            });
         }
         finally
         {
@@ -773,10 +830,22 @@
 
         try
         {
-            var response = await Http.DeleteAsync($"WebBff/vendor/restaurants/{restaurantId}");
+            var url = isAdmin
+                ? $"WebBff/admin/restaurants/{restaurantId}"
+                : $"WebBff/vendor/restaurants/{restaurantId}";
+
+            var response = await Http.DeleteAsync(url);
 
             if (response.IsSuccessStatusCode)
             {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Deleted",
+                    Detail = "Restaurant deleted successfully",
+                    Duration = 2500
+                });
+
                 await LoadRestaurants();
                 ApplyAdminSearch();
             }
@@ -784,13 +853,29 @@
             {
                 var body = await response.Content.ReadAsStringAsync();
                 Logger.LogError("Delete failed: {Status} {Body}", response.StatusCode, body);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = $"Delete failed: {response.StatusCode}. {body}",
+                    Duration = 5000
+                });
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error deleting restaurant");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = $"Error deleting restaurant: {ex.Message}",
+                Duration = 5000
+            });
         }
     }
+
 
     // ===== DTOs / Forms =====
     public class RestaurantForm
@@ -807,7 +892,7 @@
     public class RestaurantDto
     {
         public Guid RestaurantId { get; set; }
-        public Guid OwnerId { get; set; }  // still here in DTO; just not shown in UI
+        public Guid OwnerId { get; set; }
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string? CuisineType { get; set; }

@@ -1,79 +1,358 @@
 @page "/admin"
 @using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
 @inject AuthService AuthService
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 @inject ILogger<Admin> Logger
+@inject NotificationService NotificationService
 
 <PageTitle>Admin Dashboard - TraditionalEats</PageTitle>
 
-<div class="container mt-4">
-    <h2>Admin Dashboard</h2>
-    
+<RadzenStack Class="admin-shell" Gap="1.25rem">
+
+    <!-- Top bar -->
+    <RadzenCard Class="admin-topbar">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+            JustifyContent="JustifyContent.SpaceBetween" Gap="1rem">
+            <RadzenStack Gap="0.15rem">
+                <RadzenText TextStyle="TextStyle.H4" Class="m-0 admin-title">Admin Dashboard</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" Class="admin-subtitle">
+                    Control center for vendors, users, orders, and platform settings.
+                </RadzenText>
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Click="@RefreshAsync"
+                    Disabled="@(!isAuthenticated || !isAdmin)" />
+                <RadzenButton Icon="store" Text="Vendors" ButtonStyle="ButtonStyle.Primary"
+                    Click="@(() => NavigationManager.NavigateTo("/vendor"))"
+                    Disabled="@(!isAuthenticated || !isAdmin)" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+
     @if (!isAuthenticated)
     {
-        <div class="alert alert-warning">
+        <RadzenAlert Severity="AlertSeverity.Warning" Class="admin-alert">
             Please log in to access the admin dashboard.
-        </div>
+        </RadzenAlert>
     }
     else if (!isAdmin)
     {
-        <div class="alert alert-danger">
+        <RadzenAlert Severity="AlertSeverity.Error" Class="admin-alert">
             Access denied. Admin role required.
-        </div>
+        </RadzenAlert>
     }
     else
     {
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h5>System Overview</h5>
-                    </div>
-                    <div class="card-body">
-                        <p>Welcome to the Admin Dashboard!</p>
-                        <p>Your roles: <strong>@string.Join(", ", userRoles)</strong></p>
-                        <p>Email: <strong>@userEmail</strong></p>
-                    </div>
+        <!-- Overview -->
+        <RadzenRow Gap="16px">
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard Class="admin-kpi">
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                            JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Overline" Class="admin-kpi-label">Signed in as</RadzenText>
+                            <span class="pill pill-success">ADMIN</span>
+                        </RadzenStack>
+
+                        <RadzenText TextStyle="TextStyle.H6" Class="admin-kpi-value text-truncate">@userEmail</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">
+                            Authenticated session
+                        </RadzenText>
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard Class="admin-kpi">
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Overline" Class="admin-kpi-label">Roles</RadzenText>
+
+                        <RadzenText TextStyle="TextStyle.H6" Class="admin-kpi-value">
+                            @((userRoles?.Count ?? 0) == 0 ? "No roles" : $"{userRoles.Count} role(s)")
+                        </RadzenText>
+
+                        @if (userRoles is not null && userRoles.Count > 0)
+                        {
+                            <div class="chip-wrap">
+                                @foreach (var r in userRoles)
+                                {
+                                    <span class="chip">@r</span>
+                                }
+                            </div>
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard Class="admin-kpi">
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Overline" Class="admin-kpi-label">System</RadzenText>
+
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                            JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">Last refreshed</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">@lastRefreshedText</RadzenText>
+                        </RadzenStack>
+
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                            JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">Environment</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">WebApp</RadzenText>
+                        </RadzenStack>
+
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                            JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">Status</RadzenText>
+                            <span class="pill pill-neutral">OK</span>
+                        </RadzenStack>
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <!-- Actions -->
+        <RadzenCard Class="admin-actions-card">
+            <RadzenStack Gap="0.75rem">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                    JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenText TextStyle="TextStyle.H6" Class="m-0">Admin Functions</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" Class="admin-kpi-muted">Quick actions</RadzenText>
+                </RadzenStack>
+
+                <div class="admin-tiles">
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/vendor"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-store"></i></div>
+                        <div class="tile-title">Vendor Management</div>
+                        <div class="tile-sub">Manage restaurants, menus, vendor access</div>
+                    </button>
+
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/users"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-people"></i></div>
+                        <div class="tile-title">User Management</div>
+                        <div class="tile-sub">Users, roles, and permissions</div>
+                    </button>
+
+                    <button class="admin-tile" @onclick="@(() => NotifyComingSoon("Order Management"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-receipt_long"></i></div>
+                        <div class="tile-title">Order Management</div>
+                        <div class="tile-sub">View & manage all orders</div>
+                        <span class="badge-soon">Coming soon</span>
+                    </button>
+
+                    <button class="admin-tile" @onclick="@(() => NotifyComingSoon("System Settings"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-settings"></i></div>
+                        <div class="tile-title">System Settings</div>
+                        <div class="tile-sub">Feature flags, config, policies</div>
+                        <span class="badge-soon">Coming soon</span>
+                    </button>
                 </div>
-                
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h5>Admin Functions</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="list-group">
-                            <a href="/vendor" class="list-group-item list-group-item-action">
-                                <strong>Vendor Management</strong>
-                                <p class="mb-0 text-muted small">Manage restaurants and vendors</p>
-                            </a>
-                            <a href="/admin/users" class="list-group-item list-group-item-action">
-                                <strong>User Management</strong>
-                                <p class="mb-0 text-muted small">View and manage all users and roles</p>
-                            </a>
-                            <a href="#" class="list-group-item list-group-item-action" onclick="alert('Coming soon!'); return false;">
-                                <strong>Order Management</strong>
-                                <p class="mb-0 text-muted small">View and manage all orders</p>
-                            </a>
-                            <a href="#" class="list-group-item list-group-item-action" onclick="alert('Coming soon!'); return false;">
-                                <strong>System Settings</strong>
-                                <p class="mb-0 text-muted small">Configure system settings</p>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+            </RadzenStack>
+        </RadzenCard>
     }
-</div>
+</RadzenStack>
+
+<style>
+    /* Shell */
+    .admin-shell {
+        padding: 1rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    /* Top bar */
+    .admin-topbar {
+        border-radius: 18px;
+        padding: 1rem 1.1rem;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .06);
+        border: 1px solid rgba(0, 0, 0, .08);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, .92));
+    }
+
+    .admin-title {
+        font-weight: 800;
+        letter-spacing: -.2px;
+    }
+
+    .admin-subtitle {
+        color: rgba(0, 0, 0, .58);
+    }
+
+    /* Alerts */
+    .admin-alert {
+        border-radius: 16px;
+    }
+
+    /* KPI cards */
+    .admin-kpi {
+        border-radius: 18px;
+        border: 1px solid rgba(0, 0, 0, .08);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .05);
+        height: 100%;
+    }
+
+    .admin-kpi-label {
+        color: rgba(0, 0, 0, .55);
+        letter-spacing: .08em;
+    }
+
+    .admin-kpi-value {
+        font-weight: 750;
+        letter-spacing: -.2px;
+    }
+
+    .admin-kpi-muted {
+        color: rgba(0, 0, 0, .55);
+    }
+
+    /* Pills */
+    .pill {
+        font-size: .72rem;
+        padding: .28rem .55rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, .08);
+        background: rgba(0, 0, 0, .03);
+        color: rgba(0, 0, 0, .7);
+        font-weight: 700;
+    }
+
+    .pill-success {
+        background: rgba(25, 135, 84, .10);
+        border-color: rgba(25, 135, 84, .18);
+        color: rgba(25, 135, 84, .95);
+    }
+
+    .pill-neutral {
+        background: rgba(13, 110, 253, .10);
+        border-color: rgba(13, 110, 253, .18);
+        color: rgba(13, 110, 253, .95);
+    }
+
+    /* Role chips */
+    .chip-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+    }
+
+    .chip {
+        font-size: .78rem;
+        padding: .28rem .6rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, .08);
+        background: rgba(0, 0, 0, .03);
+        color: rgba(0, 0, 0, .72);
+        font-weight: 600;
+    }
+
+    /* Actions */
+    .admin-actions-card {
+        border-radius: 18px;
+        border: 1px solid rgba(0, 0, 0, .08);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .05);
+    }
+
+    .admin-tiles {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    @@media (max-width: 1100px) {
+        .admin-tiles {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .admin-shell {
+            padding: .75rem;
+        }
+
+        .admin-tiles {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .admin-tile {
+        position: relative;
+        text-align: left;
+        width: 100%;
+        border-radius: 18px;
+        padding: 14px 14px;
+        border: 1px solid rgba(0, 0, 0, .08);
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+        transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+        min-height: 128px;
+        cursor: pointer;
+    }
+
+    .admin-tile:hover {
+        transform: translateY(-2px);
+        border-color: rgba(0, 0, 0, .14);
+        box-shadow: 0 16px 28px rgba(0, 0, 0, .08);
+    }
+
+    .tile-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, .04);
+        border: 1px solid rgba(0, 0, 0, .06);
+        margin-bottom: 10px;
+        font-size: 20px;
+        color: rgba(0, 0, 0, .7);
+    }
+
+    .tile-title {
+        font-weight: 800;
+        letter-spacing: -.2px;
+        margin-bottom: 2px;
+    }
+
+    .tile-sub {
+        color: rgba(0, 0, 0, .55);
+        font-size: .9rem;
+        line-height: 1.2rem;
+    }
+
+    .badge-soon {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        font-size: .72rem;
+        padding: .22rem .5rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, .08);
+        background: rgba(0, 0, 0, .04);
+        color: rgba(0, 0, 0, .65);
+        font-weight: 700;
+    }
+</style>
 
 @code {
     private bool isAuthenticated = false;
     private bool isAdmin = false;
     private List<string> userRoles = new();
     private string userEmail = "";
+    private DateTimeOffset? lastRefreshedUtc;
+
+    private string lastRefreshedText =>
+    lastRefreshedUtc is null ? "—" : lastRefreshedUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
 
     protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
     {
         isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (isAuthenticated)
@@ -82,6 +361,20 @@
             userRoles = await AuthService.GetUserRolesAsync();
             userEmail = await GetUserEmailAsync();
         }
+
+        lastRefreshedUtc = DateTimeOffset.UtcNow;
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync();
+        NotificationService.Notify(NotificationSeverity.Success, "Refreshed", "Admin dashboard updated.");
+        StateHasChanged();
+    }
+
+    private void NotifyComingSoon(string feature)
+    {
+        NotificationService.Notify(NotificationSeverity.Info, "Coming soon", $"{feature} is not enabled yet.");
     }
 
     private async Task<string> GetUserEmailAsync()
@@ -89,17 +382,14 @@
         try
         {
             var token = await AuthService.GetAccessTokenAsync();
-            if (string.IsNullOrEmpty(token))
-            {
-                return "";
-            }
+            if (string.IsNullOrEmpty(token)) return "";
 
             var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
             var jsonToken = handler.ReadJwtToken(token);
-            
+
             var email = jsonToken.Claims
-                .FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
-            
+            .FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+
             return email ?? "";
         }
         catch

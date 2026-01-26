@@ -1262,6 +1262,86 @@ public class WebBffController : ControllerBase
         }
     }
 
+    // ----------------------------
+    // Menu Items (CatalogService passthrough)
+    // ----------------------------
+
+    [HttpPost("restaurants/{restaurantId}/menu-items")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateMenuItem(Guid restaurantId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            // CatalogController: POST /api/Catalog/restaurants/{restaurantId}/menu-items
+            var response = await client.PostAsync($"/api/Catalog/restaurants/{restaurantId}/menu-items", content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating menu item for restaurant {RestaurantId}", restaurantId);
+            return StatusCode(500, new { message = "Failed to create menu item" });
+        }
+    }
+
+    [HttpPut("menu-items/{menuItemId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateMenuItem(Guid menuItemId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            // CatalogController: PUT /api/Catalog/menu-items/{menuItemId}
+            var response = await client.PutAsync($"/api/Catalog/menu-items/{menuItemId}", content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating menu item {MenuItemId}", menuItemId);
+            return StatusCode(500, new { message = "Failed to update menu item" });
+        }
+    }
+
+    [HttpPatch("menu-items/{menuItemId}/availability")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> SetMenuItemAvailability(Guid menuItemId, [FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            // CatalogController: PATCH /api/Catalog/menu-items/{menuItemId}/availability
+            var response = await client.PatchAsync($"/api/Catalog/menu-items/{menuItemId}/availability", content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting availability for menu item {MenuItemId}", menuItemId);
+            return StatusCode(500, new { message = "Failed to update menu item availability" });
+        }
+    }
+
+
     [HttpPut("orders/{orderId}/status")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)

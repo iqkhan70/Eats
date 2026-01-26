@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -26,33 +26,49 @@ interface Category {
 
 export default function MenuScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams<{
+    restaurantId?: string;
+    refreshedAt?: string;
+    categoryId?: string;
+  }>();
+
   const restaurantId = params.restaurantId as string;
-  
+  const refreshedAt = params.refreshedAt; // 👈 will change after save
+
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentCartId, setCurrentCartId] = useState<string | null>(null);
   const [addingItemId, setAddingItemId] = useState<string | null>(null);
-  const isAddingToCartRef = React.useRef(false);
 
-  useEffect(() => {
-    loadMenu();
-    loadCategories();
-    // Reset cartId when restaurant changes
-    setCurrentCartId(null);
-  }, [restaurantId, selectedCategoryId]);
+  const isAddingToCartRef = useRef(false);
 
-  const loadMenu = async () => {
+  const loadMenu = useCallback(async () => {
     try {
       setLoading(true);
+
       const queryParams: any = {};
       if (selectedCategoryId) queryParams.categoryId = selectedCategoryId;
-      
-      const response = await api.get<MenuItem[]>(`/MobileBff/restaurants/${restaurantId}/menu`, { params: queryParams });
-      
-      const mappedItems = response.data.map((item: any) => ({
+
+      // ✅ cache buster
+      queryParams.__ts = Date.now();
+
+      const response = await api.get<MenuItem[]>(
+        `/MobileBff/restaurants/${restaurantId}/menu`,
+        {
+          params: queryParams,
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        }
+      );
+
+      console.log("MENU FETCHED AT", new Date().toISOString());
+console.log("FIRST ITEM", response.data?.[0]);
+
+      const mappedItems = (response.data || []).map((item: any) => ({
         menuItemId: item.menuItemId || item.id,
         restaurantId: item.restaurantId,
         categoryId: item.categoryId,
@@ -64,7 +80,7 @@ export default function MenuScreen() {
         isAvailable: item.isAvailable ?? true,
         dietaryTags: item.dietaryTags || [],
       }));
-      
+
       setMenuItems(mappedItems);
     } catch (error: any) {
       console.error('Error loading menu:', error);
@@ -72,17 +88,39 @@ export default function MenuScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [restaurantId, selectedCategoryId]);
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
-      const response = await api.get<Category[]>('/MobileBff/categories');
+      const response = await api.get<Category[]>('/MobileBff/categories', {
+        params: { __ts: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
       setCategories(response.data || []);
     } catch (error: any) {
       console.error('Error loading categories:', error);
       setCategories([]);
     }
-  };
+  }, []);
+
+  // Initial load + restaurant change
+  useEffect(() => {
+    if (!restaurantId) return;
+    loadMenu();
+    loadCategories();
+    setCurrentCartId(null);
+  }, [restaurantId, loadMenu, loadCategories]);
+
+  // ✅ Force reload when we come back from edit (token changes)
+  useEffect(() => {
+    if (!restaurantId) return;
+    if (refreshedAt) {
+      loadMenu();
+    }
+  }, [refreshedAt, restaurantId, loadMenu]);
 
   const filterByCategory = (categoryId: string | null) => {
     setSelectedCategoryId(categoryId);
@@ -90,8 +128,7 @@ export default function MenuScreen() {
 
   const addToCart = async (item: MenuItem) => {
     if (!item.isAvailable) return;
-    
-    // Prevent double-tapping - use ref for immediate check
+
     if (isAddingToCartRef.current) {
       console.log('Add to cart already in progress, ignoring duplicate call');
       return;
@@ -101,59 +138,38 @@ export default function MenuScreen() {
       isAddingToCartRef.current = true;
       setAddingItemId(item.menuItemId);
 
-      // Always get cart from server first (don't rely on local state)
-      // This ensures we have the correct cartId from Redis session
       let cart = await cartService.getCart();
       let cartIdToUse: string | null = null;
-      
+
       if (cart && cart.cartId) {
         cartIdToUse = cart.cartId;
-        // If cart is for a different restaurant, create a new one
         if (cart.restaurantId && cart.restaurantId !== restaurantId) {
-          console.log('Cart is for different restaurant, creating new cart');
           cartIdToUse = await cartService.createCart(restaurantId);
         }
       } else {
-        // No cart exists, create a new one
-        console.log('No cart found, creating new cart');
         cartIdToUse = await cartService.createCart(restaurantId);
       }
 
-      // Validate cartId before proceeding
-      if (!cartIdToUse || cartIdToUse.trim() === '') {
-        throw new Error('Failed to create or retrieve cart');
-      }
+      if (!cartIdToUse || cartIdToUse.trim() === '') throw new Error('Failed to create or retrieve cart');
+      if (!item.menuItemId || item.menuItemId.trim() === '') throw new Error('MenuItem ID is missing');
 
-      // Validate menuItemId
-      if (!item.menuItemId || item.menuItemId.trim() === '') {
-        throw new Error('MenuItem ID is missing');
-      }
-      
-      console.log('Adding item to cart:', { cartId: cartIdToUse, menuItemId: item.menuItemId, price: item.price, quantity: 1 });
       await cartService.addItemToCart(cartIdToUse, item.menuItemId, item.name, item.price, 1);
-      
-      // Update local state for future calls
+
       setCurrentCartId(cartIdToUse);
-      
       Alert.alert('Success', `${item.name} added to cart`);
     } catch (error: any) {
       console.error('Error adding to cart:', error);
-      const errorMessage = error.message || 'Failed to add item to cart';
-      Alert.alert('Error', errorMessage);
+      Alert.alert('Error', error.message || 'Failed to add item to cart');
     } finally {
-      // Add a small delay before resetting to prevent rapid double-clicks
       await new Promise(resolve => setTimeout(resolve, 500));
       isAddingToCartRef.current = false;
       setAddingItemId(null);
     }
   };
 
-  // Group menu items by category
   const menuItemsByCategory = menuItems.reduce((acc, item) => {
     const categoryName = item.categoryName || 'Other';
-    if (!acc[categoryName]) {
-      acc[categoryName] = [];
-    }
+    if (!acc[categoryName]) acc[categoryName] = [];
     acc[categoryName].push(item);
     return acc;
   }, {} as Record<string, MenuItem[]>);
@@ -184,72 +200,55 @@ export default function MenuScreen() {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Category Filter */}
         {categories.length > 0 && (
-          <ScrollView 
-            horizontal 
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.categoryFilter}
             contentContainerStyle={styles.categoryFilterContent}
           >
             <TouchableOpacity
-              style={[
-                styles.categoryChip,
-                selectedCategoryId === null && styles.categoryChipActive
-              ]}
+              style={[styles.categoryChip, selectedCategoryId === null && styles.categoryChipActive]}
               onPress={() => filterByCategory(null)}
             >
-              <Text style={[
-                styles.categoryChipText,
-                selectedCategoryId === null && styles.categoryChipTextActive
-              ]}>All</Text>
+              <Text style={[styles.categoryChipText, selectedCategoryId === null && styles.categoryChipTextActive]}>
+                All
+              </Text>
             </TouchableOpacity>
-            {categories.map((category) => (
+
+            {categories.map(category => (
               <TouchableOpacity
                 key={category.categoryId}
-                style={[
-                  styles.categoryChip,
-                  selectedCategoryId === category.categoryId && styles.categoryChipActive
-                ]}
+                style={[styles.categoryChip, selectedCategoryId === category.categoryId && styles.categoryChipActive]}
                 onPress={() => filterByCategory(category.categoryId)}
               >
-                <Text style={[
-                  styles.categoryChipText,
-                  selectedCategoryId === category.categoryId && styles.categoryChipTextActive
-                ]}>{category.name}</Text>
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    selectedCategoryId === category.categoryId && styles.categoryChipTextActive,
+                  ]}
+                >
+                  {category.name}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         )}
 
-        {/* Menu Items by Category */}
         {Object.entries(menuItemsByCategory).map(([categoryName, items]) => (
           <View key={categoryName} style={styles.categorySection}>
             <Text style={styles.categoryTitle}>{categoryName}</Text>
-            {items.map((item) => (
-              <TouchableOpacity
-                key={item.menuItemId}
-                style={styles.menuItemCard}
-                activeOpacity={0.8}
-              >
+
+            {items.map(item => (
+              <TouchableOpacity key={item.menuItemId} style={styles.menuItemCard} activeOpacity={0.8}>
                 <View style={styles.menuItemContent}>
                   <Ionicons name="restaurant" size={40} color="#6200ee" style={styles.menuItemIcon} />
                   <View style={styles.menuItemDetails}>
                     <Text style={styles.menuItemName}>{item.name}</Text>
-                    {item.description && (
-                      <Text style={styles.menuItemDescription}>{item.description}</Text>
-                    )}
-                    {item.dietaryTags.length > 0 && (
-                      <View style={styles.dietaryTags}>
-                        {item.dietaryTags.map((tag, index) => (
-                          <View key={index} style={styles.dietaryTag}>
-                            <Text style={styles.dietaryTagText}>{tag}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
+                    {item.description && <Text style={styles.menuItemDescription}>{item.description}</Text>}
                     <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
                   </View>
+
                   {item.isAvailable ? (
                     <TouchableOpacity
                       style={[styles.addButton, addingItemId === item.menuItemId && styles.addButtonDisabled]}
@@ -285,10 +284,7 @@ export default function MenuScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,30 +293,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  backButton: {
-    marginRight: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  categoryFilter: {
-    maxHeight: 50,
-    marginVertical: 12,
-  },
-  categoryFilterContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
+  backButton: { marginRight: 12 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#333' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollView: { flex: 1 },
+  categoryFilter: { maxHeight: 50, marginVertical: 12 },
+  categoryFilterContent: { paddingHorizontal: 16, gap: 8 },
   categoryChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -330,28 +308,11 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     marginRight: 8,
   },
-  categoryChipActive: {
-    backgroundColor: '#6200ee',
-    borderColor: '#6200ee',
-  },
-  categoryChipText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  categoryChipTextActive: {
-    color: '#fff',
-  },
-  categorySection: {
-    marginBottom: 24,
-    paddingHorizontal: 16,
-  },
-  categoryTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
+  categoryChipActive: { backgroundColor: '#6200ee', borderColor: '#6200ee' },
+  categoryChipText: { fontSize: 14, color: '#666', fontWeight: '500' },
+  categoryChipTextActive: { color: '#fff' },
+  categorySection: { marginBottom: 24, paddingHorizontal: 16 },
+  categoryTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 12 },
   menuItemCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -363,56 +324,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  menuItemContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  menuItemIcon: {
-    marginRight: 12,
-  },
-  menuItemDetails: {
-    flex: 1,
-  },
-  menuItemName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  menuItemDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  dietaryTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 8,
-    gap: 4,
-  },
-  dietaryTag: {
-    backgroundColor: '#e3f2fd',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  dietaryTagText: {
-    fontSize: 12,
-    color: '#1976d2',
-  },
-  menuItemPrice: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6200ee',
-    marginTop: 4,
-  },
-  addButton: {
-    marginLeft: 12,
-  },
-  addButtonDisabled: {
-    opacity: 0.5,
-  },
+  menuItemContent: { flexDirection: 'row', alignItems: 'flex-start' },
+  menuItemIcon: { marginRight: 12 },
+  menuItemDetails: { flex: 1 },
+  menuItemName: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 4 },
+  menuItemDescription: { fontSize: 14, color: '#666', marginBottom: 8 },
+  menuItemPrice: { fontSize: 18, fontWeight: 'bold', color: '#6200ee', marginTop: 4 },
+  addButton: { marginLeft: 12 },
+  addButtonDisabled: { opacity: 0.5 },
   unavailableBadge: {
     backgroundColor: '#ffebee',
     paddingHorizontal: 12,
@@ -420,20 +339,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginLeft: 12,
   },
-  unavailableText: {
-    fontSize: 12,
-    color: '#c62828',
-    fontWeight: '500',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    marginTop: 16,
-  },
+  unavailableText: { fontSize: 12, color: '#c62828', fontWeight: '500' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
+  emptyText: { fontSize: 16, color: '#999', marginTop: 16 },
 });

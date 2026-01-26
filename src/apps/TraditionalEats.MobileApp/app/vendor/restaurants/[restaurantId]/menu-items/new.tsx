@@ -1,253 +1,261 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { api } from '../../../../../services/api';
 
-interface Category {
-  categoryId: string;
+interface MenuItem {
+  menuItemId: string;
   name: string;
   description?: string;
+  price: number;
+  imageUrl?: string;
+  categoryId?: string;
+  categoryName?: string;
+  isAvailable: boolean;
 }
 
-export default function CreateMenuItemScreen() {
+export default function VendorMenuScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ restaurantId: string }>();
-  const restaurantId = params.restaurantId;
+
+  // ✅ READ refreshedAt from params
+  const params = useLocalSearchParams<{
+    restaurantId?: string;
+    refreshedAt?: string;
+  }>();
+
+  const restaurantId = params.restaurantId as string;
+  const refreshedAt = params.refreshedAt; // 👈 triggers reload when changed
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [formData, setFormData] = useState({
-    categoryId: '',
-    name: '',
-    description: '',
-    price: '',
-    imageUrl: '',
-  });
+  const [refreshing, setRefreshing] = useState(false);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [restaurantName, setRestaurantName] = useState('');
 
-  useEffect(() => {
-    if (restaurantId) {
-      loadCategories();
+  const normalizeCategoryName = (raw: any): string | undefined => {
+    if (typeof raw === 'string') return raw.trim() || undefined;
+    if (typeof raw === 'number') return String(raw);
+    if (raw && typeof raw === 'object') {
+      const possible =
+        (typeof raw.name === 'string' && raw.name) ||
+        (typeof raw.categoryName === 'string' && raw.categoryName);
+      return possible ? possible.trim() || undefined : undefined;
     }
-  }, [restaurantId]);
+    return undefined;
+  };
 
-  const loadCategories = async () => {
+  const loadMenuItems = useCallback(async () => {
+    if (!restaurantId) return;
+
     try {
-      setLoading(true);
-      const response = await api.get<Category[]>('/MobileBff/categories');
-      setCategories(response.data || []);
+      if (!refreshing) setLoading(true);
+
+      const response = await api.get<any[]>(
+        `/MobileBff/restaurants/${restaurantId}/menu`,
+        {
+          params: { __ts: Date.now() },
+          headers: {
+            'Cache-Control': 'no-store',
+            Pragma: 'no-cache',
+          },
+        }
+      );
+
+      const rawItems = response.data || [];
+      const mapped: MenuItem[] = rawItems.map((x: any) => ({
+        menuItemId: x.menuItemId || x.id,
+        name: typeof x.name === 'string' ? x.name : String(x.name ?? ''),
+        description: typeof x.description === 'string' ? x.description : undefined,
+        price: typeof x.price === 'number' ? x.price : parseFloat(String(x.price ?? '0')) || 0,
+        imageUrl: typeof x.imageUrl === 'string' ? x.imageUrl : undefined,
+        categoryId: typeof x.categoryId === 'string' ? x.categoryId : undefined,
+        categoryName: normalizeCategoryName(x.categoryName ?? x.category),
+        isAvailable: typeof x.isAvailable === 'boolean' ? x.isAvailable : (x.isAvailable ?? true),
+      }));
+
+      setMenuItems(mapped);
+
+      // optional restaurant name lookup
+      try {
+        const restaurantsResponse = await api.get<any[]>('/MobileBff/vendor/my-restaurants', {
+          params: { __ts: Date.now() },
+          headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+        });
+
+        const r = restaurantsResponse.data?.find((rr: any) => rr.restaurantId === restaurantId);
+        if (r?.name) setRestaurantName(r.name);
+      } catch {}
     } catch (error: any) {
-      console.error('Error loading categories:', error);
-      Alert.alert('Error', 'Failed to load categories');
+      console.error('Error loading menu items:', error);
+      if (error.response?.status === 404) setMenuItems([]);
+      else Alert.alert('Error', 'Failed to load menu items');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }, [restaurantId, refreshing]);
+
+  // ✅ Initial load (restaurantId change)
+  useEffect(() => {
+    if (!restaurantId) return;
+    loadMenuItems();
+  }, [restaurantId, loadMenuItems]);
+
+  // ✅ FORCE reload when coming back from new/edit (refreshedAt changes)
+  useEffect(() => {
+    if (!restaurantId) return;
+    if (!refreshedAt) return;
+
+    loadMenuItems();
+  }, [refreshedAt, restaurantId, loadMenuItems]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadMenuItems();
   };
 
-  const handleSave = async () => {
-    if (!formData.name.trim()) {
-      Alert.alert('Validation Error', 'Menu item name is required');
-      return;
-    }
+  const handleAddItem = () => {
+    // ✅ This MUST match your created file:
+    // app/vendor/restaurants/[restaurantId]/menu-items/new.tsx
+    router.push({
+      pathname: '/vendor/restaurants/[restaurantId]/menu-items/new',
+      params: { restaurantId },
+    });
+  };
 
-    if (!formData.categoryId) {
-      Alert.alert('Validation Error', 'Please select a category');
-      return;
-    }
-
-    const price = parseFloat(formData.price);
-    if (isNaN(price) || price <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price');
-      return;
-    }
-
+  const handleToggleAvailability = async (item: MenuItem) => {
     try {
-      setSaving(true);
-      const request = {
-        categoryId: formData.categoryId,
-        name: formData.name.trim(),
-        description: formData.description.trim() || null,
-        price: price,
-        imageUrl: formData.imageUrl.trim() || null,
-        dietaryTags: null as string[] | null,
-      };
-
-      await api.post(`/MobileBff/restaurants/${restaurantId}/menu-items`, request);
-      
-      Alert.alert('Success', 'Menu item created successfully', [
-        { 
-          text: 'OK', 
-          onPress: () => {
-            router.back();
-          }
+      await api.patch(
+        `/MobileBff/menu-items/${item.menuItemId}/availability`,
+        { isAvailable: !item.isAvailable },
+        {
+          params: { __ts: Date.now() },
+          headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' },
         }
-      ]);
+      );
+
+      await loadMenuItems();
     } catch (error: any) {
-      console.error('Error creating menu item:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to create menu item';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setSaving(false);
+      console.error('Error toggling availability:', error);
+      Alert.alert('Error', 'Failed to update menu item availability');
     }
   };
 
-  if (loading) {
+  if (loading && menuItems.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#6200ee" />
-        <Text style={styles.loadingText}>Loading categories...</Text>
+        <Text style={styles.loadingText}>Loading menu items...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Menu Item</Text>
-        <View style={styles.placeholder} />
-      </View>
 
-      <View style={styles.form}>
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Category *</Text>
-          <View style={styles.categoryContainer}>
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category.categoryId}
-                style={[
-                  styles.categoryButton,
-                  formData.categoryId === category.categoryId && styles.categoryButtonSelected,
-                ]}
-                onPress={() => setFormData({ ...formData, categoryId: category.categoryId })}
-              >
-                <Text
-                  style={[
-                    styles.categoryButtonText,
-                    formData.categoryId === category.categoryId && styles.categoryButtonTextSelected,
-                  ]}
-                >
-                  {category.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          {!formData.categoryId && (
-            <Text style={styles.errorText}>Please select a category</Text>
-          )}
-        </View>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {restaurantName || 'Menu Items'}
+        </Text>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Item Name *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.name}
-            onChangeText={(text) => setFormData({ ...formData, name: text })}
-            placeholder="Enter menu item name"
-            autoFocus
-          />
-          {!formData.name.trim() && (
-            <Text style={styles.errorText}>Item name is required</Text>
-          )}
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.description}
-            onChangeText={(text) => setFormData({ ...formData, description: text })}
-            placeholder="Enter description"
-            multiline
-            numberOfLines={4}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Price *</Text>
-          <View style={styles.priceContainer}>
-            <Text style={styles.currencySymbol}>$</Text>
-            <TextInput
-              style={[styles.input, styles.priceInput]}
-              value={formData.price}
-              onChangeText={(text) => {
-                // Allow only numbers and one decimal point
-                const cleaned = text.replace(/[^0-9.]/g, '');
-                if (cleaned.split('.').length <= 2) {
-                  setFormData({ ...formData, price: cleaned });
-                }
-              }}
-              placeholder="0.00"
-              keyboardType="decimal-pad"
-            />
-          </View>
-          {(!formData.price || parseFloat(formData.price) <= 0) && (
-            <Text style={styles.errorText}>Please enter a valid price</Text>
-          )}
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Image URL</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.imageUrl}
-            onChangeText={(text) => setFormData({ ...formData, imageUrl: text })}
-            placeholder="Enter image URL"
-            autoCapitalize="none"
-          />
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.saveButton,
-            (saving || !formData.name.trim() || !formData.categoryId || !formData.price || parseFloat(formData.price) <= 0) &&
-            styles.saveButtonDisabled,
-          ]}
-          onPress={handleSave}
-          disabled={saving || !formData.name.trim() || !formData.categoryId || !formData.price || parseFloat(formData.price) <= 0}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="checkmark" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.saveButtonText}>Create Menu Item</Text>
-            </>
-          )}
+        <TouchableOpacity onPress={handleAddItem} style={styles.addButton}>
+          <Ionicons name="add" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {menuItems.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="restaurant-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No menu items yet</Text>
+          <Text style={styles.emptySubtext}>Add your first menu item to get started</Text>
+          <TouchableOpacity style={styles.addButtonLarge} onPress={handleAddItem}>
+            <Text style={styles.addButtonText}>Add Menu Item</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.menuList}>
+          {menuItems.map((item) => (
+            <View key={item.menuItemId} style={styles.menuItemCard}>
+              <View style={styles.menuItemHeader}>
+                <View style={styles.menuItemInfo}>
+                  <Text style={styles.menuItemName}>{item.name}</Text>
+                  <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.availabilityBadge,
+                    item.isAvailable ? styles.availableBadge : styles.unavailableBadge,
+                  ]}
+                >
+                  <Text style={styles.availabilityText}>
+                    {item.isAvailable ? 'Available' : 'Unavailable'}
+                  </Text>
+                </View>
+              </View>
+
+              {item.description ? (
+                <Text style={styles.menuItemDescription} numberOfLines={2}>
+                  {item.description}
+                </Text>
+              ) : null}
+
+              {item.categoryName ? (
+                <Text style={styles.menuItemCategory}>{item.categoryName}</Text>
+              ) : null}
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.toggleButton]}
+                  onPress={() => handleToggleAvailability(item)}
+                >
+                  <Ionicons
+                    name={item.isAvailable ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color={item.isAvailable ? '#f57c00' : '#4caf50'}
+                  />
+                  <Text
+                    style={[
+                      styles.toggleButtonText,
+                      { color: item.isAvailable ? '#f57c00' : '#4caf50' },
+                    ]}
+                  >
+                    {item.isAvailable ? 'Disable' : 'Enable'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <TouchableOpacity style={styles.fab} onPress={handleAddItem}>
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
+  loadingText: { marginTop: 16, fontSize: 16, color: '#666' },
+
   header: {
     backgroundColor: '#6200ee',
     padding: 16,
@@ -256,109 +264,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    flex: 1,
-    textAlign: 'center',
-  },
-  placeholder: {
-    width: 40,
-  },
-  form: {
+  backButton: { padding: 8 },
+  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', flex: 1, textAlign: 'center' },
+  addButton: { padding: 8 },
+
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, minHeight: 400 },
+  emptyText: { fontSize: 20, fontWeight: 'bold', color: '#333', marginTop: 16 },
+  emptySubtext: { fontSize: 14, color: '#666', marginTop: 8, textAlign: 'center' },
+  addButtonLarge: { marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#6200ee', borderRadius: 8 },
+  addButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+
+  menuList: { padding: 16 },
+  menuItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
     padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  formGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  categoryContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-  },
-  categoryButtonSelected: {
+  menuItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  menuItemInfo: { flex: 1 },
+  menuItemName: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  menuItemPrice: { fontSize: 16, fontWeight: '600', color: '#6200ee' },
+
+  availabilityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  availableBadge: { backgroundColor: '#e8f5e9' },
+  unavailableBadge: { backgroundColor: '#ffebee' },
+  availabilityText: { fontSize: 12, fontWeight: '600', color: '#333' },
+
+  menuItemDescription: { fontSize: 14, color: '#666', marginBottom: 8 },
+  menuItemCategory: { fontSize: 12, color: '#999', marginBottom: 12 },
+
+  actionButtons: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, gap: 4 },
+  toggleButton: { backgroundColor: '#f5f5f5', borderWidth: 1, borderColor: '#e0e0e0' },
+  toggleButtonText: { fontSize: 14, fontWeight: '600' },
+
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#6200ee',
-    borderColor: '#6200ee',
-  },
-  categoryButtonText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  categoryButtonTextSelected: {
-    color: '#fff',
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingLeft: 12,
-  },
-  currencySymbol: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginRight: 8,
-  },
-  priceInput: {
-    flex: 1,
-    borderWidth: 0,
-    paddingLeft: 0,
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#d32f2f',
-    marginTop: 4,
-  },
-  saveButton: {
-    backgroundColor: '#6200ee',
-    padding: 16,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });
