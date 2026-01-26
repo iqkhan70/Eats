@@ -121,7 +121,13 @@ export default function EditMenuItemScreen() {
         { 
           text: 'OK', 
           onPress: () => {
-            router.back();
+            router.replace({
+              pathname: '/vendor/restaurants/[restaurantId]/menu', // ⚠️ adjust to your real path
+              params: {
+                restaurantId,
+                _ts: Date.now().toString(), // cache buster
+              },
+            });
           }
         }
       ]);
