@@ -20,7 +20,7 @@ interface MenuItem {
   price: number;
   imageUrl?: string;
   categoryId?: string;
-  categoryName?: string;
+  categoryName?: string; // keep as string only for UI
   isAvailable: boolean;
 }
 
@@ -38,23 +38,70 @@ export default function ManageMenuScreen() {
     if (restaurantId) {
       loadMenuItems();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId]);
+
+  // ✅ Normalize categoryName to always be a string (or undefined)
+  const normalizeCategoryName = (raw: any): string | undefined => {
+    if (typeof raw === 'string') return raw.trim() || undefined;
+    if (typeof raw === 'number') return String(raw);
+    if (raw && typeof raw === 'object') {
+      // common shapes: { name: "Pizza" } or { categoryName: "Pizza" }
+      const possible =
+        (typeof raw.name === 'string' && raw.name) ||
+        (typeof raw.categoryName === 'string' && raw.categoryName);
+
+      return possible ? possible.trim() || undefined : undefined;
+    }
+    return undefined;
+  };
 
   const loadMenuItems = async () => {
     try {
       setLoading(true);
-      const response = await api.get<MenuItem[]>(`/MobileBff/restaurants/${restaurantId}/menu`);
-      setMenuItems(response.data || []);
-      
+
+      const response = await api.get<any[]>(`/MobileBff/restaurants/${restaurantId}/menu`, {
+        params: { __ts: Date.now() }, // cache buster
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      });
+
+      const rawItems = response.data || [];
+
+      const mapped: MenuItem[] = rawItems.map((x: any) => ({
+        menuItemId: x.menuItemId || x.id,
+        name: typeof x.name === 'string' ? x.name : String(x.name ?? ''),
+        description: typeof x.description === 'string' ? x.description : undefined,
+        price: typeof x.price === 'number' ? x.price : parseFloat(String(x.price ?? '0')) || 0,
+        imageUrl: typeof x.imageUrl === 'string' ? x.imageUrl : undefined,
+        categoryId: typeof x.categoryId === 'string' ? x.categoryId : undefined,
+
+        // ✅ This is the important part:
+        categoryName: normalizeCategoryName(x.categoryName ?? x.category),
+
+        isAvailable: typeof x.isAvailable === 'boolean' ? x.isAvailable : (x.isAvailable ?? true),
+      }));
+
+      // Optional: log any weird ones for debugging
+      mapped.forEach(mi => {
+        if (mi.categoryName && typeof mi.categoryName !== 'string') {
+          console.log('BAD categoryName after normalize (should not happen):', mi.menuItemId, mi.categoryName);
+        }
+      });
+
+      setMenuItems(mapped);
+
       // Try to get restaurant name from vendor restaurants list
       try {
-        const restaurantsResponse = await api.get<any[]>('/MobileBff/vendor/my-restaurants');
+        const restaurantsResponse = await api.get<any[]>('/MobileBff/vendor/my-restaurants', {
+          params: { __ts: Date.now() },
+          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        });
         const restaurant = restaurantsResponse.data?.find(r => r.restaurantId === restaurantId);
-        if (restaurant) {
+        if (restaurant?.name) {
           setRestaurantName(restaurant.name);
         }
-      } catch (e) {
-        // Ignore error, just use restaurant ID
+      } catch {
+        // ignore
       }
     } catch (error: any) {
       console.error('Error loading menu items:', error);
@@ -76,9 +123,15 @@ export default function ManageMenuScreen() {
 
   const handleToggleAvailability = async (item: MenuItem) => {
     try {
-      await api.patch(`/MobileBff/menu-items/${item.menuItemId}/availability`, {
-        isAvailable: !item.isAvailable,
-      });
+      await api.patch(
+        `/MobileBff/menu-items/${item.menuItemId}/availability`,
+        { isAvailable: !item.isAvailable },
+        {
+          params: { __ts: Date.now() },
+          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        }
+      );
+
       Alert.alert('Success', `Menu item ${!item.isAvailable ? 'enabled' : 'disabled'} successfully`);
       await loadMenuItems();
     } catch (error: any) {
@@ -132,55 +185,71 @@ export default function ManageMenuScreen() {
         </View>
       ) : (
         <View style={styles.menuList}>
-          {menuItems.map((item) => (
-            <View key={item.menuItemId} style={styles.menuItemCard}>
-              <View style={styles.menuItemHeader}>
-                <View style={styles.menuItemInfo}>
-                  <Text style={styles.menuItemName}>{item.name}</Text>
-                  <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
-                </View>
-                <View style={[styles.availabilityBadge, item.isAvailable ? styles.availableBadge : styles.unavailableBadge]}>
-                  <Text style={styles.availabilityText}>
-                    {item.isAvailable ? 'Available' : 'Unavailable'}
-                  </Text>
-                </View>
-              </View>
-              
-              {item.description && (
-                <Text style={styles.menuItemDescription} numberOfLines={2}>
-                  {item.description}
-                </Text>
-              )}
-              
-              {item.categoryName && (
-                <Text style={styles.menuItemCategory}>{item.categoryName}</Text>
-              )}
+          {menuItems.map((item) => {
+            const categoryText =
+              typeof item.categoryName === 'string' ? item.categoryName.trim() : '';
 
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.toggleButton]}
-                  onPress={() => handleToggleAvailability(item)}
-                >
-                  <Ionicons 
-                    name={item.isAvailable ? "eye-off-outline" : "eye-outline"} 
-                    size={18} 
-                    color={item.isAvailable ? "#f57c00" : "#4caf50"} 
-                  />
-                  <Text style={[styles.toggleButtonText, { color: item.isAvailable ? "#f57c00" : "#4caf50" }]}>
-                    {item.isAvailable ? 'Disable' : 'Enable'}
+            return (
+              <View key={item.menuItemId} style={styles.menuItemCard}>
+                <View style={styles.menuItemHeader}>
+                  <View style={styles.menuItemInfo}>
+                    <Text style={styles.menuItemName}>{item.name}</Text>
+                    <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.availabilityBadge,
+                      item.isAvailable ? styles.availableBadge : styles.unavailableBadge,
+                    ]}
+                  >
+                    <Text style={styles.availabilityText}>
+                      {item.isAvailable ? 'Available' : 'Unavailable'}
+                    </Text>
+                  </View>
+                </View>
+
+                {item.description ? (
+                  <Text style={styles.menuItemDescription} numberOfLines={2}>
+                    {item.description}
                   </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.editButton]}
-                  onPress={() => handleEditItem(item)}
-                >
-                  <Ionicons name="create-outline" size={18} color="#6200ee" />
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
+                ) : null}
+
+                {/* ✅ SAFE render */}
+                {categoryText.length > 0 ? (
+                  <Text style={styles.menuItemCategory}>{categoryText}</Text>
+                ) : null}
+
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.toggleButton]}
+                    onPress={() => handleToggleAvailability(item)}
+                  >
+                    <Ionicons
+                      name={item.isAvailable ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={item.isAvailable ? '#f57c00' : '#4caf50'}
+                    />
+                    <Text
+                      style={[
+                        styles.toggleButtonText,
+                        { color: item.isAvailable ? '#f57c00' : '#4caf50' },
+                      ]}
+                    >
+                      {item.isAvailable ? 'Disable' : 'Enable'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.editButton]}
+                    onPress={() => handleEditItem(item)}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#6200ee" />
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
 

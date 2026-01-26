@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { APP_CONFIG } from '../config/app.config';
 import { cartSessionService } from './cartSession';
@@ -46,7 +46,7 @@ class ApiClient {
             code: error.code,
             baseURL: this.client.defaults.baseURL,
             url: error.config?.url,
-            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/app.config.ts with your computer's IP address.`
+            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/app.config.ts with your computer's IP address.`,
           });
         } else if (error.response) {
           const url = error.config?.url || '';
@@ -75,7 +75,7 @@ class ApiClient {
               statusText: error.response.statusText,
               data: error.response.data,
               url: url,
-              method: method
+              method: method,
             });
           }
         } else if (error.request) {
@@ -83,33 +83,39 @@ class ApiClient {
             message: error.message,
             baseURL: this.client.defaults.baseURL,
             url: error.config?.url,
-            hint: 'No response received. Check network connection and BFF status.'
+            hint: 'No response received. Check network connection and BFF status.',
           });
         }
 
         if (error.response?.status === 401) {
           // Handle unauthorized - clear token and redirect to login
-          await AsyncStorage.removeItem('auth_token');
+          await AsyncStorage.removeItem('access_token');
           // TODO: Navigate to login screen
         }
+
         return Promise.reject(error);
       }
     );
   }
 
-  async get<T>(url: string, config?: AxiosRequestConfig) {
+  async get<T>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.get<T>(url, config);
   }
 
-  async post<T>(url: string, data?: any, config?: AxiosRequestConfig) {
+  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.post<T>(url, data, config);
   }
 
-  async put<T>(url: string, data?: any, config?: AxiosRequestConfig) {
+  async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.put<T>(url, data, config);
   }
 
-  async delete<T>(url: string, config?: AxiosRequestConfig) {
+  // ✅ FIX: implement PATCH
+  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    return this.client.patch<T>(url, data, config);
+  }
+
+  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.client.delete<T>(url, config);
   }
 }
