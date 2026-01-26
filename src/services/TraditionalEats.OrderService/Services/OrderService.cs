@@ -1036,7 +1036,7 @@ public class OrderService : IOrderService
         // Recalculate totals from order items to ensure accuracy
         var orderSubtotal = orderItems.Sum(i => i.TotalPrice);
         var orderTax = orderSubtotal * 0.08m; // 8% tax
-        var orderDeliveryFee = 2.99m; // Fixed delivery fee
+        var orderDeliveryFee = 0.00m; // Fixed delivery fee
         var orderTotal = orderSubtotal + orderTax + orderDeliveryFee;
 
         _logger.LogInformation("PlaceOrderAsync: Calculated order totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, Total={Total}",
@@ -1356,7 +1356,7 @@ public class OrderService : IOrderService
 
         cart.Subtotal = subtotal;
         cart.Tax = cart.Subtotal * 0.08m; // 8% tax
-        cart.DeliveryFee = 2.99m; // Fixed delivery fee
+        cart.DeliveryFee = 0.00m; // Fixed delivery fee
         cart.Total = cart.Subtotal + cart.Tax + cart.DeliveryFee;
 
         _logger.LogInformation("RecalculateCartTotals: Final totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, Total={Total}",
