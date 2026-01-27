@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { api } from '../../services/api';
+import { authService } from '../../services/auth';
 
 interface Order {
   orderId: string;
@@ -42,38 +43,136 @@ export default function OrdersScreen() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
 
+  // Track if we've already redirected to prevent double redirects
+  const hasRedirectedRef = useRef(false);
+  const isNavigatingRef = useRef(false);
+
+  // Check authentication status (only on mount)
+  useEffect(() => {
+    let isMounted = true;
+    
+    (async () => {
+      try {
+        const authenticated = await authService.isAuthenticated();
+        
+        if (!isMounted) return;
+        
+        setIsAuthenticated(authenticated);
+        
+        if (!authenticated && !hasRedirectedRef.current && !isNavigatingRef.current) {
+          // Redirect to login if not authenticated (only once)
+          hasRedirectedRef.current = true;
+          isNavigatingRef.current = true;
+          // Use replace to avoid stacking - login is no longer a modal
+          router.replace('/login');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        if (!isMounted) return;
+        
+        if (!hasRedirectedRef.current && !isNavigatingRef.current) {
+          hasRedirectedRef.current = true;
+          isNavigatingRef.current = true;
+          router.replace('/login');
+        }
+      } finally {
+        if (isMounted) {
+          setCheckingAuth(false);
+        }
+      }
+    })();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
+
   const loadOrders = useCallback(async () => {
+    // Don't load orders if not authenticated
+    if (!isAuthenticated) {
+      return;
+    }
+
     try {
       const response = await api.get<Order[]>('/MobileBff/orders');
       setOrders(response.data || []);
     } catch (error: any) {
       console.error('Error loading orders:', error);
+      
+      // If 401 Unauthorized, redirect to login (only if not already redirected)
+      if (error.response?.status === 401) {
+        setIsAuthenticated(false);
+        if (!hasRedirectedRef.current && !isNavigatingRef.current) {
+          hasRedirectedRef.current = true;
+          isNavigatingRef.current = true;
+          router.replace('/login');
+        }
+        return;
+      }
+      
       setOrders([]);
     }
-  }, []);
+  }, [isAuthenticated, router]);
 
   // ✅ Initial load (show full-screen loader only once)
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        await loadOrders();
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [loadOrders]);
+    // Only load orders if authenticated and auth check is complete
+    if (!checkingAuth && isAuthenticated) {
+      (async () => {
+        try {
+          setLoading(true);
+          await loadOrders();
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }
+  }, [loadOrders, checkingAuth, isAuthenticated]);
 
   // ✅ Auto refresh whenever tab/screen becomes active (best UX)
   useFocusEffect(
     useCallback(() => {
-      // don’t flash loader when user returns; just refresh silently
-      loadOrders();
-    }, [loadOrders])
+      // Only check auth and refresh if we haven't already redirected
+      if (hasRedirectedRef.current || isNavigatingRef.current) {
+        return;
+      }
+
+      // Check auth status when screen comes into focus
+      (async () => {
+        try {
+          const authenticated = await authService.isAuthenticated();
+          setIsAuthenticated(authenticated);
+          
+          if (!authenticated) {
+            if (!hasRedirectedRef.current && !isNavigatingRef.current) {
+              hasRedirectedRef.current = true;
+              isNavigatingRef.current = true;
+              router.replace('/login');
+            }
+            return;
+          }
+          
+          // Only refresh if authenticated
+          if (authenticated) {
+            loadOrders();
+          }
+        } catch (error) {
+          console.error('Error checking authentication on focus:', error);
+          if (!hasRedirectedRef.current && !isNavigatingRef.current) {
+            hasRedirectedRef.current = true;
+            isNavigatingRef.current = true;
+            router.replace('/login');
+          }
+        }
+      })();
+    }, [loadOrders, router])
   );
 
   // ✅ If you ever navigate with /orders?refresh=xyz it will reload
@@ -121,15 +220,28 @@ export default function OrdersScreen() {
     }
   }
 
-  if (loading) {
+  // Don't render anything if we've redirected (prevents double rendering)
+  if (hasRedirectedRef.current || isNavigatingRef.current) {
+    return null;
+  }
+
+  // Show loading while checking authentication
+  if (checkingAuth || loading) {
     return (
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color="#6200ee" />
-          <Text style={styles.loadingText}>Loading orders...</Text>
+          <Text style={styles.loadingText}>
+            {checkingAuth ? 'Checking authentication...' : 'Loading orders...'}
+          </Text>
         </View>
       </View>
     );
+  }
+
+  // Don't render anything if not authenticated (should redirect)
+  if (!isAuthenticated) {
+    return null;
   }
 
   const EmptyState = (

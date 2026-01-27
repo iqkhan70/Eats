@@ -25,7 +25,7 @@ export default function RootLayout() {
         />
         <Stack.Screen 
           name="login" 
-          options={{ title: 'Sign In', presentation: 'modal' }} 
+          options={{ title: 'Sign In' }} 
         />
         <Stack.Screen 
           name="register" 
