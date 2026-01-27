@@ -25,6 +25,7 @@ export default function CartScreen() {
   const [deliveryAddress, setDeliveryAddress] = useState(
     'Delivery is not available yet, might be available later based on customer needs. Pickup only!'
   );
+  const [specialInstructions, setSpecialInstructions] = useState('');
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -178,13 +179,18 @@ export default function CartScreen() {
     try {
       setPlacingOrder(true);
 
-      const orderId = await cartService.placeOrder(cart.cartId, deliveryAddress);
+      const orderId = await cartService.placeOrder(
+        cart.cartId,
+        deliveryAddress,
+        specialInstructions.trim() || undefined
+      );
 
       // Clear cart state immediately after successful order placement
       setCart(null);
       setDeliveryAddress(
         'Delivery is not available yet, might be available later based on customer needs. Pickup only!'
       );
+      setSpecialInstructions('');
 
       Alert.alert('Success', `Order placed! Order ID: ${orderId.substring(0, 8)}`, [
         {
@@ -325,6 +331,18 @@ export default function CartScreen() {
           </TouchableOpacity>
         )}
 
+      <View style={styles.deliverySection}>
+          <Text style={styles.deliveryLabel}>Special Instructions (Optional)</Text>
+          <TextInput
+            style={styles.deliveryInput}
+            placeholder="e.g., 'Cut with clean knife', 'I will pick it up around 3 PM CST', etc."
+            value={specialInstructions}
+            onChangeText={setSpecialInstructions}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+
         <View style={styles.deliverySection}>
           <Text style={styles.deliveryLabel}>Delivery Address</Text>
           <TextInput
@@ -336,6 +354,8 @@ export default function CartScreen() {
             multiline
           />
         </View>
+
+        
 
         <TouchableOpacity
           style={[

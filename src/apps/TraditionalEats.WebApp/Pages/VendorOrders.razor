@@ -178,6 +178,18 @@
                                     </RadzenStack>
                                 </RadzenStack>
 
+                                @if (!string.IsNullOrWhiteSpace(o.SpecialInstructions))
+                                {
+                                    <RadzenStack Gap="0.25rem">
+                                        <RadzenText TextStyle="TextStyle.Body2"><strong>Special Instructions</strong>
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body2"
+                                            Style="color: var(--rz-text-secondary-color); font-style: italic;">
+                                            @o.SpecialInstructions
+                                        </RadzenText>
+                                    </RadzenStack>
+                                }
+
                                 <RadzenStack Gap="0.25rem">
                                     <RadzenText TextStyle="TextStyle.Body2"><strong>Delivery Address</strong></RadzenText>
                                     <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
@@ -614,6 +626,7 @@
             CreatedAt = o.CreatedAt,
             CreatedAtLocal = o.CreatedAt.ToLocalTime(),
             DeliveryAddress = o.DeliveryAddress,
+            SpecialInstructions = o.SpecialInstructions,
             Total = o.Total,
             ItemsSummary = summary,
             StatusHistory = o.StatusHistory ?? new List<OrderStatusHistoryDto>()
@@ -694,6 +707,7 @@
         public string Status { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public string? DeliveryAddress { get; set; }
+        public string? SpecialInstructions { get; set; }
         public decimal Total { get; set; }
         public List<OrderItemDto> Items { get; set; } = new();
         public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
@@ -724,6 +738,7 @@
         public DateTime CreatedAt { get; set; }
         public DateTime CreatedAtLocal { get; set; }
         public string? DeliveryAddress { get; set; }
+        public string? SpecialInstructions { get; set; }
         public decimal Total { get; set; }
         public string ItemsSummary { get; set; } = "";
         public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();

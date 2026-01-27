@@ -43,6 +43,7 @@ interface Order {
   status: string;
   createdAt: string;
   deliveryAddress?: string;
+  specialInstructions?: string;
   total: number;
   items: OrderItem[];
   statusHistory?: OrderStatusHistory[];
@@ -473,6 +474,12 @@ export default function VendorOrdersScreen() {
                 ))}
               </View>
 
+              {order.specialInstructions && (
+                <View style={styles.specialInstructionsContainer}>
+                  <Text style={styles.specialInstructionsLabel}>Special Instructions:</Text>
+                  <Text style={styles.specialInstructionsText}>{order.specialInstructions}</Text>
+                </View>
+              )}
               {order.deliveryAddress && (
                 <Text style={styles.deliveryAddress}>📍 {order.deliveryAddress}</Text>
               )}

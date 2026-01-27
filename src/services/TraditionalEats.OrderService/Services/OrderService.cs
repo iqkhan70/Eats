@@ -17,7 +17,7 @@ public interface IOrderService
     Task RemoveCartItemAsync(Guid cartId, Guid cartItemId);
     Task ClearCartAsync(Guid cartId);
     Task<Guid> MergeCartsAsync(Guid guestCartId, Guid userCartId);
-    Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string idempotencyKey);
+    Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string? specialInstructions, string idempotencyKey);
     Task<Order?> GetOrderAsync(Guid orderId);
     Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId);
     Task<List<Order>> GetOrdersByRestaurantAsync(Guid restaurantId);
@@ -955,7 +955,7 @@ public class OrderService : IOrderService
         return userCartId;
     }
 
-    public async Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string idempotencyKey)
+    public async Task<Guid> PlaceOrderAsync(Guid cartId, Guid customerId, string deliveryAddress, string? specialInstructions, string idempotencyKey)
     {
         _logger.LogInformation("PlaceOrderAsync: Starting - CartId={CartId}, CustomerId={CustomerId}", cartId, customerId);
 
@@ -1056,6 +1056,7 @@ public class OrderService : IOrderService
             Status = "Pending",
             CreatedAt = DateTime.UtcNow,
             DeliveryAddress = deliveryAddress,
+            SpecialInstructions = specialInstructions,
             IdempotencyKey = idempotencyKey,
             Items = orderItems,
             StatusHistory = new List<OrderStatusHistory>

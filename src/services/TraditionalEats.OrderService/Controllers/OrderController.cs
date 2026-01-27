@@ -374,8 +374,8 @@ public class OrderController : ControllerBase
                 return BadRequest(new { message = "Invalid user ID format" });
             }
 
-            _logger.LogInformation("PlaceOrder: CartId={CartId}, CustomerId={CustomerId}, DeliveryAddress={DeliveryAddress}",
-                request.CartId, customerId, request.DeliveryAddress);
+            _logger.LogInformation("PlaceOrder: CartId={CartId}, CustomerId={CustomerId}, DeliveryAddress={DeliveryAddress}, SpecialInstructions={SpecialInstructions}",
+                request.CartId, customerId, request.DeliveryAddress, request.SpecialInstructions ?? "none");
 
             var idempotencyKey = request.IdempotencyKey ?? Guid.NewGuid().ToString();
 
@@ -383,6 +383,7 @@ public class OrderController : ControllerBase
                 request.CartId,
                 customerId,
                 request.DeliveryAddress,
+                request.SpecialInstructions,
                 idempotencyKey);
 
             _logger.LogInformation("PlaceOrder: Successfully placed order {OrderId} for customer {CustomerId}", orderId, customerId);
@@ -612,6 +613,7 @@ public record UpdateCartItemRequest(int Quantity);
 public record PlaceOrderRequest(
     Guid CartId,
     string DeliveryAddress,
+    string? SpecialInstructions,
     string? IdempotencyKey
 );
 

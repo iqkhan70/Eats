@@ -7,7 +7,8 @@
 
 <PageTitle>Orders - TraditionalEats</PageTitle>
 
-<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;"
+    Class="page-container">
     <RadzenText TextStyle="TextStyle.H1">My Orders</RadzenText>
 
     @if (loading)
@@ -21,7 +22,8 @@
             {
                 <RadzenCard>
                     <RadzenStack Gap="1rem">
-                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+                            AlignItems="AlignItems.Center">
                             <RadzenStack Gap="0.5rem">
                                 <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">
                                     Order #@order.OrderId.ToString().Substring(0, 8)
@@ -30,8 +32,7 @@
                                     @order.CreatedAt.ToString("MMM dd, yyyy HH:mm")
                                 </RadzenText>
                             </RadzenStack>
-                            <RadzenBadge Text="@order.Status" 
-                                       Style="@GetStatusStyle(order.Status)" />
+                            <RadzenBadge Text="@order.Status" Style="@GetStatusStyle(order.Status)" />
                         </RadzenStack>
 
                         <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
@@ -64,7 +65,8 @@
                                         </RadzenText>
                                     </RadzenStack>
                                 }
-                                <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); font-style: italic;">
+                                <RadzenText TextStyle="TextStyle.Body2"
+                                    Style="color: var(--rz-text-secondary-color); font-style: italic;">
                                     +@(order.Items.Count - 2) more items
                                 </RadzenText>
                             }
@@ -72,15 +74,16 @@
 
                         <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
 
-                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+                            AlignItems="AlignItems.Center">
                             <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">Total</RadzenText>
                             <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold; color: var(--rz-primary);">
                                 $@order.Total.ToString("F2")
                             </RadzenText>
                         </RadzenStack>
 
-                        <RadzenButton Text="View Details" Icon="info" Click="@(() => ViewOrderDetails(order.OrderId))" 
-                                     Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        <RadzenButton Text="View Details" Icon="info" Click="@(() => ViewOrderDetails(order.OrderId))"
+                            Variant="Variant.Flat" Size="ButtonSize.Small" />
                     </RadzenStack>
                 </RadzenCard>
             }
@@ -95,8 +98,8 @@
                 <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
                     Start ordering to see your order history here
                 </RadzenText>
-                <RadzenButton Text="Browse Restaurants" Icon="restaurant" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" 
-                             Variant="Variant.Flat" />
+                <RadzenButton Text="Browse Restaurants" Icon="restaurant"
+                    Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" />
             </RadzenStack>
         </RadzenCard>
     }
@@ -161,6 +164,7 @@
         public decimal Total { get; set; }
         public string Status { get; set; } = string.Empty;
         public string DeliveryAddress { get; set; } = string.Empty;
+        public string SpecialInstructions { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime? DeliveredAt { get; set; }
         public List<OrderItemDto> Items { get; set; } = new();

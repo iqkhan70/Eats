@@ -14,6 +14,7 @@ interface Order {
   total: number;
   status: string;
   deliveryAddress?: string;
+  specialInstructions?: string;
   createdAt: string;
   estimatedDeliveryAt?: string;
   deliveredAt?: string;
@@ -197,6 +198,16 @@ export default function OrderDetailsScreen() {
                 minute: '2-digit',
               })}
             </Text>
+          </View>
+        )}
+
+        {order.specialInstructions && (
+          <View style={[styles.infoRow, styles.specialInstructionsRow]}>
+            <Ionicons name="information-circle-outline" size={20} color="#ffc107" />
+            <View style={styles.specialInstructionsContent}>
+              <Text style={styles.specialInstructionsLabel}>Special Instructions</Text>
+              <Text style={[styles.infoText, styles.specialInstructionsText]}>{order.specialInstructions}</Text>
+            </View>
           </View>
         )}
 
@@ -402,6 +413,28 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  specialInstructionsRow: {
+    backgroundColor: '#fff3cd',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+    marginBottom: 8,
+  },
+  specialInstructionsContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  specialInstructionsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#856404',
+    marginBottom: 4,
+  },
+  specialInstructionsText: {
+    fontStyle: 'italic',
+    color: '#856404',
   },
   infoRow: {
     flexDirection: 'row',

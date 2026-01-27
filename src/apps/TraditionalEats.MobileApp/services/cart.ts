@@ -133,10 +133,11 @@ class CartService {
     await api.delete(`/MobileBff/cart/${cartId}`);
   }
 
-  async placeOrder(cartId: string, deliveryAddress: string): Promise<string> {
+  async placeOrder(cartId: string, deliveryAddress: string, specialInstructions?: string): Promise<string> {
     const response = await api.post<{ orderId: string }>('/MobileBff/orders/place', {
       cartId,
       deliveryAddress,
+      specialInstructions: specialInstructions || null,
       idempotencyKey: null,
     });
     return response.data.orderId;

@@ -413,6 +413,7 @@ public class WebBffController : ControllerBase
                                     Status = GetString(orderElement, "status", "Status") ?? "Pending",
                                     CreatedAt = GetDateTime(orderElement, "createdAt", "CreatedAt"),
                                     DeliveryAddress = GetString(orderElement, "deliveryAddress", "DeliveryAddress"),
+                                    SpecialInstructions = GetString(orderElement, "specialInstructions", "SpecialInstructions"),
                                     Total = GetDecimal(orderElement, "total", "Total"),
                                     Items = new List<OrderItemDto>(),
                                     StatusHistory = new List<OrderStatusHistoryDto>()
@@ -1524,6 +1525,7 @@ public record UpdateCartItemRequest(int Quantity);
 public record PlaceOrderRequest(
     Guid CartId,
     string DeliveryAddress,
+    string? SpecialInstructions,
     string? IdempotencyKey
 );
 
@@ -1543,6 +1545,7 @@ public class OrderDto
     public string Status { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public string? DeliveryAddress { get; set; }
+    public string? SpecialInstructions { get; set; }
     public decimal Total { get; set; }
     public List<OrderItemDto> Items { get; set; } = new();
     public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();

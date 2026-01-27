@@ -83,12 +83,13 @@ public class CartService
         await _httpClient.DeleteAsync($"WebBff/cart/{cartId}");
     }
 
-    public async Task<Guid> PlaceOrderAsync(Guid cartId, string deliveryAddress)
+    public async Task<Guid> PlaceOrderAsync(Guid cartId, string deliveryAddress, string? specialInstructions = null)
     {
         var request = new
         {
             CartId = cartId,
             DeliveryAddress = deliveryAddress,
+            SpecialInstructions = specialInstructions,
             IdempotencyKey = (string?)null
         };
         var response = await _httpClient.PostAsJsonAsync("WebBff/orders/place", request);

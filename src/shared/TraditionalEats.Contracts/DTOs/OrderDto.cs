@@ -10,7 +10,8 @@ public record OrderDto(
     DateTime CreatedAt,
     DateTime? EstimatedDeliveryAt,
     List<OrderItemDto> Items,
-    DeliveryAddressDto? DeliveryAddress
+    DeliveryAddressDto? DeliveryAddress,
+    string? SpecialInstructions
 );
 
 public record OrderItemDto(

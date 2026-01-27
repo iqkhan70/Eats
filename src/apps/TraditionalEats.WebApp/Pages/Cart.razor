@@ -85,6 +85,11 @@
                     <RadzenTextBox @bind-Value="@deliveryAddress" Placeholder="Enter your delivery address"
                         Disabled="true" />
                 </RadzenFormField>
+                <RadzenFormField Text="Special Instructions (Optional)" class="w-100">
+                    <RadzenTextArea @bind-Value="@specialInstructions" 
+                        Placeholder="e.g., 'Cut with clean knife', 'I will pick it up around 3 PM CST', etc."
+                        Rows="3" Style="width: 100%;" />
+                </RadzenFormField>
                 <RadzenButton Text="Place Order" Icon="shopping_cart" Click="@PlaceOrder" Variant="Variant.Filled"
                     IsLoading="@placingOrder" Disabled="@isPlaceOrderDisabled" Class="w-100" />
             </RadzenStack>
@@ -111,6 +116,7 @@
     private bool placingOrder = false;
     private CartDto? cart;
     private string deliveryAddress = "Delivery is not available yet, might be available later based on customer needs. Pickup only!";
+    private string specialInstructions = string.Empty;
     //string.Empty;
 
     private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress);
@@ -206,11 +212,13 @@
         try
         {
             placingOrder = true;
-            var orderId = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress);
+            var orderId = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress, 
+                string.IsNullOrWhiteSpace(specialInstructions) ? null : specialInstructions);
 
             // Clear cart state immediately after successful order placement
             cart = null;
             deliveryAddress = string.Empty;
+            specialInstructions = string.Empty;
 
             NotificationService.Notify(new NotificationMessage
             {

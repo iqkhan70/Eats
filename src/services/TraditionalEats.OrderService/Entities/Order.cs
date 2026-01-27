@@ -14,6 +14,7 @@ public class Order
     public DateTime? EstimatedDeliveryAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
     public string? DeliveryAddress { get; set; }
+    public string? SpecialInstructions { get; set; }
     public string? IdempotencyKey { get; set; }
 
     public List<OrderItem> Items { get; set; } = new();
