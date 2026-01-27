@@ -167,9 +167,35 @@ public class WebBffController : ControllerBase
     /// /api/WebBff/orders?restaurantId=...&skip=0&take=20&orderBy=CreatedAt%20desc&q=...
     /// Returns: { items: [...], totalCount: N }
     /// </summary>
+    // Customer orders endpoint (must come before vendor orders to avoid routing conflict)
     [HttpGet("orders")]
+    [Authorize]
+    public async Task<IActionResult> GetCustomerOrders()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            }
+
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting customer orders");
+            return StatusCode(500, new { error = "Failed to get orders" });
+        }
+    }
+
+    [HttpGet("vendor/orders")]
     [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> GetOrders(
+    public async Task<IActionResult> GetVendorOrders(
         [FromQuery] Guid? restaurantId,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
