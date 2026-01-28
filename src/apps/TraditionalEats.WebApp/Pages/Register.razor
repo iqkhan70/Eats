@@ -7,65 +7,67 @@
 
 <PageTitle>Register - TraditionalEats</PageTitle>
 
-<RadzenStack Gap="1.5rem"
-    Style="padding: 1rem; max-width: 400px; margin: 2rem auto; width: 100%; box-sizing: border-box;">
-    <RadzenText TextStyle="TextStyle.H1">Create Account</RadzenText>
-    <RadzenText TextStyle="TextStyle.Body1">Sign up for TraditionalEats</RadzenText>
+<div style="min-height: 100vh; padding: 1rem; display: flex; align-items: center; justify-content: center;">
+    <RadzenStack Gap="1.5rem" Style="max-width: 400px; width: 100%; box-sizing: border-box;">
+        <RadzenText TextStyle="TextStyle.H1">Create Account</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body1">Sign up for TraditionalEats</RadzenText>
 
-    <RadzenCard>
-        <RadzenStack Gap="1rem">
-            <RadzenFormField Text="First Name" class="w-100">
-                <RadzenTextBox @bind-Value="@firstName" Placeholder="Enter your first name" Style="width: 100%;" />
-            </RadzenFormField>
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenFormField Text="First Name" class="w-100">
+                    <RadzenTextBox @bind-Value="@firstName" Placeholder="Enter your first name" Style="width: 100%;" />
+                </RadzenFormField>
 
-            <RadzenFormField Text="Last Name" class="w-100">
-                <RadzenTextBox @bind-Value="@lastName" Placeholder="Enter your last name" Style="width: 100%;" />
-            </RadzenFormField>
+                <RadzenFormField Text="Last Name" class="w-100">
+                    <RadzenTextBox @bind-Value="@lastName" Placeholder="Enter your last name" Style="width: 100%;" />
+                </RadzenFormField>
 
-            <RadzenFormField Text="Display Name (Optional)" class="w-100">
-                <RadzenTextBox @bind-Value="@displayName" Placeholder="How you want to be displayed"
-                    Style="width: 100%;" />
-            </RadzenFormField>
+                <RadzenFormField Text="Display Name (Optional)" class="w-100">
+                    <RadzenTextBox @bind-Value="@displayName" Placeholder="How you want to be displayed"
+                        Style="width: 100%;" />
+                </RadzenFormField>
 
-            <RadzenFormField Text="Email" class="w-100">
-                <RadzenTextBox @bind-Value="@email" Placeholder="Enter your email" Type="email" Style="width: 100%;" />
-            </RadzenFormField>
+                <RadzenFormField Text="Email" class="w-100">
+                    <RadzenTextBox @bind-Value="@email" Placeholder="Enter your email" Type="email"
+                        Style="width: 100%;" />
+                </RadzenFormField>
 
-            <RadzenFormField Text="Phone Number *" class="w-100">
-                <RadzenTextBox @bind-Value="@phoneNumber" Placeholder="Enter your phone number (required)"
-                    Style="width: 100%;" />
-            </RadzenFormField>
+                <RadzenFormField Text="Phone Number *" class="w-100">
+                    <RadzenTextBox @bind-Value="@phoneNumber" Placeholder="Enter your phone number (required)"
+                        Style="width: 100%;" />
+                </RadzenFormField>
 
-            <RadzenFormField Text="Password" class="w-100">
-                <RadzenPassword @bind-Value="@password" Placeholder="Enter your password" Style="width: 100%;" />
-            </RadzenFormField>
+                <RadzenFormField Text="Password" class="w-100">
+                    <RadzenPassword @bind-Value="@password" Placeholder="Enter your password" Style="width: 100%;" />
+                </RadzenFormField>
 
-            <RadzenFormField Text="Confirm Password" class="w-100">
-                <RadzenPassword @bind-Value="@confirmPassword" Placeholder="Confirm your password"
-                    Style="width: 100%;" />
-            </RadzenFormField>
+                <RadzenFormField Text="Confirm Password" class="w-100">
+                    <RadzenPassword @bind-Value="@confirmPassword" Placeholder="Confirm your password"
+                        Style="width: 100%;" />
+                </RadzenFormField>
 
-            @if (!string.IsNullOrEmpty(errorMessage))
-            {
-                <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
-            }
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+                }
 
-            @if (!string.IsNullOrEmpty(successMessage))
-            {
-                <RadzenAlert AlertStyle="AlertStyle.Success" Title="Success" Text="@successMessage" />
-            }
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Success" Title="Success" Text="@successMessage" />
+                }
 
-            <RadzenButton Text="Register" Icon="person_add" Click="@HandleRegister" Variant="Variant.Filled"
-                Style="width: 100%;" IsBusy="@loading" />
+                <RadzenButton Text="Register" Icon="person_add" Click="@HandleRegister" Variant="Variant.Filled"
+                    Style="width: 100%;" IsBusy="@loading" />
 
-            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem">
-                <RadzenText TextStyle="TextStyle.Body2">Already have an account?</RadzenText>
-                <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))"
-                    Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem">
+                    <RadzenText TextStyle="TextStyle.Body2">Already have an account?</RadzenText>
+                    <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))"
+                        Variant="Variant.Flat" Size="ButtonSize.Small" />
+                </RadzenStack>
             </RadzenStack>
-        </RadzenStack>
-    </RadzenCard>
-</RadzenStack>
+        </RadzenCard>
+    </RadzenStack>
+</div>
 
 @code {
     private string firstName = string.Empty;
