@@ -234,7 +234,7 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
           placeholderTextColor="#999"
           value={input}
           onChangeText={setInput}
-          editable={!sending}
+          editable={true}
           multiline
           maxLength={2000}
           onFocus={() => setTimeout(() => scrollToBottom(true), 60)}
