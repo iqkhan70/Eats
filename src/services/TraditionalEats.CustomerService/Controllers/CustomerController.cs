@@ -30,7 +30,8 @@ public class CustomerController : ControllerBase
                 request.FirstName,
                 request.LastName,
                 request.Email,
-                request.PhoneNumber);
+                request.PhoneNumber ?? string.Empty,
+                null);
 
             return Ok(new { customerId });
         }
@@ -63,7 +64,8 @@ public class CustomerController : ControllerBase
                 request.FirstName,
                 request.LastName,
                 request.Email,
-                request.PhoneNumber);
+                request.PhoneNumber,
+                request.DisplayName);
 
             return Ok(new { customerId, alreadyExists = false });
         }
@@ -166,4 +168,4 @@ public class CustomerController : ControllerBase
 }
 
 public record CreateCustomerRequest(string FirstName, string LastName, string Email, string? PhoneNumber);
-public record CreateCustomerInternalRequest(Guid UserId, string FirstName, string LastName, string Email, string? PhoneNumber);
+public record CreateCustomerInternalRequest(Guid UserId, string FirstName, string LastName, string Email, string PhoneNumber, string? DisplayName);

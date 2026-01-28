@@ -9,7 +9,7 @@ public record CustomerInfoDto(Guid CustomerId, Guid UserId, string FirstName, st
 
 public interface ICustomerService
 {
-    Task<Guid> CreateCustomerAsync(Guid userId, string firstName, string lastName, string email, string? phoneNumber);
+    Task<Guid> CreateCustomerAsync(Guid userId, string firstName, string lastName, string email, string phoneNumber, string? displayName = null);
     Task<Customer?> GetCustomerByUserIdAsync(Guid userId);
     Task<CustomerInfoDto?> GetCustomerInfoByUserIdAsync(Guid userId);
     Task<Guid> AddAddressAsync(Guid customerId, AddressDto address);
@@ -32,7 +32,7 @@ public class CustomerService : ICustomerService
         _logger = logger;
     }
 
-    public async Task<Guid> CreateCustomerAsync(Guid userId, string firstName, string lastName, string email, string? phoneNumber)
+    public async Task<Guid> CreateCustomerAsync(Guid userId, string firstName, string lastName, string email, string phoneNumber, string? displayName = null)
     {
         var customerId = Guid.NewGuid();
 
@@ -40,6 +40,7 @@ public class CustomerService : ICustomerService
         {
             CustomerId = customerId,
             UserId = userId,
+            DisplayName = displayName,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -50,9 +51,9 @@ public class CustomerService : ICustomerService
             FirstNameEnc = _encryption.Encrypt(firstName),
             LastNameEnc = _encryption.Encrypt(lastName),
             EmailEnc = _encryption.Encrypt(email),
-            PhoneEnc = phoneNumber != null ? _encryption.Encrypt(phoneNumber) : null,
+            PhoneEnc = !string.IsNullOrWhiteSpace(phoneNumber) ? _encryption.Encrypt(phoneNumber) : null,
             EmailHash = _encryption.HashForSearch(email),
-            PhoneHash = phoneNumber != null ? _encryption.HashForSearch(phoneNumber) : null,
+            PhoneHash = !string.IsNullOrWhiteSpace(phoneNumber) ? _encryption.HashForSearch(phoneNumber) : null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

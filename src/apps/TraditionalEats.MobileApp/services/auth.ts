@@ -7,9 +7,12 @@ export interface LoginCredentials {
 }
 
 export interface RegisterCredentials {
+  firstName: string;
+  lastName: string;
+  displayName?: string;
   email: string;
   password: string;
-  phoneNumber?: string;
+  phoneNumber: string;
 }
 
 export interface AuthResponse {

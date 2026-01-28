@@ -22,6 +22,9 @@ public class AuthController : ControllerBase
         try
         {
             var success = await _authService.RegisterAsync(
+                request.FirstName,
+                request.LastName,
+                request.DisplayName,
                 request.Email,
                 request.PhoneNumber,
                 request.Password,
@@ -117,7 +120,7 @@ public class AuthController : ControllerBase
         try
         {
             var success = await _authService.AssignRoleAsync(request.Email, request.Role);
-            
+
             if (!success)
             {
                 return BadRequest(new { message = "User not found or role assignment failed" });
@@ -139,7 +142,7 @@ public class AuthController : ControllerBase
         try
         {
             var success = await _authService.RemoveRoleAsync(request.Email, request.Role);
-            
+
             if (!success)
             {
                 return BadRequest(new { message = "User not found, role revocation failed, or cannot remove last role" });
@@ -171,7 +174,7 @@ public class AuthController : ControllerBase
     }
 }
 
-public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
+public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);

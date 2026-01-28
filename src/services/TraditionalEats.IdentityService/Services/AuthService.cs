@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Net.Http.Json;
 using TraditionalEats.BuildingBlocks.Redis;
+using TraditionalEats.BuildingBlocks.Encryption;
 using TraditionalEats.IdentityService.Data;
 using TraditionalEats.IdentityService.Entities;
 
@@ -16,7 +17,7 @@ public interface IAuthService
 {
     Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password, string? ipAddress);
     Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken);
-    Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer");
+    Task<bool> RegisterAsync(string firstName, string lastName, string? displayName, string email, string phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
     Task<bool> AssignRoleAsync(string email, string role);
     Task<bool> RemoveRoleAsync(string email, string role);
@@ -31,19 +32,22 @@ public class AuthService : IAuthService
     private readonly ILogger<AuthService> _logger;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPiiEncryptionService _encryption;
 
     public AuthService(
         IdentityDbContext context,
         IRedisService redis,
         IConfiguration configuration,
         ILogger<AuthService> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IPiiEncryptionService encryption)
     {
         _context = context;
         _redis = redis;
         _configuration = configuration;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _encryption = encryption;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -156,7 +160,7 @@ public class AuthService : IAuthService
         return (accessToken, newRefreshToken);
     }
 
-    public async Task<bool> RegisterAsync(string email, string? phoneNumber, string password, string role = "Customer")
+    public async Task<bool> RegisterAsync(string firstName, string lastName, string? displayName, string email, string phoneNumber, string password, string role = "Customer")
     {
         // Case-insensitive email check
         if (await _context.Users.AnyAsync(u => u.Email.ToLower() == email.ToLower()))
@@ -168,7 +172,7 @@ public class AuthService : IAuthService
         {
             Id = Guid.NewGuid(),
             Email = email.ToLower(), // Store email in lowercase for consistency
-            PhoneNumber = phoneNumber,
+            PhoneNumber = !string.IsNullOrWhiteSpace(phoneNumber) ? _encryption.Encrypt(phoneNumber) : null, // Encrypt phone in Identity
             Status = "Active",
             CreatedAt = DateTime.UtcNow
         };
@@ -201,16 +205,14 @@ public class AuthService : IAuthService
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(customerServiceUrl);
 
-            var firstName = email.Split('@', 2)[0]; // basic default; can be improved later
-            var lastName = string.Empty;
-
             var response = await client.PostAsJsonAsync("/api/customer/internal", new
             {
                 UserId = user.Id,
                 FirstName = firstName,
                 LastName = lastName,
                 Email = email,
-                PhoneNumber = phoneNumber
+                PhoneNumber = phoneNumber,
+                DisplayName = displayName
             });
 
             if (!response.IsSuccessStatusCode)

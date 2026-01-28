@@ -1601,7 +1601,7 @@ public record PlaceOrderRequest(
     string? IdempotencyKey
 );
 
-public record RegisterRequest(string Email, string? PhoneNumber, string Password, string? Role);
+public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);

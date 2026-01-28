@@ -7,18 +7,33 @@
 
 <PageTitle>Register - TraditionalEats</PageTitle>
 
-<RadzenStack Gap="1.5rem" Style="padding: 1rem; max-width: 400px; margin: 2rem auto; width: 100%; box-sizing: border-box;">
+<RadzenStack Gap="1.5rem"
+    Style="padding: 1rem; max-width: 400px; margin: 2rem auto; width: 100%; box-sizing: border-box;">
     <RadzenText TextStyle="TextStyle.H1">Create Account</RadzenText>
     <RadzenText TextStyle="TextStyle.Body1">Sign up for TraditionalEats</RadzenText>
 
     <RadzenCard>
         <RadzenStack Gap="1rem">
+            <RadzenFormField Text="First Name" class="w-100">
+                <RadzenTextBox @bind-Value="@firstName" Placeholder="Enter your first name" Style="width: 100%;" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Last Name" class="w-100">
+                <RadzenTextBox @bind-Value="@lastName" Placeholder="Enter your last name" Style="width: 100%;" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Display Name (Optional)" class="w-100">
+                <RadzenTextBox @bind-Value="@displayName" Placeholder="How you want to be displayed"
+                    Style="width: 100%;" />
+            </RadzenFormField>
+
             <RadzenFormField Text="Email" class="w-100">
                 <RadzenTextBox @bind-Value="@email" Placeholder="Enter your email" Type="email" Style="width: 100%;" />
             </RadzenFormField>
 
-            <RadzenFormField Text="Phone Number (Optional)" class="w-100">
-                <RadzenTextBox @bind-Value="@phoneNumber" Placeholder="Enter your phone number" Style="width: 100%;" />
+            <RadzenFormField Text="Phone Number *" class="w-100">
+                <RadzenTextBox @bind-Value="@phoneNumber" Placeholder="Enter your phone number (required)"
+                    Style="width: 100%;" />
             </RadzenFormField>
 
             <RadzenFormField Text="Password" class="w-100">
@@ -26,7 +41,8 @@
             </RadzenFormField>
 
             <RadzenFormField Text="Confirm Password" class="w-100">
-                <RadzenPassword @bind-Value="@confirmPassword" Placeholder="Confirm your password" Style="width: 100%;" />
+                <RadzenPassword @bind-Value="@confirmPassword" Placeholder="Confirm your password"
+                    Style="width: 100%;" />
             </RadzenFormField>
 
             @if (!string.IsNullOrEmpty(errorMessage))
@@ -39,17 +55,22 @@
                 <RadzenAlert AlertStyle="AlertStyle.Success" Title="Success" Text="@successMessage" />
             }
 
-            <RadzenButton Text="Register" Icon="person_add" Click="@HandleRegister" Variant="Variant.Filled" Style="width: 100%;" IsBusy="@loading" />
+            <RadzenButton Text="Register" Icon="person_add" Click="@HandleRegister" Variant="Variant.Filled"
+                Style="width: 100%;" IsBusy="@loading" />
 
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem">
                 <RadzenText TextStyle="TextStyle.Body2">Already have an account?</RadzenText>
-                <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))"
+                    Variant="Variant.Flat" Size="ButtonSize.Small" />
             </RadzenStack>
         </RadzenStack>
     </RadzenCard>
 </RadzenStack>
 
 @code {
+    private string firstName = string.Empty;
+    private string lastName = string.Empty;
+    private string displayName = string.Empty;
     private string email = string.Empty;
     private string phoneNumber = string.Empty;
     private string password = string.Empty;
@@ -63,9 +84,21 @@
         errorMessage = string.Empty;
         successMessage = string.Empty;
 
+        if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+        {
+            errorMessage = "Please enter your first and last name";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
             errorMessage = "Please enter email and password";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            errorMessage = "Phone number is required for order notifications";
             return;
         }
 
@@ -85,14 +118,17 @@
         {
             loading = true;
 
-            var request = new 
-            { 
-                Email = email, 
-                PhoneNumber = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber, 
+            var request = new
+            {
+                FirstName = firstName,
+                LastName = lastName,
+                DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName,
+                Email = email,
+                PhoneNumber = phoneNumber,
                 Password = password,
                 Role = (string?)null
             };
-            
+
             var response = await Http.PostAsJsonAsync("WebBff/auth/register", request);
 
             if (response.IsSuccessStatusCode)

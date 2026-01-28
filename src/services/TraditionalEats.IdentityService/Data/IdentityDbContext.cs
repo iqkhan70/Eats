@@ -26,7 +26,7 @@ public class IdentityDbContext : DbContext
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.PhoneNumber);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.PhoneNumber).HasMaxLength(20);
+            entity.Property(e => e.PhoneNumber).HasMaxLength(500); // Increased to accommodate encrypted phone (base64 JSON envelope)
             entity.Property(e => e.Status).HasMaxLength(50);
         });
 

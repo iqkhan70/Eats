@@ -5,6 +5,7 @@ using System.Text;
 using TraditionalEats.BuildingBlocks.Observability;
 using TraditionalEats.BuildingBlocks.Redis;
 using TraditionalEats.BuildingBlocks.Messaging;
+using TraditionalEats.BuildingBlocks.Encryption;
 using TraditionalEats.BuildingBlocks.Configuration;
 using TraditionalEats.IdentityService.Data;
 using TraditionalEats.IdentityService.Services;
@@ -65,6 +66,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("VendorOnly", policy => policy.RequireRole("Vendor", "Admin"));
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
 });
+
+// PII Encryption (for encrypting phone in Identity)
+builder.Services.AddScoped<IPiiEncryptionService, PiiEncryptionService>();
 
 // Application services
 builder.Services.AddScoped<IAuthService, AuthService>();
