@@ -42,24 +42,24 @@ public class ChatService : IChatService
             using var orderDoc = System.Text.Json.JsonDocument.Parse(orderJson);
             var root = orderDoc.RootElement;
 
-            // Extract customer ID and restaurant ID from order
-            var customerId = root.TryGetProperty("customerId", out var customerIdProp) 
-                ? customerIdProp.GetString() 
-                : null;
-            var restaurantId = root.TryGetProperty("restaurantId", out var restaurantIdProp) 
-                ? restaurantIdProp.GetString() 
-                : null;
+            // Extract customer ID and restaurant ID (support both camelCase and PascalCase from OrderService)
+            var customerId = root.TryGetProperty("customerId", out var cProp) ? cProp.GetString()
+                : root.TryGetProperty("CustomerId", out var cPProp) ? cPProp.GetString() : null;
+            var restaurantId = root.TryGetProperty("restaurantId", out var rProp) ? rProp.GetString()
+                : root.TryGetProperty("RestaurantId", out var rPProp) ? rPProp.GetString() : null;
 
-            // Verify access based on role
-            if (userRole == "Customer")
+            var role = userRole?.Trim() ?? string.Empty;
+
+            // Verify access based on role (case-insensitive)
+            if (string.Equals(role, "Customer", StringComparison.OrdinalIgnoreCase))
             {
                 // Customer can only access their own orders
                 return customerId != null && Guid.TryParse(customerId, out var custId) && custId == userId;
             }
-            else if (userRole == "Vendor" || userRole == "Admin")
+            else if (string.Equals(role, "Vendor", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
             {
                 // Vendor/Admin can access if they own the restaurant or are admin
-                if (userRole == "Admin")
+                if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
                 {
                     return true; // Admins can access all orders
                 }
@@ -69,19 +69,20 @@ public class ChatService : IChatService
                 {
                     var restaurantClient = _httpClientFactory.CreateClient("RestaurantService");
                     var restaurantResponse = await restaurantClient.GetAsync($"/api/restaurant/{restId}");
-                    
+
                     if (restaurantResponse.IsSuccessStatusCode)
                     {
                         var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
                         using var restaurantDoc = System.Text.Json.JsonDocument.Parse(restaurantJson);
                         var restaurantRoot = restaurantDoc.RootElement;
-                        
-                        // Check if restaurant has vendorId matching userId
-                        var vendorId = restaurantRoot.TryGetProperty("vendorId", out var vendorIdProp) 
-                            ? vendorIdProp.GetString() 
-                            : null;
-                        
-                        return vendorId != null && Guid.TryParse(vendorId, out var vendorGuid) && vendorGuid == userId;
+
+                        // RestaurantService uses OwnerId (not VendorId); support both camelCase and PascalCase
+                        var ownerId = restaurantRoot.TryGetProperty("ownerId", out var oProp) ? oProp.GetString()
+                            : restaurantRoot.TryGetProperty("OwnerId", out var oPProp) ? oPProp.GetString()
+                            : restaurantRoot.TryGetProperty("vendorId", out var vProp) ? vProp.GetString()
+                            : restaurantRoot.TryGetProperty("VendorId", out var vPProp) ? vPProp.GetString() : null;
+
+                        return ownerId != null && Guid.TryParse(ownerId, out var ownerGuid) && ownerGuid == userId;
                     }
                 }
             }
@@ -90,10 +91,22 @@ public class ChatService : IChatService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error verifying order access for order {OrderId}, user {UserId}, role {Role}", 
+            _logger.LogError(ex, "Error verifying order access for order {OrderId}, user {UserId}, role {Role}",
                 orderId, userId, userRole);
             return false;
         }
+    }
+
+    public async Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles)
+    {
+        if (userRoles == null) return false;
+        foreach (var role in userRoles)
+        {
+            if (string.IsNullOrWhiteSpace(role)) continue;
+            var hasAccess = await VerifyOrderAccessAsync(orderId, userId, role.Trim());
+            if (hasAccess) return true;
+        }
+        return false;
     }
 
     public async Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string message)
@@ -112,7 +125,7 @@ public class ChatService : IChatService
         _context.Messages.Add(chatMessage);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Saved chat message {MessageId} for order {OrderId} from {SenderId} ({Role})", 
+        _logger.LogInformation("Saved chat message {MessageId} for order {OrderId} from {SenderId} ({Role})",
             chatMessage.MessageId, orderId, senderId, senderRole);
 
         return chatMessage;
@@ -124,7 +137,7 @@ public class ChatService : IChatService
         var hasAccess = await VerifyOrderAccessAsync(orderId, userId, userRole);
         if (!hasAccess)
         {
-            _logger.LogWarning("User {UserId} ({Role}) attempted to access messages for order {OrderId} without permission", 
+            _logger.LogWarning("User {UserId} ({Role}) attempted to access messages for order {OrderId} without permission",
                 userId, userRole, orderId);
             return new List<ChatMessage>();
         }
@@ -134,6 +147,27 @@ public class ChatService : IChatService
             .OrderBy(m => m.SentAt)
             .ToListAsync();
 
+        return messages;
+    }
+
+    public async Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles)
+    {
+        if (userRoles == null || !userRoles.Any())
+        {
+            _logger.LogWarning("User {UserId} attempted to access messages for order {OrderId} with no roles", userId, orderId);
+            return new List<ChatMessage>();
+        }
+        var hasAccess = await VerifyOrderAccessAsync(orderId, userId, userRoles);
+        if (!hasAccess)
+        {
+            _logger.LogWarning("User {UserId} attempted to access messages for order {OrderId} without permission",
+                userId, orderId);
+            return new List<ChatMessage>();
+        }
+        var messages = await _context.Messages
+            .Where(m => m.OrderId == orderId)
+            .OrderBy(m => m.SentAt)
+            .ToListAsync();
         return messages;
     }
 
@@ -175,7 +209,7 @@ public class ChatService : IChatService
         if (unreadMessages.Any())
         {
             await _context.SaveChangesAsync();
-            _logger.LogInformation("Marked {Count} messages as read for order {OrderId} by user {UserId}", 
+            _logger.LogInformation("Marked {Count} messages as read for order {OrderId} by user {UserId}",
                 unreadMessages.Count, orderId, userId);
         }
     }
@@ -205,8 +239,8 @@ public class ChatService : IChatService
         var lastReadAt = participant.LastReadAt ?? participant.JoinedAt;
 
         var unreadCount = await _context.Messages
-            .CountAsync(m => m.OrderId == orderId 
-                && m.SenderId != userId 
+            .CountAsync(m => m.OrderId == orderId
+                && m.SenderId != userId
                 && m.SentAt > lastReadAt);
 
         return unreadCount;

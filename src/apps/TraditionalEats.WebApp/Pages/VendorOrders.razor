@@ -147,6 +147,14 @@
                             </Template>
                         </RadzenDataGridColumn>
 
+                        <RadzenDataGridColumn TItem="OrderRowDto" Title="Chat" Width="100px" Sortable="false"
+                            Filterable="false">
+                            <Template Context="o">
+                                <RadzenButton Icon="chat" Text="Chat" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                    Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}"))" />
+                            </Template>
+                        </RadzenDataGridColumn>
+
                         <RadzenDataGridColumn TItem="OrderRowDto" Property="Total" Title="Total" Width="120px"
                             Sortable="true" Filterable="true">
                             <Template Context="o">
@@ -223,6 +231,13 @@
                                             — No history yet
                                         </RadzenText>
                                     }
+                                </RadzenStack>
+
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem"
+                                    AlignItems="AlignItems.Center">
+                                    <RadzenButton Icon="chat" Text="Open order & chat" Variant="Variant.Outlined"
+                                        Size="ButtonSize.Small"
+                                        Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}"))" />
                                 </RadzenStack>
 
                             </RadzenStack>

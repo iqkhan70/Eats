@@ -10,7 +10,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { api } from "../../services/api";
-import OrderChat from "../../components/OrderChat";
 
 interface Order {
   orderId: string;
@@ -298,8 +297,19 @@ export default function OrderDetailsScreen() {
         </View>
       )}
 
-      {/* Order Chat */}
-      <OrderChat orderId={params.orderId!} />
+      {/* Chat – opens on its own screen to save space */}
+      <TouchableOpacity
+        style={styles.chatCard}
+        onPress={() => router.push(`/orders/chat/${params.orderId}`)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="chatbubbles" size={24} color="#6200ee" />
+        <View style={styles.chatCardText}>
+          <Text style={styles.chatCardTitle}>Order Chat</Text>
+          <Text style={styles.chatCardSubtitle}>Message about this order</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#999" />
+      </TouchableOpacity>
 
       {/* Order Items */}
       <View style={styles.card}>
@@ -513,6 +523,33 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     marginBottom: 12,
+  },
+  chatCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chatCardText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  chatCardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  chatCardSubtitle: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
   },
   timeline: {
     marginTop: 8,

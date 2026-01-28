@@ -24,15 +24,20 @@ public class ChatController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var userRole = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
                 return Unauthorized(new { message = "User ID claim is missing" });
             }
 
-            var messages = await _chatService.GetOrderMessagesAsync(orderId, userId, userRole);
+            var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+            userRoles.AddRange(User.FindAll("role").Select(c => c.Value).Where(v => !userRoles.Contains(v, StringComparer.OrdinalIgnoreCase)));
+            if (userRoles.Count == 0)
+            {
+                return Unauthorized(new { message = "User role claim is missing" });
+            }
+
+            var messages = await _chatService.GetOrderMessagesAsync(orderId, userId, userRoles);
             return Ok(messages);
         }
         catch (Exception ex)

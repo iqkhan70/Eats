@@ -52,22 +52,23 @@ public class OrderChatHub : Hub
             return;
         }
 
-        var userRole = GetUserRole();
-        if (string.IsNullOrEmpty(userRole))
+        var userRoles = GetUserRoles();
+        if (userRoles == null || !userRoles.Any())
         {
             await Clients.Caller.SendAsync("Error", "Unable to determine user role");
             return;
         }
 
-        // Verify user has access to this order
-        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRole);
+        // Verify user has access to this order (any role: Customer, Vendor, or Admin)
+        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles);
         if (!hasAccess)
         {
             await Clients.Caller.SendAsync("Error", "You don't have access to this order's chat");
             return;
         }
 
-        // Add user to the order chat group
+        // Add user to the order chat group (use first role for participant label)
+        var userRole = userRoles.First();
         var groupName = GetOrderGroupName(orderId);
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
 
@@ -117,8 +118,8 @@ public class OrderChatHub : Hub
             return;
         }
 
-        var userRole = GetUserRole();
-        if (string.IsNullOrEmpty(userRole))
+        var userRoles = GetUserRoles();
+        if (userRoles == null || !userRoles.Any())
         {
             await Clients.Caller.SendAsync("Error", "Unable to determine user role");
             return;
@@ -130,13 +131,15 @@ public class OrderChatHub : Hub
             return;
         }
 
-        // Verify user has access to this order
-        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRole);
+        // Verify user has access to this order (any role: Customer, Vendor, or Admin)
+        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles);
         if (!hasAccess)
         {
             await Clients.Caller.SendAsync("Error", "You don't have access to this order's chat");
             return;
         }
+
+        var userRole = userRoles.First();
 
         // Save message to database
         var chatMessage = await _chatService.SaveMessageAsync(orderId, userId.Value, userRole, message);
@@ -164,11 +167,11 @@ public class OrderChatHub : Hub
         var userId = GetUserId();
         if (userId == null) return;
 
-        var userRole = GetUserRole();
-        if (string.IsNullOrEmpty(userRole)) return;
+        var userRoles = GetUserRoles();
+        if (userRoles == null || !userRoles.Any()) return;
 
-        // Verify access
-        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRole);
+        // Verify access (any role: Customer, Vendor, or Admin)
+        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles);
         if (!hasAccess) return;
 
         // Mark messages as read
@@ -180,7 +183,9 @@ public class OrderChatHub : Hub
 
     private Guid? GetUserId()
     {
-        var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // Try NameIdentifier first, then "sub" (standard JWT subject claim)
+        var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? Context.User?.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
             return null;
@@ -190,7 +195,24 @@ public class OrderChatHub : Hub
 
     private string GetUserRole()
     {
-        return Context.User?.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+        var roles = GetUserRoles();
+        return roles?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private List<string> GetUserRoles()
+    {
+        var list = new List<string>();
+        if (Context.User == null) return list;
+        foreach (var claim in Context.User.FindAll(ClaimTypes.Role))
+        {
+            if (!string.IsNullOrWhiteSpace(claim.Value)) list.Add(claim.Value.Trim());
+        }
+        foreach (var claim in Context.User.FindAll("role"))
+        {
+            if (!string.IsNullOrWhiteSpace(claim.Value) && !list.Contains(claim.Value.Trim(), StringComparer.OrdinalIgnoreCase))
+                list.Add(claim.Value.Trim());
+        }
+        return list;
     }
 
     private static string GetOrderGroupName(Guid orderId) => $"order_chat_{orderId}";

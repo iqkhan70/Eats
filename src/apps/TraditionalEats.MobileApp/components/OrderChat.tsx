@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+// components/OrderChat.tsx (full updated component with keyboard-safe layout)
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,8 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -49,15 +48,19 @@ function formatTime(iso: string): string {
 
 interface OrderChatProps {
   orderId: string;
+  /** When true, chat uses full height (dedicated chat screen). */
+  fullScreen?: boolean;
 }
 
-export default function OrderChat({ orderId }: OrderChatProps) {
+export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+
+  const scrollRef = useRef<ScrollView | null>(null);
 
   const loadMessages = useCallback(async () => {
     try {
@@ -74,6 +77,19 @@ export default function OrderChat({ orderId }: OrderChatProps) {
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  // Keep scrolled to bottom
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
+
+  useEffect(() => {
+    // scroll on new messages / first load
+    const t = setTimeout(() => scrollToBottom(true), 50);
+    return () => clearTimeout(t);
+  }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
     let mounted = true;
@@ -112,10 +128,12 @@ export default function OrderChat({ orderId }: OrderChatProps) {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || !connected || sending) return;
+
     setSending(true);
     try {
       await sendChatMessage(orderId, text);
       setInput("");
+      scrollToBottom(true);
     } catch (e: any) {
       setError(e?.message || "Failed to send");
     } finally {
@@ -124,7 +142,7 @@ export default function OrderChat({ orderId }: OrderChatProps) {
   };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, fullScreen && styles.cardFullScreen]}>
       <View style={styles.header}>
         <Ionicons name="chatbubbles" size={22} color="#333" />
         <Text style={styles.title}>Order Chat</Text>
@@ -140,93 +158,103 @@ export default function OrderChat({ orderId }: OrderChatProps) {
           </Text>
         </View>
       </View>
+
       {error ? (
         <Text style={styles.errorText} numberOfLines={2}>
           {error}
         </Text>
       ) : null}
 
-      {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color="#6200ee" />
-          <Text style={styles.loadingText}>Loading messages...</Text>
-        </View>
-      ) : messages.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="chatbubble-outline" size={40} color="#999" />
-          <Text style={styles.emptyText}>
-            No messages yet. Start the conversation!
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.messagesScroll}
-          contentContainerStyle={styles.messagesContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {messages.map((msg) => {
-            const isYou = msg.senderRole === "Customer";
-            return (
-              <View
-                key={
-                  msg.messageId || `${msg.sentAt}-${msg.message?.slice(0, 10)}`
-                }
-                style={[
-                  styles.messageBubble,
-                  isYou ? styles.messageBubbleOwn : styles.messageBubbleOther,
-                ]}
-              >
-                <View style={styles.messageMeta}>
-                  <Text style={styles.messageSender}>
-                    {getSenderLabel(msg)}
-                  </Text>
-                  <Text style={styles.messageTime}>
-                    {formatTime(msg.sentAt)}
-                  </Text>
-                </View>
-                <Text style={styles.messageBody}>{msg.message}</Text>
-              </View>
-            );
-          })}
-        </ScrollView>
-      )}
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      {/* Messages area: flex so it shrinks when keyboard opens */}
+      <View
+        style={[
+          styles.messagesContainer,
+          fullScreen && styles.messagesContainerFullScreen,
+        ]}
       >
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder={
-              connected
-                ? "Type your message..."
-                : "Sign in and connect to chat..."
-            }
-            placeholderTextColor="#999"
-            value={input}
-            onChangeText={setInput}
-            editable={!sending}
-            multiline
-            maxLength={2000}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!connected || !input.trim() || sending) &&
-                styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!connected || !input.trim() || sending}
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color="#6200ee" />
+            <Text style={styles.loadingText}>Loading messages...</Text>
+          </View>
+        ) : messages.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="chatbubble-outline" size={40} color="#999" />
+            <Text style={styles.emptyText}>
+              No messages yet. Start the conversation!
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            style={styles.messagesScroll}
+            contentContainerStyle={styles.messagesContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+            onContentSizeChange={() => scrollToBottom(false)}
           >
-            {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#fff" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+            {messages.map((msg) => {
+              const isYou = msg.senderRole === "Customer";
+              return (
+                <View
+                  key={
+                    msg.messageId ||
+                    `${msg.sentAt}-${msg.message?.slice(0, 10)}`
+                  }
+                  style={[
+                    styles.messageBubble,
+                    isYou ? styles.messageBubbleOwn : styles.messageBubbleOther,
+                  ]}
+                >
+                  <View style={styles.messageMeta}>
+                    <Text style={styles.messageSender}>
+                      {getSenderLabel(msg)}
+                    </Text>
+                    <Text style={styles.messageTime}>
+                      {formatTime(msg.sentAt)}
+                    </Text>
+                  </View>
+                  <Text style={styles.messageBody}>{msg.message}</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* Input row: stays above keyboard because screen wraps with KeyboardAvoidingView */}
+      <View style={styles.inputRow}>
+        <TextInput
+          style={styles.input}
+          placeholder={
+            connected
+              ? "Type your message..."
+              : "Sign in and connect to chat..."
+          }
+          placeholderTextColor="#999"
+          value={input}
+          onChangeText={setInput}
+          editable={!sending}
+          multiline
+          maxLength={2000}
+          onFocus={() => setTimeout(() => scrollToBottom(true), 60)}
+        />
+        <TouchableOpacity
+          style={[
+            styles.sendButton,
+            (!connected || !input.trim() || sending) &&
+              styles.sendButtonDisabled,
+          ]}
+          onPress={handleSend}
+          disabled={!connected || !input.trim() || sending}
+        >
+          {sending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="send" size={20} color="#fff" />
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -243,39 +271,19 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginLeft: 8,
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginLeft: "auto",
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
+  cardFullScreen: { flex: 1, marginBottom: 0 },
+
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  title: { fontSize: 18, fontWeight: "600", color: "#333", marginLeft: 8 },
+
+  badge: { flexDirection: "row", alignItems: "center", marginLeft: "auto" },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   dotConnected: { backgroundColor: "#28a745" },
   dotDisconnected: { backgroundColor: "#6c757d" },
-  badgeText: {
-    fontSize: 12,
-    color: "#666",
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#dc3545",
-    marginBottom: 8,
-  },
+  badgeText: { fontSize: 12, color: "#666" },
+
+  errorText: { fontSize: 12, color: "#dc3545", marginBottom: 8 },
+
   loadingBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -284,55 +292,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: { fontSize: 14, color: "#666" },
-  emptyBox: {
-    alignItems: "center",
-    padding: 24,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#999",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  messagesScroll: {
-    maxHeight: 240,
-  },
-  messagesContent: {
-    paddingVertical: 8,
-  },
+
+  emptyBox: { alignItems: "center", padding: 24 },
+  emptyText: { fontSize: 14, color: "#999", marginTop: 8, textAlign: "center" },
+
+  messagesContainer: { maxHeight: 240, minHeight: 120 },
+  messagesContainerFullScreen: { flex: 1, maxHeight: undefined, minHeight: 0 },
+
+  messagesScroll: { flex: 1 },
+  messagesContent: { paddingVertical: 8 },
+
   messageBubble: {
     padding: 10,
     borderRadius: 10,
     marginBottom: 8,
     maxWidth: "85%",
   },
-  messageBubbleOwn: {
-    alignSelf: "flex-end",
-    backgroundColor: "#e8e0f7",
-  },
-  messageBubbleOther: {
-    alignSelf: "flex-start",
-    backgroundColor: "#f0f0f0",
-  },
-  messageMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  messageSender: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#555",
-  },
-  messageTime: {
-    fontSize: 11,
-    color: "#888",
-    marginLeft: 8,
-  },
-  messageBody: {
-    fontSize: 14,
-    color: "#333",
-  },
+  messageBubbleOwn: { alignSelf: "flex-end", backgroundColor: "#e8e0f7" },
+  messageBubbleOther: { alignSelf: "flex-start", backgroundColor: "#f0f0f0" },
+
+  messageMeta: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  messageSender: { fontSize: 12, fontWeight: "600", color: "#555" },
+  messageTime: { fontSize: 11, color: "#888", marginLeft: 8 },
+  messageBody: { fontSize: 14, color: "#333" },
+
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -359,7 +342,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sendButtonDisabled: {
-    backgroundColor: "#ccc",
-  },
+  sendButtonDisabled: { backgroundColor: "#ccc" },
 });
