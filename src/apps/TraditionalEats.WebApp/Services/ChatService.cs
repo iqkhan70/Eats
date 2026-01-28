@@ -43,9 +43,11 @@ public class ChatService : IAsyncDisposable
             }
 
             _hubConnection = new HubConnectionBuilder()
-                .WithUrl($"{hubUrl}?access_token={token}", options =>
+                .WithUrl(hubUrl, options =>
                 {
                     options.AccessTokenProvider = async () => await _authService.GetAccessTokenAsync() ?? string.Empty;
+                    options.SkipNegotiation = false;
+                    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
                 })
                 .WithAutomaticReconnect()
                 .Build();

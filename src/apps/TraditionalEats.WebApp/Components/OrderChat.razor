@@ -215,6 +215,7 @@
             sendingMessage = true;
             var messageText = newMessage.Trim();
             newMessage = string.Empty;
+            StateHasChanged();
 
             await ChatService.SendMessageAsync(OrderId, messageText);
         }
@@ -225,6 +226,7 @@
         finally
         {
             sendingMessage = false;
+            StateHasChanged();
         }
     }
 
@@ -290,8 +292,12 @@
     }
 
     [JSInvokable]
-    public async Task SendMessageFromJs()
+    public async Task SendMessageFromJs(string? textFromTextarea)
     {
+        if (!string.IsNullOrWhiteSpace(textFromTextarea))
+        {
+            newMessage = textFromTextarea;
+        }
         await SendMessage();
     }
 

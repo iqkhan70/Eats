@@ -51,7 +51,11 @@
                     if (ev.key === 'Enter' && !ev.shiftKey) {
                         ev.preventDefault();
                         ev.stopPropagation();
-                        dotNetRef.invokeMethodAsync('SendMessageFromJs');
+                        var text = textarea.value ? textarea.value.trim() : '';
+                        if (text) {
+                            textarea.value = '';
+                            dotNetRef.invokeMethodAsync('SendMessageFromJs', text);
+                        }
                     }
                 });
                 return true;
