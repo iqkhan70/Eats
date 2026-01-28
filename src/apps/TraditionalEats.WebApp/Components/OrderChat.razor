@@ -229,6 +229,8 @@
 
     private string GetSenderLabel(ChatMessage message)
     {
+        if (!string.IsNullOrWhiteSpace(message.SenderDisplayName))
+            return message.SenderDisplayName.Trim();
         return message.SenderRole switch
         {
             "Customer" => "You",

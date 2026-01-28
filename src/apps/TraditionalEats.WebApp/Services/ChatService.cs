@@ -220,6 +220,7 @@ public class ChatMessage
     public Guid OrderId { get; set; }
     public Guid SenderId { get; set; }
     public string SenderRole { get; set; } = string.Empty;
+    public string? SenderDisplayName { get; set; }
     public string Message { get; set; } = string.Empty;
     public DateTime SentAt { get; set; }
     public bool IsRead { get; set; }

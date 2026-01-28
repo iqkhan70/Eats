@@ -109,7 +109,7 @@ public class ChatService : IChatService
         return false;
     }
 
-    public async Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string message)
+    public async Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string? senderDisplayName, string message)
     {
         var chatMessage = new ChatMessage
         {
@@ -117,6 +117,7 @@ public class ChatService : IChatService
             OrderId = orderId,
             SenderId = senderId,
             SenderRole = senderRole,
+            SenderDisplayName = senderDisplayName,
             Message = message,
             SentAt = DateTime.UtcNow,
             IsRead = false

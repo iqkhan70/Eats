@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import {
   getOrderChatMessages,
@@ -21,7 +22,19 @@ import {
   type ChatMessage,
 } from "../services/chat";
 
+function isAuthError(message: string): boolean {
+  const lower = (message || "").toLowerCase();
+  return (
+    lower.includes("sign in") ||
+    lower.includes("unauthorized") ||
+    lower.includes("401") ||
+    lower.includes("expired") ||
+    lower.includes("token")
+  );
+}
+
 function getSenderLabel(msg: ChatMessage): string {
+  if (msg.senderDisplayName?.trim()) return msg.senderDisplayName.trim();
   switch (msg.senderRole) {
     case "Customer":
       return "You";
@@ -53,6 +66,7 @@ interface OrderChatProps {
 }
 
 export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -61,18 +75,24 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
   const [sending, setSending] = useState(false);
 
   const scrollRef = useRef<ScrollView | null>(null);
+  const hasRedirectedRef = useRef(false);
 
   const loadMessages = useCallback(async () => {
     try {
       setLoading(true);
       const list = await getOrderChatMessages(orderId);
       setMessages(list);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.response?.status === 401 && !hasRedirectedRef.current) {
+        hasRedirectedRef.current = true;
+        router.replace("/login");
+        return;
+      }
       console.error("Load chat messages:", e);
     } finally {
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, router]);
 
   useEffect(() => {
     loadMessages();
@@ -101,10 +121,14 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
     };
 
     const onError = (err: string) => {
-      if (mounted) {
-        setError(err);
-        setConnected(false);
+      if (!mounted) return;
+      if (isAuthError(err) && !hasRedirectedRef.current) {
+        hasRedirectedRef.current = true;
+        router.replace("/login");
+        return;
       }
+      setError(err);
+      setConnected(false);
     };
 
     const onState = (isConnected: boolean) => {
@@ -118,7 +142,14 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
           joinOrderChat(orderId)
             .then(() => markChatMessagesRead(orderId))
             .catch((e) => {
-              if (mounted) console.warn("Chat join/read:", e?.message ?? e);
+              if (!mounted) return;
+              const msg = String(e?.message ?? e);
+              if (isAuthError(msg) && !hasRedirectedRef.current) {
+                hasRedirectedRef.current = true;
+                router.replace("/login");
+                return;
+              }
+              console.warn("Chat join/read:", msg);
             });
         }
       })
@@ -131,7 +162,7 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
       leaveOrderChat(orderId).catch(() => {});
       disconnectChatHub().catch(() => {});
     };
-  }, [orderId]);
+  }, [orderId, router]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -143,7 +174,13 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
       setInput("");
       scrollToBottom(true);
     } catch (e: any) {
-      setError(e?.message || "Failed to send");
+      const msg = e?.message || "Failed to send";
+      if (isAuthError(msg) && !hasRedirectedRef.current) {
+        hasRedirectedRef.current = true;
+        router.replace("/login");
+        return;
+      }
+      setError(msg);
     } finally {
       setSending(false);
     }

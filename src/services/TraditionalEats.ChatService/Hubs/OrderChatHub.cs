@@ -140,9 +140,10 @@ public class OrderChatHub : Hub
         }
 
         var userRole = userRoles.First();
+        var senderDisplayName = GetSenderDisplayName();
 
         // Save message to database
-        var chatMessage = await _chatService.SaveMessageAsync(orderId, userId.Value, userRole, message);
+        var chatMessage = await _chatService.SaveMessageAsync(orderId, userId.Value, userRole, senderDisplayName, message);
 
         // Broadcast to all participants in the order chat group
         var groupName = GetOrderGroupName(orderId);
@@ -152,6 +153,7 @@ public class OrderChatHub : Hub
             OrderId = chatMessage.OrderId,
             SenderId = chatMessage.SenderId,
             SenderRole = chatMessage.SenderRole,
+            SenderDisplayName = chatMessage.SenderDisplayName,
             Message = chatMessage.Message,
             SentAt = chatMessage.SentAt
         });
@@ -213,6 +215,20 @@ public class OrderChatHub : Hub
                 list.Add(claim.Value.Trim());
         }
         return list;
+    }
+
+    private string? GetSenderDisplayName()
+    {
+        if (Context.User == null) return null;
+        var name = Context.User.FindFirst(ClaimTypes.Name)?.Value
+            ?? Context.User.FindFirst("name")?.Value;
+        var email = Context.User.FindFirst(ClaimTypes.Email)?.Value
+            ?? Context.User.FindFirst("email")?.Value
+            ?? Context.User.FindFirst("preferred_username")?.Value
+            ?? Context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
+        if (!string.IsNullOrWhiteSpace(name)) return name.Trim();
+        if (!string.IsNullOrWhiteSpace(email)) return email.Trim();
+        return null;
     }
 
     private static string GetOrderGroupName(Guid orderId) => $"order_chat_{orderId}";

@@ -25,6 +25,7 @@ public class ChatDbContext : DbContext
             entity.Property(e => e.OrderId).HasColumnName("order_id").IsRequired();
             entity.Property(e => e.SenderId).HasColumnName("sender_id").IsRequired();
             entity.Property(e => e.SenderRole).HasColumnName("sender_role").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SenderDisplayName).HasColumnName("sender_display_name").HasMaxLength(256);
             entity.Property(e => e.Message).HasColumnName("message").HasColumnType("TEXT").IsRequired();
             entity.Property(e => e.SentAt).HasColumnName("sent_at").IsRequired();
             entity.Property(e => e.IsRead).HasColumnName("is_read").HasDefaultValue(false);

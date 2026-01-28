@@ -12,6 +12,8 @@ export interface ChatMessage {
   orderId: string;
   senderId: string;
   senderRole: string;
+  /** User's display name or email (when available from backend). */
+  senderDisplayName?: string;
   message: string;
   sentAt: string;
 }
@@ -71,6 +73,7 @@ export async function connectChatHub(
           orderId: msg.orderId ?? '',
           senderId: msg.senderId ?? '',
           senderRole: msg.senderRole ?? '',
+          senderDisplayName: (msg as { senderDisplayName?: string }).senderDisplayName,
           message: msg.message ?? '',
           sentAt: msg.sentAt ?? new Date().toISOString(),
         });

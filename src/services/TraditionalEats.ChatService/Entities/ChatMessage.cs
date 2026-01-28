@@ -6,6 +6,7 @@ public class ChatMessage
     public Guid OrderId { get; set; }
     public Guid SenderId { get; set; }
     public string SenderRole { get; set; } = string.Empty; // "Customer", "Vendor", "Admin"
+    public string? SenderDisplayName { get; set; } // User's name or email for display
     public string Message { get; set; } = string.Empty;
     public DateTime SentAt { get; set; } = DateTime.UtcNow;
     public bool IsRead { get; set; } = false;
