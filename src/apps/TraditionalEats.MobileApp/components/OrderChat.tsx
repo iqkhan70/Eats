@@ -111,17 +111,25 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
       if (mounted) setConnected(isConnected);
     };
 
-    connectChatHub(onMessage, onError, onState).then((ok) => {
-      if (ok && mounted) {
-        setError(null);
-        joinOrderChat(orderId).then(() => markChatMessagesRead(orderId));
-      }
-    });
+    connectChatHub(onMessage, onError, onState)
+      .then((ok) => {
+        if (ok && mounted) {
+          setError(null);
+          joinOrderChat(orderId)
+            .then(() => markChatMessagesRead(orderId))
+            .catch((e) => {
+              if (mounted) console.warn("Chat join/read:", e?.message ?? e);
+            });
+        }
+      })
+      .catch((e) => {
+        if (mounted) console.warn("Chat connect:", e?.message ?? e);
+      });
 
     return () => {
       mounted = false;
-      leaveOrderChat(orderId);
-      disconnectChatHub();
+      leaveOrderChat(orderId).catch(() => {});
+      disconnectChatHub().catch(() => {});
     };
   }, [orderId]);
 
