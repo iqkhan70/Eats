@@ -1,0 +1,32 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "ChatDb": "server=localhost;port=3306;database=traditional_eats_chat;user=root;password=YOUR_PASSWORD;"
+  },
+  "Jwt": {
+    "Secret": "YourSuperSecretKeyThatIsAtLeast32CharactersLong!",
+    "Issuer": "TraditionalEats",
+    "Audience": "TraditionalEats"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://0.0.0.0:5012"
+      }
+    }
+  },
+  "HttpClients": {
+    "OrderService": {
+      "BaseAddress": "http://localhost:5002"
+    },
+    "RestaurantService": {
+      "BaseAddress": "http://localhost:5007"
+    }
+  }
+}

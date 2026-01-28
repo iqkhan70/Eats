@@ -19,6 +19,7 @@ builder.Services.AddScoped<ContextMenuService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<CartSessionService>();
 builder.Services.AddScoped<CartService>();
+builder.Services.AddScoped<ChatService>();
 
 // HTTP Client for API calls
 // Automatically uses current host (works for both localhost and IP access)

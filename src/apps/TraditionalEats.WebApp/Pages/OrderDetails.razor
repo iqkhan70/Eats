@@ -2,6 +2,7 @@
 @using Radzen
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
+@using TraditionalEats.WebApp.Components
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 
@@ -111,6 +112,9 @@
                     </RadzenStack>
                 </RadzenCard>
             }
+
+            <!-- Order Chat -->
+            <OrderChat OrderId="@Guid.Parse(OrderId)" />
 
             <!-- Order Items -->
             <RadzenCard>

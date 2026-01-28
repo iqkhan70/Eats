@@ -11,7 +11,8 @@
     "PromotionService": "http://localhost:5008",
     "ReviewService": "http://localhost:5009",
     "SupportService": "http://localhost:5010",
-    "AIService": "http://localhost:5011"
+    "AIService": "http://localhost:5011",
+    "ChatService": "http://localhost:5012"
   },
   "Kestrel": {
     "Endpoints": {

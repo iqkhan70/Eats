@@ -1,0 +1,263 @@
+@using Microsoft.Extensions.Configuration
+@using Radzen
+@using Radzen.Blazor
+@using TraditionalEats.WebApp.Services
+@inject ChatService ChatService
+@inject AuthService AuthService
+@inject IConfiguration Configuration
+@inject ILogger<OrderChat> Logger
+
+<RadzenCard Style="max-height: 500px; display: flex; flex-direction: column;">
+    <RadzenStack Gap="1rem" Style="flex: 1; overflow: hidden;">
+        <!-- Chat Header -->
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+            AlignItems="AlignItems.Center">
+            <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">
+                <RadzenIcon Icon="chat" Style="margin-right: 0.5rem;" />
+                Order Chat
+            </RadzenText>
+            @if (isConnected)
+            {
+                <RadzenBadge Text="Connected" Variant="Variant.Flat" BadgeStyle="BadgeStyle.Success"
+                    Size="BadgeSize.Small" />
+            }
+            else
+            {
+                <RadzenBadge Text="Disconnected" Variant="Variant.Flat" BadgeStyle="BadgeStyle.Light"
+                    Size="BadgeSize.Small" />
+                @if (!string.IsNullOrEmpty(connectionError))
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger); margin-left: 0.5rem;">
+                        @connectionError</RadzenText>
+                }
+            }
+        </RadzenStack>
+
+        <!-- Messages Area -->
+        <div style="flex: 1; overflow-y: auto; border: 1px solid var(--rz-border-color); border-radius: 4px; padding: 1rem; background-color: var(--rz-base-background-color);"
+            @ref="messagesContainer">
+            @if (loadingMessages)
+            {
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            }
+            else if (!messages.Any())
+            {
+                <RadzenStack Gap="0.5rem" Style="align-items: center; padding: 2rem;">
+                    <RadzenIcon Icon="chat_bubble_outline"
+                        Style="font-size: 48px; color: var(--rz-text-secondary-color);" />
+                    <RadzenText TextStyle="TextStyle.Body1"
+                        Style="color: var(--rz-text-secondary-color); text-align: center;">
+                        No messages yet. Start the conversation!
+                    </RadzenText>
+                </RadzenStack>
+            }
+            else
+            {
+                <RadzenStack Gap="1rem">
+                    @foreach (var message in messages)
+                    {
+                        <div style="@GetMessageStyle(message)">
+                            <RadzenStack Gap="0.25rem">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                    <RadzenText TextStyle="TextStyle.Body2"
+                                        Style="font-weight: bold; color: var(--rz-text-secondary-color);">
+                                        @GetSenderLabel(message)
+                                    </RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body2"
+                                        Style="color: var(--rz-text-secondary-color); font-size: 0.75rem;">
+                                        @message.SentAt.ToString("HH:mm")
+                                    </RadzenText>
+                                </RadzenStack>
+                                <RadzenText TextStyle="TextStyle.Body1" Style="white-space: pre-wrap; word-wrap: break-word;">
+                                    @message.Message
+                                </RadzenText>
+                            </RadzenStack>
+                        </div>
+                    }
+                </RadzenStack>
+            }
+        </div>
+
+        <!-- Input Area: typing allowed when disconnected; Send disabled until connected -->
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.End">
+            <RadzenTextArea @bind-Value="@newMessage"
+                Placeholder="@(isConnected ? "Type your message..." : "Sign in and connect to chat...")" Rows="2"
+                Style="flex: 1;" Disabled="@sendingMessage"
+                @onkeypress="@(async (e) => { if (e.Key == "Enter" && !e.ShiftKey) { await SendMessage(); } })" />
+            <RadzenButton Icon="send" Text="Send" Click="@SendMessage"
+                Disabled="@(!isConnected || string.IsNullOrWhiteSpace(newMessage) || sendingMessage)"
+                Variant="Variant.Filled" />
+        </RadzenStack>
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    [Parameter]
+    public Guid OrderId { get; set; }
+
+    private List<ChatMessage> messages = new();
+    private string newMessage = string.Empty;
+    private bool loadingMessages = true;
+    private bool sendingMessage = false;
+    private bool isConnected = false;
+    private string connectionError = string.Empty;
+    private ElementReference messagesContainer;
+    private Guid? currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get current user ID
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            currentUserId = await AuthService.GetUserIdAsync();
+        }
+
+        // Load existing messages
+        await LoadMessages();
+
+        // Hub URL from config (default: ChatService on port 5012)
+        var hubUrl = Configuration["ChatHubUrl"] ?? "http://localhost:5012/chatHub";
+        ChatService.MessageReceived += OnMessageReceived;
+        ChatService.Error += OnError;
+        ChatService.ConnectionStateChanged += OnConnectionStateChanged;
+
+        connectionError = string.Empty;
+        await ChatService.ConnectAsync(hubUrl);
+        isConnected = ChatService.IsConnected;
+
+        if (isConnected)
+        {
+            await ChatService.JoinOrderChatAsync(OrderId);
+            await ChatService.MarkMessagesAsReadAsync(OrderId);
+        }
+        else if (string.IsNullOrEmpty(token))
+        {
+            connectionError = "Sign in to chat.";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ScrollToBottom();
+        }
+    }
+
+    private async Task LoadMessages()
+    {
+        try
+        {
+            loadingMessages = true;
+            messages = await ChatService.GetMessagesAsync(OrderId);
+            await ScrollToBottom();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading chat messages");
+        }
+        finally
+        {
+            loadingMessages = false;
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(newMessage) || !isConnected || sendingMessage)
+        {
+            return;
+        }
+
+        try
+        {
+            sendingMessage = true;
+            var messageText = newMessage.Trim();
+            newMessage = string.Empty;
+
+            await ChatService.SendMessageAsync(OrderId, messageText);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error sending message");
+        }
+        finally
+        {
+            sendingMessage = false;
+        }
+    }
+
+    private void OnMessageReceived(ChatMessage message)
+    {
+        if (message.OrderId == OrderId)
+        {
+            messages.Add(message);
+            InvokeAsync(async () =>
+            {
+                await ScrollToBottom();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void OnError(string error)
+    {
+        Logger.LogWarning("Chat error: {Error}", error);
+        isConnected = false;
+        connectionError = error;
+        StateHasChanged();
+    }
+
+    private void OnConnectionStateChanged(bool connected)
+    {
+        isConnected = connected;
+        if (connected) connectionError = string.Empty;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetMessageStyle(ChatMessage message)
+    {
+        var isOwnMessage = currentUserId.HasValue && message.SenderId == currentUserId.Value;
+        var bg = isOwnMessage ? "var(--rz-primary-lighter)" : "var(--rz-base-100)";
+        var ml = isOwnMessage ? "auto" : "0";
+        var mr = isOwnMessage ? "0" : "auto";
+        return "padding: 0.75rem; border-radius: 8px; background-color: " + bg + "; " +
+        "margin-left: " + ml + "; margin-right: " + mr + "; " +
+        "max-width: 70%; border: 1px solid var(--rz-border-color);";
+    }
+
+    private string GetSenderLabel(ChatMessage message)
+    {
+        return message.SenderRole switch
+        {
+            "Customer" => "You",
+            "Vendor" => "Vendor",
+            "Admin" => "Admin",
+            _ => "Unknown"
+        };
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await Task.Delay(100); // Small delay to ensure DOM is updated
+                                   // Note: Blazor doesn't have direct scroll control, but the browser will auto-scroll
+                                   // if we're at the bottom. For better UX, we could use JS interop.
+        }
+        catch { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (ChatService != null)
+        {
+            ChatService.MessageReceived -= OnMessageReceived;
+            ChatService.Error -= OnError;
+            ChatService.ConnectionStateChanged -= OnConnectionStateChanged;
+            await ChatService.LeaveOrderChatAsync(OrderId);
+            await ChatService.DisconnectAsync();
+        }
+    }
+}

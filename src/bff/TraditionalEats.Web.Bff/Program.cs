@@ -124,7 +124,14 @@ builder.Services.AddHttpClient("CatalogService", client =>
 
 builder.Services.AddHttpClient("RestaurantService", client =>
 {
+    client.Timeout = TimeSpan.FromSeconds(30);
     client.BaseAddress = new Uri(builder.Configuration["Services:RestaurantService"] ?? "http://localhost:5007");
+});
+
+builder.Services.AddHttpClient("ChatService", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.BaseAddress = new Uri(builder.Configuration["Services:ChatService"] ?? "http://localhost:5012");
 });
 
 builder.Services.AddHttpClient("PaymentService", client =>

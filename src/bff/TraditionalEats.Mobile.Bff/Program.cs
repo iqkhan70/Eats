@@ -123,6 +123,11 @@ builder.Services.AddHttpClient("ReviewService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
 });
 
+builder.Services.AddHttpClient("ChatService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:ChatService"] ?? "http://localhost:5012");
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())

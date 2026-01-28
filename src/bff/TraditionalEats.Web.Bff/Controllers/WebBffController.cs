@@ -1368,6 +1368,52 @@ public class WebBffController : ControllerBase
         }
     }
 
+    // ----------------------------
+    // Chat endpoints
+    // ----------------------------
+
+    [HttpGet("orders/{orderId}/chat/messages")]
+    [Authorize]
+    public async Task<IActionResult> GetOrderChatMessages(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/Chat/orders/{orderId}/messages");
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting chat messages for order {OrderId}", orderId);
+            return StatusCode(500, new { error = "Failed to get chat messages" });
+        }
+    }
+
+    [HttpGet("orders/{orderId}/chat/unread-count")]
+    [Authorize]
+    public async Task<IActionResult> GetOrderChatUnreadCount(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/Chat/orders/{orderId}/unread-count");
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting unread count for order {OrderId}", orderId);
+            return StatusCode(500, new { error = "Failed to get unread count" });
+        }
+    }
+
 
     [HttpPut("orders/{orderId}/status")]
     [Authorize(Roles = "Vendor,Admin")]

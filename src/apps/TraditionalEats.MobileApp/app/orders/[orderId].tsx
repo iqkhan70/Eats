@@ -1,8 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { api } from '../../services/api';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { api } from "../../services/api";
+import OrderChat from "../../components/OrderChat";
 
 interface Order {
   orderId: string;
@@ -56,10 +64,12 @@ export default function OrderDetailsScreen() {
   const loadOrder = async () => {
     try {
       setLoading(true);
-      const response = await api.get<Order>(`/MobileBff/orders/${params.orderId}`);
+      const response = await api.get<Order>(
+        `/MobileBff/orders/${params.orderId}`,
+      );
       setOrder(response.data);
     } catch (error: any) {
-      console.error('Error loading order:', error);
+      console.error("Error loading order:", error);
       setOrder(null);
     } finally {
       setLoading(false);
@@ -68,43 +78,43 @@ export default function OrderDetailsScreen() {
 
   const getStatusColor = (status: string): string => {
     switch (status) {
-      case 'Pending':
-        return '#fff3cd';
-      case 'Confirmed':
-        return '#d1ecf1';
-      case 'Preparing':
-        return '#d4edda';
-      case 'Ready':
-        return '#cce5ff';
-      case 'OutForDelivery':
-        return '#e2e3e5';
-      case 'Delivered':
-        return '#d4edda';
-      case 'Cancelled':
-        return '#f8d7da';
+      case "Pending":
+        return "#fff3cd";
+      case "Confirmed":
+        return "#d1ecf1";
+      case "Preparing":
+        return "#d4edda";
+      case "Ready":
+        return "#cce5ff";
+      case "OutForDelivery":
+        return "#e2e3e5";
+      case "Delivered":
+        return "#d4edda";
+      case "Cancelled":
+        return "#f8d7da";
       default:
-        return '#e9ecef';
+        return "#e9ecef";
     }
   };
 
   const getStatusTextColor = (status: string): string => {
     switch (status) {
-      case 'Pending':
-        return '#856404';
-      case 'Confirmed':
-        return '#0c5460';
-      case 'Preparing':
-        return '#155724';
-      case 'Ready':
-        return '#004085';
-      case 'OutForDelivery':
-        return '#383d41';
-      case 'Delivered':
-        return '#155724';
-      case 'Cancelled':
-        return '#721c24';
+      case "Pending":
+        return "#856404";
+      case "Confirmed":
+        return "#0c5460";
+      case "Preparing":
+        return "#155724";
+      case "Ready":
+        return "#004085";
+      case "OutForDelivery":
+        return "#383d41";
+      case "Delivered":
+        return "#155724";
+      case "Cancelled":
+        return "#721c24";
       default:
-        return '#495057';
+        return "#495057";
     }
   };
 
@@ -135,7 +145,8 @@ export default function OrderDetailsScreen() {
           <Ionicons name="alert-circle-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>Order Not Found</Text>
           <Text style={styles.emptySubtext}>
-            The order you're looking for doesn't exist or you don't have permission to view it.
+            The order you're looking for doesn't exist or you don't have
+            permission to view it.
           </Text>
           <TouchableOpacity
             style={styles.backButton}
@@ -149,13 +160,17 @@ export default function OrderDetailsScreen() {
   }
 
   const sortedStatusHistory = order.statusHistory
-    ? [...order.statusHistory].sort((a, b) => 
-        new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime()
+    ? [...order.statusHistory].sort(
+        (a, b) =>
+          new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
       )
     : [];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backIcon}>
@@ -169,19 +184,32 @@ export default function OrderDetailsScreen() {
       <View style={styles.card}>
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order #{order.orderId.substring(0, 8)}</Text>
+            <Text style={styles.orderId}>
+              Order #{order.orderId.substring(0, 8)}
+            </Text>
             <Text style={styles.orderDate}>
-              Placed on {new Date(order.createdAt).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
+              Placed on{" "}
+              {new Date(order.createdAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
               })}
             </Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-            <Text style={[styles.statusText, { color: getStatusTextColor(order.status) }]}>
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusColor(order.status) },
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                { color: getStatusTextColor(order.status) },
+              ]}
+            >
               {order.status}
             </Text>
           </View>
@@ -191,11 +219,12 @@ export default function OrderDetailsScreen() {
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={20} color="#666" />
             <Text style={styles.infoText}>
-              Estimated delivery: {new Date(order.estimatedDeliveryAt).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
+              Estimated delivery:{" "}
+              {new Date(order.estimatedDeliveryAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
               })}
             </Text>
           </View>
@@ -203,10 +232,18 @@ export default function OrderDetailsScreen() {
 
         {order.specialInstructions && (
           <View style={[styles.infoRow, styles.specialInstructionsRow]}>
-            <Ionicons name="information-circle-outline" size={20} color="#ffc107" />
+            <Ionicons
+              name="information-circle-outline"
+              size={20}
+              color="#ffc107"
+            />
             <View style={styles.specialInstructionsContent}>
-              <Text style={styles.specialInstructionsLabel}>Special Instructions</Text>
-              <Text style={[styles.infoText, styles.specialInstructionsText]}>{order.specialInstructions}</Text>
+              <Text style={styles.specialInstructionsLabel}>
+                Special Instructions
+              </Text>
+              <Text style={[styles.infoText, styles.specialInstructionsText]}>
+                {order.specialInstructions}
+              </Text>
             </View>
           </View>
         )}
@@ -227,21 +264,32 @@ export default function OrderDetailsScreen() {
             {sortedStatusHistory.map((statusEntry, index) => (
               <View key={statusEntry.id} style={styles.timelineItem}>
                 <View style={styles.timelineLine}>
-                  <View style={[styles.timelineDot, { backgroundColor: '#6200ee' }]} />
-                  {index < sortedStatusHistory.length - 1 && <View style={styles.timelineConnector} />}
+                  <View
+                    style={[styles.timelineDot, { backgroundColor: "#6200ee" }]}
+                  />
+                  {index < sortedStatusHistory.length - 1 && (
+                    <View style={styles.timelineConnector} />
+                  )}
                 </View>
                 <View style={styles.timelineContent}>
-                  <Text style={styles.timelineStatus}>{statusEntry.status}</Text>
+                  <Text style={styles.timelineStatus}>
+                    {statusEntry.status}
+                  </Text>
                   <Text style={styles.timelineDate}>
-                    {new Date(statusEntry.changedAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {new Date(statusEntry.changedAt).toLocaleDateString(
+                      "en-US",
+                      {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )}
                   </Text>
                   {statusEntry.notes && (
-                    <Text style={styles.timelineNotes}>{statusEntry.notes}</Text>
+                    <Text style={styles.timelineNotes}>
+                      {statusEntry.notes}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -249,6 +297,9 @@ export default function OrderDetailsScreen() {
           </View>
         </View>
       )}
+
+      {/* Order Chat */}
+      <OrderChat orderId={params.orderId!} />
 
       {/* Order Items */}
       <View style={styles.card}>
@@ -261,7 +312,9 @@ export default function OrderDetailsScreen() {
                 <View style={styles.orderItemInfo}>
                   <Text style={styles.orderItemName}>{item.name}</Text>
                   {item.description && (
-                    <Text style={styles.orderItemDescription}>{item.description}</Text>
+                    <Text style={styles.orderItemDescription}>
+                      {item.description}
+                    </Text>
                   )}
                   <Text style={styles.orderItemQuantity}>
                     Quantity: {item.quantity} × ${item.unitPrice.toFixed(2)}
@@ -276,9 +329,13 @@ export default function OrderDetailsScreen() {
                     </View>
                   )}
                 </View>
-                <Text style={styles.orderItemPrice}>${item.totalPrice.toFixed(2)}</Text>
+                <Text style={styles.orderItemPrice}>
+                  ${item.totalPrice.toFixed(2)}
+                </Text>
               </View>
-              {index < order.items.length - 1 && <View style={styles.divider} />}
+              {index < order.items.length - 1 && (
+                <View style={styles.divider} />
+              )}
             </View>
           );
         })}
@@ -297,12 +354,16 @@ export default function OrderDetailsScreen() {
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Delivery Fee</Text>
-          <Text style={styles.summaryValue}>${order.deliveryFee.toFixed(2)}</Text>
+          <Text style={styles.summaryValue}>
+            ${order.deliveryFee.toFixed(2)}
+          </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryRow}>
           <Text style={styles.summaryTotalLabel}>Total</Text>
-          <Text style={styles.summaryTotalValue}>${order.total.toFixed(2)}</Text>
+          <Text style={styles.summaryTotalValue}>
+            ${order.total.toFixed(2)}
+          </Text>
         </View>
       </View>
     </ScrollView>
@@ -312,84 +373,84 @@ export default function OrderDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
   },
   contentContainer: {
     padding: 16,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 40,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 40,
   },
   emptyText: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginTop: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   backButton: {
-    backgroundColor: '#6200ee',
+    backgroundColor: "#6200ee",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 20,
   },
   backButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
   },
   backIcon: {
     width: 40,
     height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   orderInfo: {
@@ -397,13 +458,13 @@ const styles = StyleSheet.create({
   },
   orderId: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 4,
   },
   orderDate: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -412,14 +473,14 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   specialInstructionsRow: {
-    backgroundColor: '#fff3cd',
+    backgroundColor: "#fff3cd",
     padding: 12,
     borderRadius: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#ffc107',
+    borderLeftColor: "#ffc107",
     marginBottom: 8,
   },
   specialInstructionsContent: {
@@ -428,40 +489,40 @@ const styles = StyleSheet.create({
   },
   specialInstructionsLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#856404',
+    fontWeight: "600",
+    color: "#856404",
     marginBottom: 4,
   },
   specialInstructionsText: {
-    fontStyle: 'italic',
-    color: '#856404',
+    fontStyle: "italic",
+    color: "#856404",
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 8,
     gap: 8,
   },
   infoText: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     flex: 1,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 12,
   },
   timeline: {
     marginTop: 8,
   },
   timelineItem: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 16,
   },
   timelineLine: {
-    alignItems: 'center',
+    alignItems: "center",
     marginRight: 12,
     minWidth: 24,
   },
@@ -474,7 +535,7 @@ const styles = StyleSheet.create({
   timelineConnector: {
     width: 2,
     flex: 1,
-    backgroundColor: '#ddd',
+    backgroundColor: "#ddd",
     marginTop: 4,
     minHeight: 40,
   },
@@ -483,24 +544,24 @@ const styles = StyleSheet.create({
   },
   timelineStatus: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "500",
+    color: "#333",
     marginBottom: 4,
   },
   timelineDate: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 2,
   },
   timelineNotes: {
     fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
+    color: "#666",
+    fontStyle: "italic",
   },
   orderItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   orderItemInfo: {
@@ -509,72 +570,72 @@ const styles = StyleSheet.create({
   },
   orderItemName: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "500",
+    color: "#333",
     marginBottom: 4,
   },
   orderItemDescription: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 4,
   },
   orderItemQuantity: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginBottom: 4,
   },
   modifiersContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
     marginTop: 4,
   },
   modifierBadge: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
   modifierText: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
   },
   orderItemPrice: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   divider: {
     height: 1,
-    backgroundColor: '#eee',
+    backgroundColor: "#eee",
     marginVertical: 12,
   },
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   summaryValue: {
     fontSize: 16,
-    color: '#333',
+    color: "#333",
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: '#eee',
+    backgroundColor: "#eee",
     marginVertical: 12,
   },
   summaryTotalLabel: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   summaryTotalValue: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6200ee',
+    fontWeight: "bold",
+    color: "#6200ee",
   },
 });
