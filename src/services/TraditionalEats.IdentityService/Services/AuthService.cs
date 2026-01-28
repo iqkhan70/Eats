@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Net.Http.Json;
 using TraditionalEats.BuildingBlocks.Redis;
 using TraditionalEats.IdentityService.Data;
 using TraditionalEats.IdentityService.Entities;
@@ -29,17 +30,20 @@ public class AuthService : IAuthService
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthService> _logger;
     private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public AuthService(
         IdentityDbContext context,
         IRedisService redis,
         IConfiguration configuration,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _redis = redis;
         _configuration = configuration;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -58,7 +62,7 @@ public class AuthService : IAuthService
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
-        
+
         // If not found, try case-insensitive search (for backward compatibility)
         if (user == null)
         {
@@ -66,8 +70,8 @@ public class AuthService : IAuthService
                 .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
                 .ToListAsync();
-            user = allUsers.FirstOrDefault(u => 
-                u.Email.ToLower() == normalizedEmail || 
+            user = allUsers.FirstOrDefault(u =>
+                u.Email.ToLower() == normalizedEmail ||
                 u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -96,7 +100,7 @@ public class AuthService : IAuthService
             await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password verification exception");
             throw new UnauthorizedAccessException("Invalid email or password");
         }
-        
+
         if (verificationResult == PasswordVerificationResult.Failed)
         {
             await RecordLoginAttemptAsync(user.Id, email, ipAddress, false, "Password verification failed");
@@ -188,6 +192,44 @@ public class AuthService : IAuthService
         });
 
         await _context.SaveChangesAsync();
+
+        // Create corresponding customer profile (CustomerService owns customer PII/profile).
+        // This is what NotificationService uses later to send "Order Ready" email/SMS.
+        try
+        {
+            var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(customerServiceUrl);
+
+            var firstName = email.Split('@', 2)[0]; // basic default; can be improved later
+            var lastName = string.Empty;
+
+            var response = await client.PostAsJsonAsync("/api/customer/internal", new
+            {
+                UserId = user.Id,
+                FirstName = firstName,
+                LastName = lastName,
+                Email = email,
+                PhoneNumber = phoneNumber
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Customer provisioning failed: Status={Status}, Body={Body}", response.StatusCode, body);
+                // Keep systems consistent: roll back the identity user creation
+                _context.UserRoles.RemoveRange(_context.UserRoles.Where(ur => ur.UserId == user.Id));
+                _context.Users.Remove(user);
+                await _context.SaveChangesAsync();
+                throw new InvalidOperationException("Customer provisioning failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Customer provisioning failed during registration");
+            throw;
+        }
+
         return true;
     }
 
@@ -273,7 +315,7 @@ public class AuthService : IAuthService
         // Remove the role
         _context.UserRoles.Remove(userRole);
         await _context.SaveChangesAsync();
-        
+
         _logger.LogInformation("Role '{Role}' removed from user {Email}", role, email);
         return true;
     }
@@ -308,15 +350,15 @@ public class AuthService : IAuthService
         }
 
         // Get JWT secret with fallback
-        var jwtSecret = _configuration["Jwt:Secret"] 
+        var jwtSecret = _configuration["Jwt:Secret"]
             ?? _configuration["Jwt:Key"]
             ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
-        
+
         if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
         {
             jwtSecret = "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
         }
-        
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

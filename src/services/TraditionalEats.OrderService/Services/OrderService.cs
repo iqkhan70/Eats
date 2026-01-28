@@ -1321,7 +1321,7 @@ public class OrderService : IOrderService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "UpdateOrderStatusAsync: Failed to publish order status changed event, continuing anyway");
+                _logger.LogWarning(ex, "UpdateOrderStatusAsync: Failed to publish order status changed event (is RabbitMQ running?). Continuing anyway.");
             }
 
             return true;

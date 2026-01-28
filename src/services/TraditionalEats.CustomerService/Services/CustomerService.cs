@@ -5,10 +5,13 @@ using TraditionalEats.CustomerService.Entities;
 
 namespace TraditionalEats.CustomerService.Services;
 
+public record CustomerInfoDto(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
+
 public interface ICustomerService
 {
     Task<Guid> CreateCustomerAsync(Guid userId, string firstName, string lastName, string email, string? phoneNumber);
     Task<Customer?> GetCustomerByUserIdAsync(Guid userId);
+    Task<CustomerInfoDto?> GetCustomerInfoByUserIdAsync(Guid userId);
     Task<Guid> AddAddressAsync(Guid customerId, AddressDto address);
     Task<List<AddressDto>> GetAddressesAsync(Guid customerId);
 }
@@ -68,6 +71,23 @@ public class CustomerService : ICustomerService
             .Include(c => c.Addresses)
             .Include(c => c.Preferences)
             .FirstOrDefaultAsync(c => c.UserId == userId);
+    }
+
+    public async Task<CustomerInfoDto?> GetCustomerInfoByUserIdAsync(Guid userId)
+    {
+        var customer = await _context.Customers
+            .Include(c => c.PII)
+            .FirstOrDefaultAsync(c => c.UserId == userId);
+        if (customer?.PII == null)
+            return null;
+        var pii = customer.PII;
+        return new CustomerInfoDto(
+            customer.CustomerId,
+            customer.UserId,
+            _encryption.Decrypt(pii.FirstNameEnc),
+            _encryption.Decrypt(pii.LastNameEnc),
+            _encryption.Decrypt(pii.EmailEnc),
+            pii.PhoneEnc != null ? _encryption.Decrypt(pii.PhoneEnc) : null);
     }
 
     public async Task<Guid> AddAddressAsync(Guid customerId, AddressDto address)

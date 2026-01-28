@@ -49,12 +49,16 @@ public static class ConfigurationExtensions
         {
             // Insert at the beginning so service-specific configs can override
             // Make it optional to avoid errors during design-time (EF migrations)
-            builder.Sources.Insert(0, new JsonConfigurationSource
+            // NOTE: When using an absolute Path we must resolve a file provider,
+            // otherwise the config file may not load (and keys like Encryption:MasterKey will be missing).
+            var sharedSource = new JsonConfigurationSource
             {
                 Path = sharedConfigPath,
                 Optional = true, // Always optional to avoid design-time issues
                 ReloadOnChange = true
-            });
+            };
+            sharedSource.ResolveFileProvider();
+            builder.Sources.Insert(0, sharedSource);
         }
 
         // Add environment-specific shared config if it exists
@@ -69,12 +73,14 @@ public static class ConfigurationExtensions
             var normalizedPath = Path.GetFullPath(path);
             if (File.Exists(normalizedPath))
             {
-                builder.Sources.Insert(1, new JsonConfigurationSource
+                var sharedEnvSource = new JsonConfigurationSource
                 {
                     Path = normalizedPath,
                     Optional = true,
                     ReloadOnChange = true
-                });
+                };
+                sharedEnvSource.ResolveFileProvider();
+                builder.Sources.Insert(1, sharedEnvSource);
                 break;
             }
         }

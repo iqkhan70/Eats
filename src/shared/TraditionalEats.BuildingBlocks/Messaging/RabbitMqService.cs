@@ -37,6 +37,7 @@ public class RabbitMqService : IMessagePublisher, IDisposable
     {
         try
         {
+            _channel.ExchangeDeclare(exchange, ExchangeType.Topic, durable: true);
             var json = JsonSerializer.Serialize(message);
             var body = Encoding.UTF8.GetBytes(json);
 

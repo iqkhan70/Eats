@@ -33,7 +33,7 @@ builder.Services.AddRabbitMq(builder.Configuration);
 builder.Services.AddOpenTelemetry("NotificationService", builder.Configuration);
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
@@ -62,7 +62,14 @@ builder.Services.AddHttpClient();
 
 // Application services
 builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<ICustomerService, CustomerService>();
+
+// Register CustomerService with HttpClient
+builder.Services.AddHttpClient<ICustomerService, CustomerService>(client =>
+{
+    var customerServiceUrl = builder.Configuration["Services:CustomerService"] ?? "http://localhost:5001";
+    client.BaseAddress = new Uri(customerServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 // Background service for handling order status events
 builder.Services.AddHostedService<OrderStatusEventHandler>();

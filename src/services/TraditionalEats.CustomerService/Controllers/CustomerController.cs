@@ -41,6 +41,39 @@ public class CustomerController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Internal endpoint used by IdentityService right after registration to create the customer profile.
+    /// NOTE: Currently AllowAnonymous (dev). In production, protect with service-to-service auth (API key/JWT/mTLS).
+    /// </summary>
+    [HttpPost("internal")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CreateCustomerInternal([FromBody] CreateCustomerInternalRequest request)
+    {
+        try
+        {
+            // Prevent duplicates if registration retries
+            var existing = await _customerService.GetCustomerByUserIdAsync(request.UserId);
+            if (existing != null)
+            {
+                return Ok(new { customerId = existing.CustomerId, alreadyExists = true });
+            }
+
+            var customerId = await _customerService.CreateCustomerAsync(
+                request.UserId,
+                request.FirstName,
+                request.LastName,
+                request.Email,
+                request.PhoneNumber);
+
+            return Ok(new { customerId, alreadyExists = false });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create customer (internal)");
+            return StatusCode(500, new { message = "Failed to create customer" });
+        }
+    }
+
     [HttpGet("me")]
     public async Task<IActionResult> GetMyCustomer()
     {
@@ -59,6 +92,28 @@ public class CustomerController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get customer");
+            return StatusCode(500, new { message = "Failed to get customer" });
+        }
+    }
+
+    /// <summary>
+    /// Get customer info by user id (identity). Used by NotificationService for order-ready emails/SMS.
+    /// AllowAnonymous for server-to-server calls.
+    /// </summary>
+    [HttpGet("by-user/{userId:guid}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetCustomerByUserId(Guid userId)
+    {
+        try
+        {
+            var customer = await _customerService.GetCustomerInfoByUserIdAsync(userId);
+            if (customer == null)
+                return NotFound(new { message = "Customer not found" });
+            return Ok(customer);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get customer by user id");
             return StatusCode(500, new { message = "Failed to get customer" });
         }
     }
@@ -111,3 +166,4 @@ public class CustomerController : ControllerBase
 }
 
 public record CreateCustomerRequest(string FirstName, string LastName, string Email, string? PhoneNumber);
+public record CreateCustomerInternalRequest(Guid UserId, string FirstName, string LastName, string Email, string? PhoneNumber);

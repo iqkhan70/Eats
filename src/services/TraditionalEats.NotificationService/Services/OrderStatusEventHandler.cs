@@ -186,13 +186,11 @@ public interface ICustomerService
 public class CustomerService : ICustomerService
 {
     private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
     private readonly ILogger<CustomerService> _logger;
 
-    public CustomerService(HttpClient httpClient, IConfiguration configuration, ILogger<CustomerService> logger)
+    public CustomerService(HttpClient httpClient, ILogger<CustomerService> logger)
     {
         _httpClient = httpClient;
-        _configuration = configuration;
         _logger = logger;
     }
 
@@ -200,15 +198,15 @@ public class CustomerService : ICustomerService
     {
         try
         {
-            var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5003";
-            var response = await _httpClient.GetAsync($"{customerServiceUrl}/api/customer/{customerId}");
-            
+            // Order.CustomerId is the identity UserId; CustomerService exposes by-user/{userId}
+            var response = await _httpClient.GetAsync($"/api/customer/by-user/{customerId}");
+
             if (response.IsSuccessStatusCode)
             {
                 var customer = await response.Content.ReadFromJsonAsync<CustomerDto>();
                 return customer;
             }
-            
+
             _logger.LogWarning("Customer not found: CustomerId={CustomerId}, Status={Status}", customerId, response.StatusCode);
             return null;
         }
