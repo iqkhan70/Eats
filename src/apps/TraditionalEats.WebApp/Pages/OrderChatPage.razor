@@ -1,0 +1,31 @@
+@page "/orders/{OrderId:guid}/chat"
+@using Radzen
+@using Radzen.Blazor
+@using TraditionalEats.WebApp.Components
+@inject NavigationManager NavigationManager
+
+<PageTitle>Order Chat - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="0" Style="padding: 0; min-height: 100vh; box-sizing: border-box;">
+    <!-- Header -->
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+        AlignItems="AlignItems.Center"
+        Style="padding: 1rem; border-bottom: 1px solid var(--rz-border-color); background: var(--rz-base-0); flex-shrink: 0;">
+        <RadzenButton Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo($"/orders/{OrderId}"))"
+            Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">
+            Order #@OrderId.ToString().Substring(0, 8) – Chat
+        </RadzenText>
+        <div style="width: 40px;"></div>
+    </RadzenStack>
+
+    <!-- Chat: fixed max height so send button is visible without scrolling the page -->
+    <div style="max-height: 75vh; display: flex; flex-direction: column; padding: 1rem; min-height: 0;">
+        <OrderChat OrderId="@OrderId" FullScreen="true" />
+    </div>
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public Guid OrderId { get; set; }
+}

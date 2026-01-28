@@ -113,8 +113,22 @@
                 </RadzenCard>
             }
 
-            <!-- Order Chat -->
-            <OrderChat OrderId="@Guid.Parse(OrderId)" />
+            <!-- Order Chat entry -->
+            <RadzenCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo($"/orders/{OrderId}/chat"))">
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center"
+                    JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+                        <RadzenIcon Icon="chat" Style="font-size: 28px; color: var(--rz-primary);" />
+                        <RadzenStack Gap="0.25rem">
+                            <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Order Chat</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                                Message about this order
+                            </RadzenText>
+                        </RadzenStack>
+                    </RadzenStack>
+                    <RadzenIcon Icon="chevron_right" Style="color: var(--rz-text-secondary-color);" />
+                </RadzenStack>
+            </RadzenCard>
 
             <!-- Order Items -->
             <RadzenCard>

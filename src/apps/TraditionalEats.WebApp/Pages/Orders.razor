@@ -99,8 +99,13 @@
                             </RadzenText>
                         </RadzenStack>
 
-                        <RadzenButton Text="View Details" Icon="info" Click="@(() => ViewOrderDetails(order.OrderId))"
-                            Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                            <RadzenButton Text="View Details" Icon="info" Click="@(() => ViewOrderDetails(order.OrderId))"
+                                Variant="Variant.Flat" Size="ButtonSize.Small" />
+                            <RadzenButton Text="Chat" Icon="chat"
+                                Click="@(() => NavigationManager.NavigateTo($"/orders/{order.OrderId}/chat"))"
+                                Variant="Variant.Outlined" Size="ButtonSize.Small" />
+                        </RadzenStack>
                     </RadzenStack>
                 </RadzenCard>
             }

@@ -30,6 +30,40 @@
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
+    <script>
+        window.scrollChatMessagesToBottom = function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                requestAnimationFrame(function () {
+                    el.scrollTop = el.scrollHeight;
+                });
+            }
+        };
+        window.attachChatEnterToSend = function (inputWrapperId, dotNetRef) {
+            function tryAttach() {
+                var wrapper = document.getElementById(inputWrapperId);
+                if (!wrapper) return false;
+                var textarea = wrapper.querySelector('textarea');
+                if (!textarea) return false;
+                if (textarea.getAttribute('data-enter-to-send') === 'true') return true;
+                textarea.setAttribute('data-enter-to-send', 'true');
+                textarea.addEventListener('keydown', function (ev) {
+                    if (ev.key === 'Enter' && !ev.shiftKey) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        dotNetRef.invokeMethodAsync('SendMessageFromJs');
+                    }
+                });
+                return true;
+            }
+            if (tryAttach()) return;
+            var attempts = 0;
+            var interval = setInterval(function () {
+                attempts++;
+                if (tryAttach() || attempts >= 10) clearInterval(interval);
+            }, 150);
+        };
+    </script>
 </body>
 
 </html>

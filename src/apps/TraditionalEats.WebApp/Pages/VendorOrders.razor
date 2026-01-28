@@ -151,7 +151,7 @@
                             Filterable="false">
                             <Template Context="o">
                                 <RadzenButton Icon="chat" Text="Chat" Variant="Variant.Flat" Size="ButtonSize.Small"
-                                    Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}"))" />
+                                    Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}/chat"))" />
                             </Template>
                         </RadzenDataGridColumn>
 
@@ -237,7 +237,7 @@
                                     AlignItems="AlignItems.Center">
                                     <RadzenButton Icon="chat" Text="Open order & chat" Variant="Variant.Outlined"
                                         Size="ButtonSize.Small"
-                                        Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}"))" />
+                                        Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}/chat"))" />
                                 </RadzenStack>
 
                             </RadzenStack>
