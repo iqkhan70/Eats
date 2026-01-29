@@ -440,6 +440,10 @@ public class WebBffController : ControllerBase
                                     CreatedAt = GetDateTime(orderElement, "createdAt", "CreatedAt"),
                                     DeliveryAddress = GetString(orderElement, "deliveryAddress", "DeliveryAddress"),
                                     SpecialInstructions = GetString(orderElement, "specialInstructions", "SpecialInstructions"),
+                                    Subtotal = GetDecimal(orderElement, "subtotal", "Subtotal"),
+                                    Tax = GetDecimal(orderElement, "tax", "Tax"),
+                                    DeliveryFee = GetDecimal(orderElement, "deliveryFee", "DeliveryFee"),
+                                    ServiceFee = GetDecimal(orderElement, "serviceFee", "ServiceFee"),
                                     Total = GetDecimal(orderElement, "total", "Total"),
                                     Items = new List<OrderItemDto>(),
                                     StatusHistory = new List<OrderStatusHistoryDto>()
@@ -1618,6 +1622,10 @@ public class OrderDto
     public DateTime CreatedAt { get; set; }
     public string? DeliveryAddress { get; set; }
     public string? SpecialInstructions { get; set; }
+    public decimal Subtotal { get; set; }
+    public decimal Tax { get; set; }
+    public decimal DeliveryFee { get; set; }
+    public decimal ServiceFee { get; set; }
     public decimal Total { get; set; }
     public List<OrderItemDto> Items { get; set; } = new();
     public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();

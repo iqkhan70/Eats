@@ -5,6 +5,7 @@ public record OrderPlacedEvent(
     Guid CustomerId,
     Guid RestaurantId,
     decimal TotalAmount,
+    decimal ServiceFee,
     DateTime PlacedAt,
     string DeliveryAddress,
     List<OrderItemDto> Items

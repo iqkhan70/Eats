@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-} from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import axios from 'axios';
-import { authService } from '../../services/auth';
-import { api } from '../../services/api';
+} from "react-native";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import axios from "axios";
+import { authService } from "../../services/auth";
+import { api } from "../../services/api";
 
 interface Restaurant {
   restaurantId: string;
@@ -45,40 +45,47 @@ interface Order {
   deliveryAddress?: string;
   specialInstructions?: string;
   total: number;
+  serviceFee?: number;
   items: OrderItem[];
   statusHistory?: OrderStatusHistory[];
 }
 
-const statusOptions = ['Pending', 'Preparing', 'Ready', 'Completed', 'Cancelled'] as const;
+const statusOptions = [
+  "Pending",
+  "Preparing",
+  "Ready",
+  "Completed",
+  "Cancelled",
+] as const;
 type OrderStatus = (typeof statusOptions)[number];
 
 const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
-  Pending: ['Preparing', 'Cancelled'],
-  Preparing: ['Ready', 'Cancelled'],
-  Ready: ['Completed', 'Cancelled'],
+  Pending: ["Preparing", "Cancelled"],
+  Preparing: ["Ready", "Cancelled"],
+  Ready: ["Completed", "Cancelled"],
   Completed: [],
   Cancelled: [],
 };
 
 const getStatusColor = (status: string): string => {
   switch (status) {
-    case 'Pending':
-      return '#FFA726';
-    case 'Preparing':
-      return '#42A5F5';
-    case 'Ready':
-      return '#66BB6A';
-    case 'Completed':
-      return '#78909C';
-    case 'Cancelled':
-      return '#EF5350';
+    case "Pending":
+      return "#FFA726";
+    case "Preparing":
+      return "#42A5F5";
+    case "Ready":
+      return "#66BB6A";
+    case "Completed":
+      return "#78909C";
+    case "Cancelled":
+      return "#EF5350";
     default:
-      return '#78909C';
+      return "#78909C";
   }
 };
 
 function safeJsonParse(input: unknown) {
-  if (typeof input !== 'string') return input;
+  if (typeof input !== "string") return input;
   try {
     return JSON.parse(input);
   } catch {
@@ -89,15 +96,15 @@ function safeJsonParse(input: unknown) {
 /** Pretty-print for RN console (avoids truncation) */
 function logJson(label: string, obj: any) {
   try {
-    console.log(label + ':\n' + JSON.stringify(obj, null, 2));
+    console.log(label + ":\n" + JSON.stringify(obj, null, 2));
   } catch {
-    console.log(label + ':', obj);
+    console.log(label + ":", obj);
   }
 }
 
 function extractAspNetValidationErrors(data: any): string | null {
   const errors = data?.errors;
-  if (!errors || typeof errors !== 'object') return null;
+  if (!errors || typeof errors !== "object") return null;
 
   const lines: string[] = [];
   for (const key of Object.keys(errors)) {
@@ -106,7 +113,7 @@ function extractAspNetValidationErrors(data: any): string | null {
       for (const msg of arr) lines.push(`${key}: ${msg}`);
     }
   }
-  return lines.length ? lines.join('\n') : null;
+  return lines.length ? lines.join("\n") : null;
 }
 
 function normalizeErrorMessage(err: unknown): string {
@@ -116,18 +123,18 @@ function normalizeErrorMessage(err: unknown): string {
     const modelErrors = extractAspNetValidationErrors(data);
     if (modelErrors) return modelErrors;
 
-    if (typeof data === 'string' && data.trim()) return data;
+    if (typeof data === "string" && data.trim()) return data;
     if (data?.message) return String(data.message);
     if (data?.error) return String(data.error);
     if (data?.title && data?.detail) return `${data.title}\n${data.detail}`;
     if (data?.title) return String(data.title);
     if (data?.detail) return String(data.detail);
 
-    return `Request failed (${err.response?.status ?? 'no status'})`;
+    return `Request failed (${err.response?.status ?? "no status"})`;
   }
 
   if (err instanceof Error) return err.message;
-  return 'Unexpected error';
+  return "Unexpected error";
 }
 
 /**
@@ -136,7 +143,11 @@ function normalizeErrorMessage(err: unknown): string {
  *   public record UpdateOrderStatusRequest(string Status, string? Notes);
  * So status MUST be a STRING. No numeric fallback.
  */
-async function putUpdateOrderStatus(orderId: string, status: OrderStatus, notes?: string | null) {
+async function putUpdateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  notes?: string | null,
+) {
   const payload = {
     status, // string only
     notes: notes ?? null,
@@ -146,10 +157,10 @@ async function putUpdateOrderStatus(orderId: string, status: OrderStatus, notes?
   // Base URL already includes /api, so use /MobileBff/... not /api/MobileBff/...
   const url = `/MobileBff/orders/${orderId}/status`;
 
-  logJson('Updating order status (PUT)', { url, payload });
+  logJson("Updating order status (PUT)", { url, payload });
 
   await api.put(url, payload, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -163,9 +174,9 @@ export default function VendorOrdersScreen() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
 
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(
-    params.restaurantId || null
-  );
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<
+    string | null
+  >(params.restaurantId || null);
 
   const [loadingRestaurants, setLoadingRestaurants] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -212,8 +223,8 @@ export default function VendorOrdersScreen() {
         await loadRestaurants();
       }
     } catch (err) {
-      console.error('Auth check failed:', err);
-      Alert.alert('Error', 'Failed to validate authentication.');
+      console.error("Auth check failed:", err);
+      Alert.alert("Error", "Failed to validate authentication.");
     }
   };
 
@@ -224,15 +235,15 @@ export default function VendorOrdersScreen() {
   const loadRestaurants = async () => {
     try {
       setLoadingRestaurants(true);
-      const response = await api.get('/MobileBff/vendor/my-restaurants');
+      const response = await api.get("/MobileBff/vendor/my-restaurants");
 
       const data = response.data ?? [];
       if (!isMountedRef.current) return;
 
       setRestaurants(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Error loading restaurants:', err);
-      Alert.alert('Error', normalizeErrorMessage(err));
+      console.error("Error loading restaurants:", err);
+      Alert.alert("Error", normalizeErrorMessage(err));
     } finally {
       if (isMountedRef.current) setLoadingRestaurants(false);
     }
@@ -249,7 +260,7 @@ export default function VendorOrdersScreen() {
 
       if (selectedRestaurantId) {
         const response = await api.get(
-          `/MobileBff/vendor/restaurants/${selectedRestaurantId}/orders`
+          `/MobileBff/vendor/restaurants/${selectedRestaurantId}/orders`,
         );
         const data = response.data ?? [];
         allOrders = Array.isArray(data) ? data : [];
@@ -257,28 +268,29 @@ export default function VendorOrdersScreen() {
         for (const restaurant of activeRestaurants) {
           try {
             const response = await api.get(
-              `/MobileBff/vendor/restaurants/${restaurant.restaurantId}/orders`
+              `/MobileBff/vendor/restaurants/${restaurant.restaurantId}/orders`,
             );
             const data = response.data ?? [];
             if (Array.isArray(data)) allOrders.push(...data);
           } catch (innerErr) {
             console.error(
               `Error loading orders for restaurant ${restaurant.restaurantId}:`,
-              innerErr
+              innerErr,
             );
           }
         }
       }
 
       allOrders.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
       if (!isMountedRef.current) return;
       setOrders(allOrders);
     } catch (err) {
-      console.error('Error loading orders:', err);
-      Alert.alert('Error', normalizeErrorMessage(err));
+      console.error("Error loading orders:", err);
+      Alert.alert("Error", normalizeErrorMessage(err));
     } finally {
       if (isMountedRef.current) setLoadingOrders(false);
     }
@@ -312,7 +324,7 @@ export default function VendorOrdersScreen() {
       if (axios.isAxiosError(err)) {
         const parsedSent = safeJsonParse(err.config?.data);
 
-        logJson('Error updating order status (axios)', {
+        logJson("Error updating order status (axios)", {
           status: err.response?.status,
           responseData: err.response?.data,
           url: err.config?.url,
@@ -321,10 +333,10 @@ export default function VendorOrdersScreen() {
           headersSent: err.config?.headers,
         });
       } else {
-        console.error('Error updating order status:', err);
+        console.error("Error updating order status:", err);
       }
 
-      Alert.alert('Update failed', normalizeErrorMessage(err));
+      Alert.alert("Update failed", normalizeErrorMessage(err));
     } finally {
       if (isMountedRef.current) setUpdatingStatus(null);
     }
@@ -334,33 +346,31 @@ export default function VendorOrdersScreen() {
     const current = order.status as OrderStatus;
 
     if (!statusOptions.includes(current)) {
-      Alert.alert('Cannot update', `Unknown order status: ${order.status}`);
+      Alert.alert("Cannot update", `Unknown order status: ${order.status}`);
       return;
     }
 
     const nextList = allowedNextStatuses[current];
     if (!nextList || nextList.length === 0) {
-      Alert.alert('Cannot update', `Order is already ${order.status}.`);
+      Alert.alert("Cannot update", `Order is already ${order.status}.`);
       return;
     }
 
-    Alert.alert(
-      'Update status',
-      `Current: "${order.status}"`,
-      [
-        ...nextList.map((s) => ({
-          text: s,
-          onPress: () => void updateOrderStatus(order.orderId, s),
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    Alert.alert("Update status", `Current: "${order.status}"`, [
+      ...nextList.map((s) => ({
+        text: s,
+        onPress: () => void updateOrderStatus(order.orderId, s),
+      })),
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   if (!isAuthenticated || !isVendor) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>You must be a vendor to access this page.</Text>
+        <Text style={styles.errorText}>
+          You must be a vendor to access this page.
+        </Text>
       </View>
     );
   }
@@ -377,7 +387,9 @@ export default function VendorOrdersScreen() {
   if (restaurants.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>You don&apos;t have any restaurants yet.</Text>
+        <Text style={styles.errorText}>
+          You don&apos;t have any restaurants yet.
+        </Text>
       </View>
     );
   }
@@ -385,7 +397,10 @@ export default function VendorOrdersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Vendor Orders</Text>
@@ -393,7 +408,9 @@ export default function VendorOrdersScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         <View style={styles.filterContainer}>
           <Text style={styles.filterLabel}>Filter by Restaurant:</Text>
@@ -403,7 +420,10 @@ export default function VendorOrdersScreen() {
             style={styles.restaurantFilter}
           >
             <TouchableOpacity
-              style={[styles.filterChip, !selectedRestaurantId && styles.filterChipActive]}
+              style={[
+                styles.filterChip,
+                !selectedRestaurantId && styles.filterChipActive,
+              ]}
               onPress={() => setSelectedRestaurantId(null)}
             >
               <Text
@@ -421,14 +441,16 @@ export default function VendorOrdersScreen() {
                 key={restaurant.restaurantId}
                 style={[
                   styles.filterChip,
-                  selectedRestaurantId === restaurant.restaurantId && styles.filterChipActive,
+                  selectedRestaurantId === restaurant.restaurantId &&
+                    styles.filterChipActive,
                 ]}
                 onPress={() => setSelectedRestaurantId(restaurant.restaurantId)}
               >
                 <Text
                   style={[
                     styles.filterChipText,
-                    selectedRestaurantId === restaurant.restaurantId && styles.filterChipTextActive,
+                    selectedRestaurantId === restaurant.restaurantId &&
+                      styles.filterChipTextActive,
                   ]}
                 >
                   {restaurant.name}
@@ -457,11 +479,20 @@ export default function VendorOrdersScreen() {
             >
               <View style={styles.orderHeader}>
                 <View>
-                  <Text style={styles.orderId}>Order #{order.orderId.substring(0, 8)}</Text>
-                  <Text style={styles.orderDate}>{new Date(order.createdAt).toLocaleString()}</Text>
+                  <Text style={styles.orderId}>
+                    Order #{order.orderId.substring(0, 8)}
+                  </Text>
+                  <Text style={styles.orderDate}>
+                    {new Date(order.createdAt).toLocaleString()}
+                  </Text>
                 </View>
 
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(order.status) },
+                  ]}
+                >
                   <Text style={styles.statusText}>{order.status}</Text>
                 </View>
               </View>
@@ -476,22 +507,31 @@ export default function VendorOrdersScreen() {
 
               {order.specialInstructions && (
                 <View style={styles.specialInstructionsContainer}>
-                  <Text style={styles.specialInstructionsLabel}>Special Instructions:</Text>
-                  <Text style={styles.specialInstructionsText}>{order.specialInstructions}</Text>
+                  <Text style={styles.specialInstructionsLabel}>
+                    Special Instructions:
+                  </Text>
+                  <Text style={styles.specialInstructionsText}>
+                    {order.specialInstructions}
+                  </Text>
                 </View>
               )}
               {order.deliveryAddress && (
-                <Text style={styles.deliveryAddress}>📍 {order.deliveryAddress}</Text>
+                <Text style={styles.deliveryAddress}>
+                  📍 {order.deliveryAddress}
+                </Text>
               )}
 
               <View style={styles.orderFooter}>
-                <Text style={styles.orderTotal}>Total: ${order.total.toFixed(2)}</Text>
+                <Text style={styles.orderTotal}>
+                  Total: ${order.total.toFixed(2)}
+                </Text>
 
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
                     { backgroundColor: getStatusColor(order.status) },
-                    updatingStatus === order.orderId && styles.statusButtonDisabled,
+                    updatingStatus === order.orderId &&
+                      styles.statusButtonDisabled,
                   ]}
                   onPress={() => showStatusPicker(order)}
                   disabled={updatingStatus === order.orderId}
@@ -515,103 +555,103 @@ export default function VendorOrdersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: "#F5F5F5",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: "#E0E0E0",
   },
   backButton: {
     marginRight: 16,
   },
   backButtonText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: "#007AFF",
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   scrollView: {
     flex: 1,
   },
   filterContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: "#E0E0E0",
   },
   filterLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
-    color: '#333',
+    color: "#333",
   },
   restaurantFilter: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: "#F0F0F0",
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
   },
   filterChipText: {
     fontSize: 14,
-    color: '#333',
+    color: "#333",
   },
   filterChipTextActive: {
-    color: 'white',
+    color: "white",
   },
   loadingContainer: {
     padding: 32,
-    alignItems: 'center',
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 8,
-    color: '#666',
+    color: "#666",
   },
   emptyContainer: {
     padding: 32,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   orderCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     margin: 16,
     padding: 16,
     borderRadius: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   orderId: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   orderDate: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
   statusBadge: {
@@ -620,35 +660,35 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   statusText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   orderItems: {
     marginBottom: 12,
   },
   orderItem: {
     fontSize: 14,
-    color: '#333',
+    color: "#333",
     marginBottom: 4,
   },
   deliveryAddress: {
     fontSize: 12,
-    color: '#666',
+    color: "#666",
     marginBottom: 12,
   },
   orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: "#E0E0E0",
   },
   orderTotal: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   statusButton: {
     paddingHorizontal: 16,
@@ -659,14 +699,14 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   statusButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   errorText: {
     fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginTop: 32,
   },
 });

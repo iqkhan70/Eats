@@ -18,6 +18,7 @@ interface Order {
   subtotal: number;
   tax: number;
   deliveryFee: number;
+  serviceFee?: number;
   total: number;
   status: string;
   deliveryAddress?: string;
@@ -366,6 +367,12 @@ export default function OrderDetailsScreen() {
           <Text style={styles.summaryLabel}>Delivery Fee</Text>
           <Text style={styles.summaryValue}>
             ${order.deliveryFee.toFixed(2)}
+          </Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Service Fee</Text>
+          <Text style={styles.summaryValue}>
+            ${(order.serviceFee ?? 0).toFixed(2)}
           </Text>
         </View>
         <View style={styles.summaryDivider} />

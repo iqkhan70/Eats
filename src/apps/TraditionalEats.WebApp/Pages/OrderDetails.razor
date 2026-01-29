@@ -201,6 +201,10 @@
                             <RadzenText TextStyle="TextStyle.Body1">Delivery Fee</RadzenText>
                             <RadzenText TextStyle="TextStyle.Body1">$@order.DeliveryFee.ToString("F2")</RadzenText>
                         </RadzenStack>
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                            <RadzenText TextStyle="TextStyle.Body1">Service fee</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body1">$@order.ServiceFee.ToString("F2")</RadzenText>
+                        </RadzenStack>
                         <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
                         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
                             <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Total</RadzenText>
@@ -276,6 +280,7 @@
         public decimal Subtotal { get; set; }
         public decimal Tax { get; set; }
         public decimal DeliveryFee { get; set; }
+        public decimal ServiceFee { get; set; }
         public decimal Total { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? DeliveryAddress { get; set; }

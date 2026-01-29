@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -7,11 +13,11 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { api } from '../../services/api';
-import { authService } from '../../services/auth';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { api } from "../../services/api";
+import { authService } from "../../services/auth";
 
 interface Order {
   orderId: string;
@@ -20,6 +26,7 @@ interface Order {
   subtotal: number;
   tax: number;
   deliveryFee: number;
+  serviceFee?: number;
   total: number;
   status: string;
   deliveryAddress: string;
@@ -56,31 +63,35 @@ export default function OrdersScreen() {
   // Check authentication status (only on mount)
   useEffect(() => {
     let isMounted = true;
-    
+
     (async () => {
       try {
         const authenticated = await authService.isAuthenticated();
-        
+
         if (!isMounted) return;
-        
+
         setIsAuthenticated(authenticated);
-        
-        if (!authenticated && !hasRedirectedRef.current && !isNavigatingRef.current) {
+
+        if (
+          !authenticated &&
+          !hasRedirectedRef.current &&
+          !isNavigatingRef.current
+        ) {
           // Redirect to login if not authenticated (only once)
           hasRedirectedRef.current = true;
           isNavigatingRef.current = true;
           // Use replace to avoid stacking - login is no longer a modal
-          router.replace('/login');
+          router.replace("/login");
           return;
         }
       } catch (error) {
-        console.error('Error checking authentication:', error);
+        console.error("Error checking authentication:", error);
         if (!isMounted) return;
-        
+
         if (!hasRedirectedRef.current && !isNavigatingRef.current) {
           hasRedirectedRef.current = true;
           isNavigatingRef.current = true;
-          router.replace('/login');
+          router.replace("/login");
         }
       } finally {
         if (isMounted) {
@@ -88,7 +99,7 @@ export default function OrdersScreen() {
         }
       }
     })();
-    
+
     return () => {
       isMounted = false;
     };
@@ -101,22 +112,22 @@ export default function OrdersScreen() {
     }
 
     try {
-      const response = await api.get<Order[]>('/MobileBff/orders');
+      const response = await api.get<Order[]>("/MobileBff/orders");
       setOrders(response.data || []);
     } catch (error: any) {
-      console.error('Error loading orders:', error);
-      
+      console.error("Error loading orders:", error);
+
       // If 401 Unauthorized, redirect to login (only if not already redirected)
       if (error.response?.status === 401) {
         setIsAuthenticated(false);
         if (!hasRedirectedRef.current && !isNavigatingRef.current) {
           hasRedirectedRef.current = true;
           isNavigatingRef.current = true;
-          router.replace('/login');
+          router.replace("/login");
         }
         return;
       }
-      
+
       setOrders([]);
     }
   }, [isAuthenticated, router]);
@@ -149,30 +160,30 @@ export default function OrdersScreen() {
         try {
           const authenticated = await authService.isAuthenticated();
           setIsAuthenticated(authenticated);
-          
+
           if (!authenticated) {
             if (!hasRedirectedRef.current && !isNavigatingRef.current) {
               hasRedirectedRef.current = true;
               isNavigatingRef.current = true;
-              router.replace('/login');
+              router.replace("/login");
             }
             return;
           }
-          
+
           // Only refresh if authenticated
           if (authenticated) {
             loadOrders();
           }
         } catch (error) {
-          console.error('Error checking authentication on focus:', error);
+          console.error("Error checking authentication on focus:", error);
           if (!hasRedirectedRef.current && !isNavigatingRef.current) {
             hasRedirectedRef.current = true;
             isNavigatingRef.current = true;
-            router.replace('/login');
+            router.replace("/login");
           }
         }
       })();
-    }, [loadOrders, router])
+    }, [loadOrders, router]),
   );
 
   // ✅ If you ever navigate with /orders?refresh=xyz it will reload
@@ -195,28 +206,29 @@ export default function OrdersScreen() {
   // ✅ Newest first
   const sortedOrders = useMemo(() => {
     return [...orders].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [orders]);
 
   function getStatusColor(status: string): string {
     switch (status) {
-      case 'Pending':
-        return '#fff3cd';
-      case 'Confirmed':
-        return '#d1ecf1';
-      case 'Preparing':
-        return '#d4edda';
-      case 'Ready':
-        return '#cce5ff';
-      case 'OutForDelivery':
-        return '#e2e3e5';
-      case 'Delivered':
-        return '#d4edda';
-      case 'Cancelled':
-        return '#f8d7da';
+      case "Pending":
+        return "#fff3cd";
+      case "Confirmed":
+        return "#d1ecf1";
+      case "Preparing":
+        return "#d4edda";
+      case "Ready":
+        return "#cce5ff";
+      case "OutForDelivery":
+        return "#e2e3e5";
+      case "Delivered":
+        return "#d4edda";
+      case "Cancelled":
+        return "#f8d7da";
       default:
-        return '#e9ecef';
+        return "#e9ecef";
     }
   }
 
@@ -232,7 +244,7 @@ export default function OrdersScreen() {
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color="#6200ee" />
           <Text style={styles.loadingText}>
-            {checkingAuth ? 'Checking authentication...' : 'Loading orders...'}
+            {checkingAuth ? "Checking authentication..." : "Loading orders..."}
           </Text>
         </View>
       </View>
@@ -248,9 +260,14 @@ export default function OrdersScreen() {
     <View style={styles.emptyContainer}>
       <Ionicons name="receipt-outline" size={64} color="#ccc" />
       <Text style={styles.emptyText}>No orders yet</Text>
-      <Text style={styles.emptySubtext}>Your order history will appear here</Text>
+      <Text style={styles.emptySubtext}>
+        Your order history will appear here
+      </Text>
 
-      <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/(tabs)')}>
+      <TouchableOpacity
+        style={styles.browseButton}
+        onPress={() => router.push("/(tabs)")}
+      >
         <Text style={styles.browseButtonText}>Browse Restaurants</Text>
       </TouchableOpacity>
 
@@ -265,14 +282,18 @@ export default function OrdersScreen() {
           data={[]}
           renderItem={null as any}
           ListEmptyComponent={EmptyState}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
           contentContainerStyle={{ flexGrow: 1 }}
         />
       ) : (
         <FlatList
           data={sortedOrders}
           keyExtractor={(item) => item.orderId}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.orderCard}
@@ -280,31 +301,43 @@ export default function OrdersScreen() {
               activeOpacity={0.85}
             >
               <View style={styles.orderHeader}>
-                <Text style={styles.orderId}>Order #{item.orderId.substring(0, 8)}</Text>
+                <Text style={styles.orderId}>
+                  Order #{item.orderId.substring(0, 8)}
+                </Text>
                 <Text style={styles.orderDate}>
-                  {new Date(item.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
+                  {new Date(item.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
                   })}
                 </Text>
               </View>
 
               <View style={styles.orderItems}>
                 {item.items.slice(0, 2).map((orderItem) => (
-                  <Text key={orderItem.orderItemId} style={styles.orderItemText}>
+                  <Text
+                    key={orderItem.orderItemId}
+                    style={styles.orderItemText}
+                  >
                     {orderItem.name} x {orderItem.quantity}
                   </Text>
                 ))}
                 {item.items.length > 2 && (
-                  <Text style={styles.orderItemText}>+{item.items.length - 2} more items</Text>
+                  <Text style={styles.orderItemText}>
+                    +{item.items.length - 2} more items
+                  </Text>
                 )}
               </View>
 
               <View style={styles.orderFooter}>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(item.status) },
+                  ]}
+                >
                   <Text style={styles.orderStatus}>{item.status}</Text>
                 </View>
                 <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
@@ -318,58 +351,71 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
 
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 40,
   },
 
-  emptyText: { fontSize: 20, fontWeight: '600', color: '#333', marginTop: 16 },
-  emptySubtext: { fontSize: 14, color: '#666', marginTop: 8, textAlign: 'center' },
+  emptyText: { fontSize: 20, fontWeight: "600", color: "#333", marginTop: 16 },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 8,
+    textAlign: "center",
+  },
 
-  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
+  loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 
   browseButton: {
-    backgroundColor: '#6200ee',
+    backgroundColor: "#6200ee",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 20,
   },
-  browseButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  browseButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 
-  pullHint: { marginTop: 14, fontSize: 12, color: '#999', textAlign: 'center' },
+  pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
 
-  orderId: { fontSize: 18, fontWeight: '600', color: '#333' },
+  orderId: { fontSize: 18, fontWeight: "600", color: "#333" },
 
   orderItems: { marginVertical: 8 },
-  orderItemText: { fontSize: 14, color: '#666', marginBottom: 4 },
+  orderItemText: { fontSize: 14, color: "#666", marginBottom: 4 },
 
   statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
 
   orderCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
     margin: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
 
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  orderHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
 
-  orderDate: { fontSize: 14, color: '#666' },
+  orderDate: { fontSize: 14, color: "#666" },
 
-  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  orderFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
 
   // keep your existing look (purple text)
-  orderStatus: { fontSize: 14, color: '#6200ee', fontWeight: '500' },
+  orderStatus: { fontSize: 14, color: "#6200ee", fontWeight: "500" },
 
-  orderTotal: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  orderTotal: { fontSize: 18, fontWeight: "bold", color: "#333" },
 });

@@ -1037,10 +1037,15 @@ public class OrderService : IOrderService
         var orderSubtotal = orderItems.Sum(i => i.TotalPrice);
         var orderTax = orderSubtotal * 0.08m; // 8% tax
         var orderDeliveryFee = 0.00m; // Fixed delivery fee
-        var orderTotal = orderSubtotal + orderTax + orderDeliveryFee;
+        var amountBeforeServiceFee = orderSubtotal + orderTax + orderDeliveryFee;
+        // Service fee: 2% of order amount, capped at $5. Kept separate for payment split (service provider vs vendor).
+        const decimal serviceFeeRate = 0.02m;
+        const decimal serviceFeeCap = 5.00m;
+        var orderServiceFee = Math.Min(amountBeforeServiceFee * serviceFeeRate, serviceFeeCap);
+        var orderTotal = amountBeforeServiceFee + orderServiceFee;
 
-        _logger.LogInformation("PlaceOrderAsync: Calculated order totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, Total={Total}",
-            orderSubtotal, orderTax, orderDeliveryFee, orderTotal);
+        _logger.LogInformation("PlaceOrderAsync: Calculated order totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, ServiceFee={ServiceFee}, Total={Total}",
+            orderSubtotal, orderTax, orderDeliveryFee, orderServiceFee, orderTotal);
         _logger.LogInformation("PlaceOrderAsync: Cart totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, Total={Total}",
             cart.Subtotal, cart.Tax, cart.DeliveryFee, cart.Total);
 
@@ -1052,7 +1057,8 @@ public class OrderService : IOrderService
             Subtotal = orderSubtotal, // Use recalculated subtotal
             Tax = orderTax, // Use recalculated tax
             DeliveryFee = orderDeliveryFee, // Use recalculated delivery fee
-            Total = orderTotal, // Use recalculated total
+            ServiceFee = orderServiceFee,
+            Total = orderTotal, // Use recalculated total (includes service fee)
             Status = "Pending",
             CreatedAt = DateTime.UtcNow,
             DeliveryAddress = deliveryAddress,
@@ -1116,6 +1122,7 @@ public class OrderService : IOrderService
                 customerId,
                 cart.RestaurantId.Value,
                 order.Total,
+                order.ServiceFee,
                 order.CreatedAt,
                 deliveryAddress,
                 order.Items.Select(item => new OrderItemDto(

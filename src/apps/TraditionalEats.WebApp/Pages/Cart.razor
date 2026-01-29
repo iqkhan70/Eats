@@ -69,11 +69,20 @@
                     <RadzenText TextStyle="TextStyle.Body1">Delivery Fee</RadzenText>
                     <RadzenText TextStyle="TextStyle.Body1">$@cart.DeliveryFee.ToString("F2")</RadzenText>
                 </RadzenStack>
+                @{
+                    var amountBeforeServiceFee = cart.Subtotal + cart.Tax + cart.DeliveryFee;
+                    var serviceFee = Math.Min(amountBeforeServiceFee * 0.02m, 5.00m);
+                    var totalWithServiceFee = amountBeforeServiceFee + serviceFee;
+                }
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                    <RadzenText TextStyle="TextStyle.Body1">Service Fee</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body1">$@serviceFee.ToString("F2")</RadzenText>
+                </RadzenStack>
                 <hr style="border: none; border-top: 1px solid var(--rz-border-color); margin: 0.5rem 0;" />
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
                     <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">Total</RadzenText>
                     <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold; color: var(--rz-primary);">
-                        $@cart.Total.ToString("F2")
+                        $@totalWithServiceFee.ToString("F2")
                     </RadzenText>
                 </RadzenStack>
             </RadzenStack>

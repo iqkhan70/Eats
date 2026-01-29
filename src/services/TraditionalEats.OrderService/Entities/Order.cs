@@ -8,6 +8,8 @@ public class Order
     public decimal Subtotal { get; set; }
     public decimal Tax { get; set; }
     public decimal DeliveryFee { get; set; }
+    /// <summary>Service fee (platform): 2% of order amount before this fee, capped at $5. Kept separate for payment split (service provider vs vendor).</summary>
+    public decimal ServiceFee { get; set; }
     public decimal Total { get; set; }
     public string Status { get; set; } = "Pending"; // Pending, Accepted, Preparing, Ready, PickedUp, InTransit, Delivered, Cancelled, Refunded
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
