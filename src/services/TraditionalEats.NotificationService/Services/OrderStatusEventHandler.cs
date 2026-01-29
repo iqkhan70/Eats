@@ -145,7 +145,11 @@ public class OrderStatusEventHandler : BackgroundService
             }
 
             // Send SMS notification
-            if (!string.IsNullOrEmpty(customer.PhoneNumber))
+            if (string.IsNullOrEmpty(customer.PhoneNumber))
+            {
+                _logger.LogWarning("Skipping SMS: customer has no phone number. OrderId={OrderId}, CustomerId={CustomerId}", evt.OrderId, evt.CustomerId);
+            }
+            else
             {
                 var smsSent = await notificationService.SendNotificationAsync(new SendNotificationDto(
                     evt.CustomerId,
