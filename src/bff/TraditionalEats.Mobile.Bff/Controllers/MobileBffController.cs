@@ -74,6 +74,45 @@ public class MobileBffController : ControllerBase
         };
 
     // ----------------------------
+    // Geocode ZIP (for restaurant search by zip + radius)
+    // ----------------------------
+
+    [HttpGet("geocode-zip")]
+    public async Task<IActionResult> GeocodeZip([FromQuery] string zip)
+    {
+        if (string.IsNullOrWhiteSpace(zip))
+            return BadRequest(new { message = "zip is required" });
+        var zipClean = zip.Trim();
+        if (zipClean.Length < 5)
+            return BadRequest(new { message = "zip must be at least 5 digits" });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("Geocoding");
+            var url = $"https://nominatim.openstreetmap.org/search?postalcode={Uri.EscapeDataString(zipClean)}&country=United%20States&format=json&limit=1";
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("User-Agent", "TraditionalEats/1.0");
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, new { message = "Geocoding service error" });
+            var json = await response.Content.ReadAsStringAsync();
+            var arr = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(json);
+            if (arr == null || arr.Length == 0)
+                return NotFound(new { message = "ZIP code not found" });
+            var first = arr[0];
+            var lat = first.GetProperty("lat").GetString();
+            var lon = first.GetProperty("lon").GetString();
+            if (string.IsNullOrEmpty(lat) || string.IsNullOrEmpty(lon) || !double.TryParse(lat, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var latitude) || !double.TryParse(lon, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var longitude))
+                return NotFound(new { message = "ZIP code not found" });
+            return Ok(new { latitude, longitude });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Geocode zip failed for {Zip}", zipClean);
+            return StatusCode(500, new { message = "Geocoding failed" });
+        }
+    }
+
+    // ----------------------------
     // Restaurants
     // ----------------------------
 
@@ -83,6 +122,8 @@ public class MobileBffController : ControllerBase
         [FromQuery] string? cuisineType,
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
+        [FromQuery] double? radiusMiles,
+        [FromQuery] string? zip,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20)
     {
@@ -95,6 +136,8 @@ public class MobileBffController : ControllerBase
             if (!string.IsNullOrEmpty(cuisineType)) queryParams.Add($"cuisineType={Uri.EscapeDataString(cuisineType)}");
             if (latitude.HasValue) queryParams.Add($"latitude={latitude.Value}");
             if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");
+            if (radiusMiles.HasValue) queryParams.Add($"radiusMiles={radiusMiles.Value}");
+            if (!string.IsNullOrEmpty(zip)) queryParams.Add($"zip={Uri.EscapeDataString(zip)}");
             queryParams.Add($"skip={skip}");
             queryParams.Add($"take={take}");
 

@@ -60,12 +60,14 @@ public class RestaurantController : ControllerBase
         [FromQuery] string? cuisineType,
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
+        [FromQuery] double? radiusMiles,
+        [FromQuery] string? zip,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20)
     {
         try
         {
-            var restaurants = await _restaurantService.GetRestaurantsAsync(location, cuisineType, latitude, longitude, skip, take);
+            var restaurants = await _restaurantService.GetRestaurantsAsync(location, cuisineType, latitude, longitude, radiusMiles, zip, skip, take);
             return Ok(restaurants);
         }
         catch (Exception ex)

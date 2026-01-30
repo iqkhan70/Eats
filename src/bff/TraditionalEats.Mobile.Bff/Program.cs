@@ -98,6 +98,12 @@ builder.Services.AddHttpClient("RestaurantService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:RestaurantService"] ?? "http://localhost:5007");
 });
 
+builder.Services.AddHttpClient("Geocoding", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "TraditionalEats/1.0");
+});
+
 builder.Services.AddHttpClient("PaymentService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:PaymentService"] ?? "http://localhost:5004");

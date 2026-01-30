@@ -10,7 +10,7 @@ public interface IRestaurantService
 {
     Task<Guid> CreateRestaurantAsync(Guid ownerId, CreateRestaurantDto dto);
     Task<RestaurantDto?> GetRestaurantAsync(Guid restaurantId);
-    Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, int skip = 0, int take = 20);
+    Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20);
     Task<bool> UpdateRestaurantAsync(Guid restaurantId, Guid ownerId, UpdateRestaurantDto dto);
     Task<Guid> AddDeliveryZoneAsync(Guid restaurantId, Guid ownerId, CreateDeliveryZoneDto dto);
     Task<List<DeliveryZoneDto>> GetDeliveryZonesAsync(Guid restaurantId);
@@ -18,11 +18,11 @@ public interface IRestaurantService
     Task<List<RestaurantHoursDto>> GetRestaurantHoursAsync(Guid restaurantId);
     Task<bool> IsRestaurantOpenAsync(Guid restaurantId);
     Task<List<string>> GetSearchSuggestionsAsync(string query, int maxResults = 10);
-    
+
     // Vendor endpoints
     Task<List<RestaurantDto>> GetVendorRestaurantsAsync(Guid vendorId);
     Task<bool> DeleteRestaurantAsync(Guid restaurantId, Guid vendorId);
-    
+
     // Admin endpoints
     Task<List<RestaurantDto>> GetAllRestaurantsAsync(int skip = 0, int take = 100);
     Task<bool> AdminUpdateRestaurantAsync(Guid restaurantId, UpdateRestaurantDto dto);
@@ -56,7 +56,7 @@ public class RestaurantService : IRestaurantService
         // Geocode address if lat/long not provided
         double latitude = dto.Latitude ?? 0;
         double longitude = dto.Longitude ?? 0;
-        
+
         if ((dto.Latitude == null || dto.Longitude == null) && !string.IsNullOrWhiteSpace(dto.Address))
         {
             var geocodeResult = await _geocoding.GeocodeAddressAsync(dto.Address);
@@ -64,7 +64,7 @@ public class RestaurantService : IRestaurantService
             {
                 latitude = geocodeResult.Value.Latitude;
                 longitude = geocodeResult.Value.Longitude;
-                _logger.LogInformation("Geocoded address '{Address}' to lat={Latitude}, lon={Longitude}", 
+                _logger.LogInformation("Geocoded address '{Address}' to lat={Latitude}, lon={Longitude}",
                     dto.Address, latitude, longitude);
             }
             else
@@ -121,14 +121,14 @@ public class RestaurantService : IRestaurantService
         }
 
         var dto = MapToDto(restaurant);
-        
+
         // Cache for 1 hour
         await _redis.SetAsync($"restaurant:dto:{restaurantId}", dto, TimeSpan.FromHours(1));
 
         return dto;
     }
 
-    public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, int skip = 0, int take = 20)
+    public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20)
     {
         var query = _context.Restaurants
             .Where(r => r.IsActive)
@@ -136,10 +136,12 @@ public class RestaurantService : IRestaurantService
             .Include(r => r.Hours)
             .AsQueryable();
 
-        // Filter by location (address contains location string)
-        if (!string.IsNullOrWhiteSpace(location))
+        // When searching by coordinates (ZIP/near me), use ONLY radius + cuisine — do NOT filter by location text.
+        // Otherwise we pull in restaurants whose address contains the zip but have wrong coordinates (e.g. seed data from another city).
+        if (!latitude.HasValue || !longitude.HasValue)
         {
-            query = query.Where(r => r.Address.Contains(location) || r.Name.Contains(location));
+            if (!string.IsNullOrWhiteSpace(location))
+                query = query.Where(r => r.Address.Contains(location) || r.Name.Contains(location));
         }
 
         // Filter by cuisine type
@@ -148,24 +150,56 @@ public class RestaurantService : IRestaurantService
             query = query.Where(r => r.CuisineType != null && r.CuisineType.Contains(cuisineType));
         }
 
-        // If coordinates provided, order by distance (simple approximation)
+        var restaurants = await query.ToListAsync();
+
+        // If coordinates provided, filter by radius (Haversine) and order by distance
         if (latitude.HasValue && longitude.HasValue)
         {
-            query = query.OrderBy(r => 
-                Math.Abs(r.Latitude - latitude.Value) + Math.Abs(r.Longitude - longitude.Value));
-        }
-        else
-        {
-            // Default ordering by name
-            query = query.OrderBy(r => r.Name);
+            var lat = latitude.Value;
+            var lon = longitude.Value;
+            // Cap radius to 1–150 miles so we never return restaurants thousands of miles away
+            var radiusMi = Math.Max(1, Math.Min(150, radiusMiles ?? 100));
+
+            // Restaurants with distance
+            var withDistance = restaurants
+                .Select(r => new { Restaurant = r, DistanceMiles = HaversineMiles(lat, lon, r.Latitude, r.Longitude) })
+                .ToList();
+
+            // When user searched by ZIP, also include restaurants whose address contains that ZIP (same-ZIP fallback for wrong/missing coords)
+            var zipTrim = zip?.Trim();
+            var isZipSearch = !string.IsNullOrEmpty(zipTrim) && zipTrim.Length >= 5;
+            var zip5 = isZipSearch ? (zipTrim!.Length >= 5 ? zipTrim[..5] : zipTrim) : "";
+
+            var ordered = withDistance
+                .Where(x => x.DistanceMiles <= radiusMi || (isZipSearch && !string.IsNullOrEmpty(x.Restaurant.Address) && x.Restaurant.Address.Contains(zip5)))
+                .OrderBy(x => x.DistanceMiles)
+                .ThenBy(x => x.Restaurant.Name)
+                .Skip(skip)
+                .Take(take)
+                .ToList();
+
+            return ordered.Select(x => MapToDto(x.Restaurant)).ToList();
         }
 
-        var restaurants = await query
+        // Default ordering by name, then skip/take
+        return restaurants
+            .OrderBy(r => r.Name)
             .Skip(skip)
             .Take(take)
-            .ToListAsync();
+            .Select(MapToDto)
+            .ToList();
+    }
 
-        return restaurants.Select(MapToDto).ToList();
+    private static double HaversineMiles(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double R = 3959; // Earth radius in miles
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lon2 - lon1) * Math.PI / 180;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return R * c;
     }
 
     public async Task<bool> UpdateRestaurantAsync(Guid restaurantId, Guid ownerId, UpdateRestaurantDto dto)
@@ -353,7 +387,7 @@ public class RestaurantService : IRestaurantService
 
         // Combine and deduplicate, prioritizing addresses
         var suggestions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        
+
         foreach (var address in addresses)
         {
             if (suggestions.Count >= maxResults) break;

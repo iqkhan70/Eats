@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,10 +11,10 @@ import {
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { api } from '../../services/api';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { api } from "../../services/api";
 
 interface Restaurant {
   restaurantId: string;
@@ -24,6 +24,41 @@ interface Restaurant {
   rating?: number;
   reviewCount?: number;
   imageUrl?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+function haversineMiles(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 3959;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/** Show "Same ZIP" when coords are invalid (0,0) or distance is unreasonably large. */
+function getDisplayDistance(
+  lat: number | null | undefined,
+  lon: number | null | undefined,
+  centerLat: number,
+  centerLon: number,
+): string {
+  if (lat == null || lon == null) return "Same ZIP";
+  if (Math.abs(lat) < 0.01 && Math.abs(lon) < 0.01) return "Same ZIP";
+  const mi = haversineMiles(centerLat, centerLon, lat, lon);
+  if (mi > 200) return "Same ZIP";
+  return `${mi.toFixed(1)} mi away`;
 }
 
 export default function RestaurantsScreen() {
@@ -32,15 +67,35 @@ export default function RestaurantsScreen() {
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Search
-  const [searchText, setSearchText] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Active filters (from query params)
-  const activeCategory = typeof params.category === 'string' ? params.category : '';
-  const activeLocation = typeof params.location === 'string' ? params.location : '';
-  const hasFilters = !!(activeCategory || activeLocation);
+  const activeCategory =
+    typeof params.category === "string" ? params.category : "";
+  const activeLocation =
+    typeof params.location === "string" ? params.location : "";
+  const zipParam = typeof params.zip === "string" ? params.zip : undefined;
+  const centerLat =
+    typeof params.latitude === "string"
+      ? parseFloat(params.latitude)
+      : undefined;
+  const centerLon =
+    typeof params.longitude === "string"
+      ? parseFloat(params.longitude)
+      : undefined;
+  const radiusMiles =
+    typeof params.radiusMiles === "string"
+      ? parseFloat(params.radiusMiles)
+      : undefined;
+  const hasFilters = !!(
+    activeCategory ||
+    activeLocation ||
+    (centerLat != null && centerLon != null)
+  );
 
   // Debounce search (300ms)
   useEffect(() => {
@@ -51,28 +106,47 @@ export default function RestaurantsScreen() {
   useEffect(() => {
     loadRestaurants();
     // If user changes filters (location/category), usually it’s nicer to clear the search
-    setSearchText('');
-    setDebouncedSearch('');
-  }, [params.location, params.category]);
+    setSearchText("");
+    setDebouncedSearch("");
+  }, [
+    params.location,
+    params.category,
+    params.zip,
+    params.latitude,
+    params.longitude,
+    params.radiusMiles,
+  ]);
 
   const clearFilters = () => {
-    setSearchText('');
-    setDebouncedSearch('');
+    setSearchText("");
+    setDebouncedSearch("");
     Keyboard.dismiss();
-    router.replace('/restaurants'); // ✅ back to ALL restaurants (no params)
+    router.replace("/restaurants"); // ✅ back to ALL restaurants (no params)
   };
 
   const loadRestaurants = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
 
-      const queryParams: any = {};
+      const queryParams: Record<string, string | number> = {};
       if (params.location) queryParams.location = params.location;
       if (params.category) queryParams.cuisineType = params.category;
+      if (zipParam) queryParams.zip = zipParam;
+      if (centerLat != null && !Number.isNaN(centerLat))
+        queryParams.latitude = centerLat;
+      if (centerLon != null && !Number.isNaN(centerLon))
+        queryParams.longitude = centerLon;
+      if (radiusMiles != null && !Number.isNaN(radiusMiles))
+        queryParams.radiusMiles = radiusMiles;
 
-      const response = await api.get<Restaurant[]>('/MobileBff/restaurants', { params: queryParams });
+      const response = await api.get<Restaurant[]>("/MobileBff/restaurants", {
+        params: queryParams,
+      });
 
-      const mappedRestaurants = response.data.map((r: any) => ({
+      const data = response.data;
+      const list = Array.isArray(data) ? data : [];
+      const mappedRestaurants = list.map((r: any) => ({
         restaurantId: r.restaurantId || r.id,
         name: r.name,
         cuisineType: r.cuisineType,
@@ -80,12 +154,19 @@ export default function RestaurantsScreen() {
         rating: r.rating,
         reviewCount: r.reviewCount,
         imageUrl: r.imageUrl,
+        latitude: r.latitude,
+        longitude: r.longitude,
       }));
 
       setRestaurants(mappedRestaurants);
-    } catch (error) {
-      console.error('Error loading restaurants:', error);
+    } catch (error: any) {
+      console.error("Error loading restaurants:", error);
       setRestaurants([]);
+      const msg =
+        error?.response?.data?.error ?? error?.message ?? "Request failed";
+      setLoadError(
+        `Could not load restaurants. ${msg} Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/app.config.ts.`,
+      );
     } finally {
       setLoading(false);
     }
@@ -97,7 +178,8 @@ export default function RestaurantsScreen() {
     const q = debouncedSearch.toLowerCase();
 
     return restaurants.filter((r) => {
-      const haystack = `${r.name} ${r.cuisineType ?? ''} ${r.address ?? ''}`.toLowerCase();
+      const haystack =
+        `${r.name} ${r.cuisineType ?? ""} ${r.address ?? ""}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [restaurants, debouncedSearch]);
@@ -118,15 +200,29 @@ export default function RestaurantsScreen() {
 
       <View style={styles.restaurantInfo}>
         <Text style={styles.restaurantName}>{item.name}</Text>
-        {!!item.cuisineType && <Text style={styles.cuisineType}>{item.cuisineType}</Text>}
+        {!!item.cuisineType && (
+          <Text style={styles.cuisineType}>{item.cuisineType}</Text>
+        )}
         <Text style={styles.address} numberOfLines={2}>
           {item.address}
         </Text>
+        {centerLat != null && centerLon != null && (
+          <Text style={styles.distanceText}>
+            {getDisplayDistance(
+              item.latitude,
+              item.longitude,
+              centerLat,
+              centerLon,
+            )}
+          </Text>
+        )}
 
         <View style={styles.ratingContainer}>
           <Ionicons name="star" size={16} color="#FFD700" />
-          <Text style={styles.rating}>{item.rating ?? '-'}</Text>
-          <Text style={styles.reviewCount}>({item.reviewCount ?? 0} reviews)</Text>
+          <Text style={styles.rating}>{item.rating ?? "-"}</Text>
+          <Text style={styles.reviewCount}>
+            ({item.reviewCount ?? 0} reviews)
+          </Text>
         </View>
       </View>
 
@@ -137,7 +233,12 @@ export default function RestaurantsScreen() {
   const ListHeader = (
     <View style={styles.searchHeader}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color="#666" style={styles.searchIcon} />
+        <Ionicons
+          name="search"
+          size={18}
+          color="#666"
+          style={styles.searchIcon}
+        />
         <TextInput
           value={searchText}
           onChangeText={setSearchText}
@@ -151,7 +252,7 @@ export default function RestaurantsScreen() {
         />
         {!!searchText && (
           <TouchableOpacity
-            onPress={() => setSearchText('')}
+            onPress={() => setSearchText("")}
             style={styles.clearBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -165,12 +266,19 @@ export default function RestaurantsScreen() {
         <View style={styles.filtersRow}>
           <Ionicons name="funnel-outline" size={16} color="#666" />
           <Text style={styles.filtersText} numberOfLines={1}>
-            {activeCategory ? `Category: ${activeCategory}` : ''}
-            {activeCategory && activeLocation ? ' • ' : ''}
-            {activeLocation ? `Location: ${activeLocation}` : ''}
+            {activeCategory ? `Category: ${activeCategory}` : ""}
+            {activeCategory && activeLocation ? " • " : ""}
+            {activeLocation ? `Location: ${activeLocation}` : ""}
+            {activeCategory && centerLat != null ? " • " : ""}
+            {centerLat != null && radiusMiles != null
+              ? `Within ${Math.round(radiusMiles)} mi`
+              : ""}
           </Text>
 
-          <TouchableOpacity onPress={clearFilters} style={styles.clearFiltersBtn}>
+          <TouchableOpacity
+            onPress={clearFilters}
+            style={styles.clearFiltersBtn}
+          >
             <Text style={styles.clearFiltersBtnText}>Clear</Text>
           </TouchableOpacity>
         </View>
@@ -178,7 +286,8 @@ export default function RestaurantsScreen() {
 
       {!!debouncedSearch && (
         <Text style={styles.resultsText}>
-          Showing {filteredRestaurants.length} result{filteredRestaurants.length === 1 ? '' : 's'}
+          Showing {filteredRestaurants.length} result
+          {filteredRestaurants.length === 1 ? "" : "s"}
         </Text>
       )}
     </View>
@@ -192,12 +301,20 @@ export default function RestaurantsScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{loadError}</Text>
+      </View>
+    );
+  }
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <FlatList
           data={filteredRestaurants}
@@ -211,7 +328,7 @@ export default function RestaurantsScreen() {
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Text style={styles.emptyText}>
-                {debouncedSearch ? 'No matches found' : 'No restaurants found'}
+                {debouncedSearch ? "No matches found" : "No restaurants found"}
               </Text>
             </View>
           }
@@ -222,7 +339,7 @@ export default function RestaurantsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
 
   listContent: {
     padding: 16,
@@ -232,91 +349,91 @@ const styles = StyleSheet.create({
 
   // Sticky header wrapper
   searchHeader: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e9e9e9',
+    borderBottomColor: "#e9e9e9",
   },
 
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   searchIcon: {
-    position: 'absolute',
+    position: "absolute",
     left: 12,
     zIndex: 2,
   },
 
   searchInput: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 10,
     paddingLeft: 36,
     paddingRight: 36,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
     fontSize: 14,
-    color: '#333',
+    color: "#333",
   },
 
   clearBtn: {
-    position: 'absolute',
+    position: "absolute",
     right: 10,
   },
 
   resultsText: {
     marginTop: 8,
     fontSize: 12,
-    color: '#777',
+    color: "#777",
   },
 
   // ✅ Active filters row styles
   filtersRow: {
     marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
   filtersText: {
     flex: 1,
     marginLeft: 8,
     fontSize: 12,
-    color: '#555',
+    color: "#555",
   },
   clearFiltersBtn: {
-    backgroundColor: '#6200ee',
+    backgroundColor: "#6200ee",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   clearFiltersBtnText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 
   restaurantCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
+    flexDirection: "row",
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   restaurantImage: { width: 80, height: 80, borderRadius: 8, marginRight: 12 },
@@ -325,27 +442,44 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
 
   restaurantInfo: { flex: 1 },
 
-  restaurantName: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 4 },
+  restaurantName: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
 
-  cuisineType: { fontSize: 14, color: '#666', marginBottom: 4 },
+  cuisineType: { fontSize: 14, color: "#666", marginBottom: 4 },
 
-  address: { fontSize: 12, color: '#999', marginBottom: 8 },
+  address: { fontSize: 12, color: "#999", marginBottom: 4 },
+  distanceText: { fontSize: 12, color: "#6200ee", marginBottom: 8 },
 
-  ratingContainer: { flexDirection: 'row', alignItems: 'center' },
+  ratingContainer: { flexDirection: "row", alignItems: "center" },
 
-  rating: { fontSize: 14, fontWeight: '600', color: '#333', marginLeft: 4 },
+  rating: { fontSize: 14, fontWeight: "600", color: "#333", marginLeft: 4 },
 
-  reviewCount: { fontSize: 12, color: '#666', marginLeft: 4 },
+  reviewCount: { fontSize: 12, color: "#666", marginLeft: 4 },
 
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
 
-  emptyText: { fontSize: 16, color: '#666' },
+  emptyText: { fontSize: 16, color: "#666" },
+  errorText: {
+    fontSize: 14,
+    color: "#c00",
+    textAlign: "center",
+    paddingHorizontal: 24,
+  },
 });
