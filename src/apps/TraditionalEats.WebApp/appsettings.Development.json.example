@@ -1,5 +1,6 @@
 {
   "ApiBaseUrl": "http://localhost:5101/api/",
+  "ApiBaseUrlHttps": "https://localhost:5143/api/",
   "Logging": {
     "LogLevel": {
       "Default": "Debug",

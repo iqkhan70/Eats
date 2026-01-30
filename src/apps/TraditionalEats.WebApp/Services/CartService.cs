@@ -83,7 +83,7 @@ public class CartService
         await _httpClient.DeleteAsync($"WebBff/cart/{cartId}");
     }
 
-    public async Task<Guid> PlaceOrderAsync(Guid cartId, string deliveryAddress, string? specialInstructions = null)
+    public async Task<PlaceOrderResult> PlaceOrderAsync(Guid cartId, string deliveryAddress, string? specialInstructions = null)
     {
         var request = new
         {
@@ -94,7 +94,12 @@ public class CartService
         };
         var response = await _httpClient.PostAsJsonAsync("WebBff/orders/place", request);
         var result = await response.Content.ReadFromJsonAsync<PlaceOrderResponse>();
-        return result?.OrderId ?? Guid.Empty;
+        return new PlaceOrderResult
+        {
+            OrderId = result?.OrderId ?? Guid.Empty,
+            CheckoutUrl = result?.CheckoutUrl,
+            Error = result?.Error
+        };
     }
 
     private class CreateCartResponse
@@ -105,7 +110,16 @@ public class CartService
     private class PlaceOrderResponse
     {
         public Guid OrderId { get; set; }
+        public string? CheckoutUrl { get; set; }
+        public string? Error { get; set; }
     }
+}
+
+public class PlaceOrderResult
+{
+    public Guid OrderId { get; set; }
+    public string? CheckoutUrl { get; set; }
+    public string? Error { get; set; }
 }
 
 public class CartDto

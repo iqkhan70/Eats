@@ -22,10 +22,12 @@ builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ChatService>();
 
 // HTTP Client for API calls
-// Automatically uses current host (works for both localhost and IP access)
-// For phone testing: Access the app via http://YOUR_IP:5300 and API will use the same host
+// When app is on HTTPS we must call the BFF over HTTPS to avoid "Failed to fetch" (mixed content).
+// BFF HTTP = 5101, BFF HTTPS = 5143 (5143 avoids conflict with other services on 51xx).
 var configuredApiUrl = builder.Configuration["ApiBaseUrl"];
-const int apiPort = 5101; // Web BFF port
+var configuredApiUrlHttps = builder.Configuration["ApiBaseUrlHttps"];
+const int apiPortHttp = 5101;
+const int apiPortHttps = 5143;
 
 // HTTP Client that automatically adds auth tokens
 builder.Services.AddScoped(sp =>
@@ -33,18 +35,23 @@ builder.Services.AddScoped(sp =>
     var navigationManager = sp.GetRequiredService<NavigationManager>();
     var authService = sp.GetRequiredService<AuthService>();
     var baseUri = new Uri(navigationManager.BaseUri);
+    var isHttps = baseUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
 
-    // If a full URL is configured, use it
     Uri apiBaseUri;
-    if (!string.IsNullOrEmpty(configuredApiUrl) && configuredApiUrl.StartsWith("http"))
+    if (isHttps && !string.IsNullOrEmpty(configuredApiUrlHttps) && configuredApiUrlHttps.StartsWith("https"))
+    {
+        apiBaseUri = new Uri(configuredApiUrlHttps);
+    }
+    else if (!isHttps && !string.IsNullOrEmpty(configuredApiUrl) && configuredApiUrl.StartsWith("http"))
     {
         apiBaseUri = new Uri(configuredApiUrl);
     }
     else
     {
-        // Otherwise, construct API URL from current host with API port
-        // This works for both localhost and IP access
-        apiBaseUri = new UriBuilder(baseUri.Scheme, baseUri.Host, apiPort, "/api/").Uri;
+        // Build from current host: HTTPS page -> HTTPS BFF (5102), HTTP page -> HTTP BFF (5101)
+        var port = isHttps ? apiPortHttps : apiPortHttp;
+        var scheme = isHttps ? "https" : "http";
+        apiBaseUri = new UriBuilder(scheme, baseUri.Host, port, "/api/").Uri;
     }
 
     // Create HttpClient with message handler that adds auth tokens and cart session ID

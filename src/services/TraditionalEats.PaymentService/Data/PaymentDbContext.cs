@@ -11,6 +11,7 @@ public class PaymentDbContext : DbContext
 
     public DbSet<PaymentIntent> PaymentIntents { get; set; }
     public DbSet<Refund> Refunds { get; set; }
+    public DbSet<Vendor> Vendors { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +32,15 @@ public class PaymentDbContext : DbContext
             entity.HasIndex(e => e.PaymentIntentId);
             entity.HasIndex(e => e.OrderId);
             entity.Property(e => e.Status).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<Vendor>(entity =>
+        {
+            entity.HasKey(e => e.VendorId);
+            entity.HasIndex(e => e.UserId).IsUnique();
+            entity.HasIndex(e => e.StripeAccountId);
+            entity.Property(e => e.StripeAccountId).HasMaxLength(255);
+            entity.Property(e => e.StripeOnboardingStatus).HasMaxLength(50);
         });
     }
 }

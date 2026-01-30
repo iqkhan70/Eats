@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TraditionalEats.PaymentService.Data;
 
@@ -10,9 +11,11 @@ using TraditionalEats.PaymentService.Data;
 namespace TraditionalEats.PaymentService.Migrations
 {
     [DbContext(typeof(PaymentDbContext))]
-    partial class PaymentDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260129172308_AddVendorTable")]
+    partial class AddVendorTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -57,9 +60,6 @@ namespace TraditionalEats.PaymentService.Migrations
 
                     b.Property<string>("ProviderTransactionId")
                         .HasColumnType("longtext");
-
-                    b.Property<decimal>("ServiceFee")
-                        .HasColumnType("decimal(65,30)");
 
                     b.Property<string>("Status")
                         .IsRequired()

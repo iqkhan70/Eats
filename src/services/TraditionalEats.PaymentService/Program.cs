@@ -34,7 +34,7 @@ builder.Services.AddRabbitMq(builder.Configuration);
 builder.Services.AddOpenTelemetry("PaymentService", builder.Configuration);
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
@@ -58,6 +58,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddHttpClient();
+
 // Application services
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 
@@ -74,11 +76,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created
+// Run migrations at startup (or use EnsureCreated in dev if no migrations yet)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 
 app.Run();

@@ -221,26 +221,38 @@
         try
         {
             placingOrder = true;
-            var orderId = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress, 
+            var result = await CartService.PlaceOrderAsync(cart.CartId, deliveryAddress,
                 string.IsNullOrWhiteSpace(specialInstructions) ? null : specialInstructions);
 
             // Clear cart state immediately after successful order placement
             cart = null;
             deliveryAddress = string.Empty;
             specialInstructions = string.Empty;
-
-            NotificationService.Notify(new NotificationMessage
-            {
-                Severity = NotificationSeverity.Success,
-                Summary = "Order Placed",
-                Detail = $"Your order #{orderId.ToString().Substring(0, 8)} has been placed successfully!"
-            });
-
-            // Trigger navigation to refresh cart count in MainLayout
             NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
 
-            // Navigate to orders page
-            await Task.Delay(100); // Small delay to ensure state updates
+            if (!string.IsNullOrEmpty(result.CheckoutUrl))
+            {
+                // Redirect to Stripe Checkout to pay (authorize now, capture when order Completed)
+                NavigationManager.NavigateTo(result.CheckoutUrl, forceLoad: true);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(result.Error))
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Warning,
+                    Summary = "Order Placed",
+                    Detail = $"Order #{result.OrderId.ToString().Substring(0, 8)} placed. {result.Error}"
+                });
+            else
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Order Placed",
+                    Detail = $"Your order #{result.OrderId.ToString().Substring(0, 8)} has been placed successfully!"
+                });
+
+            await Task.Delay(100);
             NavigationManager.NavigateTo("/orders");
         }
         catch (Exception ex)

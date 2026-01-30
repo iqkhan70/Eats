@@ -52,7 +52,7 @@ builder.Services.AddRabbitMq(builder.Configuration);
 builder.Services.AddOpenTelemetry("OrderService", builder.Configuration);
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
@@ -96,6 +96,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Application services
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<IOrderService, OrderService>();
 
 var app = builder.Build();
@@ -130,14 +131,14 @@ static IEdmModel GetEdmModel()
     // Orders - main entity set
     var orderSet = builder.EntitySet<Order>("Orders");
     orderSet.EntityType.HasKey(o => o.OrderId);
-    
+
     // Register related entity sets (needed for navigation properties)
     var orderItemSet = builder.EntitySet<OrderItem>("OrderItems");
     orderItemSet.EntityType.HasKey(oi => oi.OrderItemId);
-    
+
     var orderStatusHistorySet = builder.EntitySet<OrderStatusHistory>("OrderStatusHistories");
     orderStatusHistorySet.EntityType.HasKey(osh => osh.Id);
-    
+
     // Configure navigation properties - OData will serialize them when using .Include()
     // Note: We're not using $expand, but the data will be included via .Include() in the controller
     orderSet.EntityType.HasMany(o => o.Items);

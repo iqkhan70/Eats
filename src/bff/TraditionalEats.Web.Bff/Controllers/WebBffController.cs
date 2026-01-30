@@ -15,16 +15,19 @@ public class WebBffController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WebBffController> _logger;
     private readonly ICartSessionService _cartSessionService;
+    private readonly IConfiguration _configuration;
     private const string SESSION_COOKIE_NAME = "cart_session";
 
     public WebBffController(
         IHttpClientFactory httpClientFactory,
         ILogger<WebBffController> logger,
-        ICartSessionService cartSessionService)
+        ICartSessionService cartSessionService,
+        IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _cartSessionService = cartSessionService;
+        _configuration = configuration;
     }
 
     // ----------------------------
@@ -971,23 +974,127 @@ public class WebBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("OrderService");
-
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
+            var orderClient = _httpClientFactory.CreateClient("OrderService");
+            var orderRequest = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
             if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-            {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-            }
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
+                orderRequest.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            orderRequest.Content = System.Net.Http.Json.JsonContent.Create(request);
 
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+            var orderResponse = await orderClient.SendAsync(orderRequest);
+            var orderContent = await orderResponse.Content.ReadAsStringAsync();
+            if (!orderResponse.IsSuccessStatusCode)
+                return JsonContent(orderContent, (int)orderResponse.StatusCode);
+
+            // Parse orderId from { "orderId": "..." }
+            Guid orderId;
+            try
+            {
+                var orderJson = System.Text.Json.JsonDocument.Parse(orderContent);
+                var orderIdEl = orderJson.RootElement.TryGetProperty("orderId", out var o) ? o : orderJson.RootElement.GetProperty("OrderId");
+                orderId = Guid.Parse(orderIdEl.GetString()!);
+            }
+            catch
+            {
+                return JsonContent(orderContent, (int)orderResponse.StatusCode);
+            }
+
+            // Get order details (total, serviceFee, restaurantId) for checkout session
+            var getOrderRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
+            if (Request.Headers.TryGetValue("Authorization", out authHeader))
+                getOrderRequest.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            var getOrderResponse = await orderClient.SendAsync(getOrderRequest);
+            if (!getOrderResponse.IsSuccessStatusCode)
+                return Ok(new { orderId, checkoutUrl = (string?)null, error = "Order placed but could not load details for payment" });
+
+            var orderDetailContent = await getOrderResponse.Content.ReadAsStringAsync();
+            decimal total = 0, serviceFee = 0;
+            Guid restaurantId = default;
+            try
+            {
+                var orderDoc = System.Text.Json.JsonDocument.Parse(orderDetailContent);
+                var root = orderDoc.RootElement;
+                total = root.TryGetProperty("total", out var t) ? t.GetDecimal() : root.GetProperty("Total").GetDecimal();
+                serviceFee = root.TryGetProperty("serviceFee", out var s) ? s.GetDecimal() : (root.TryGetProperty("ServiceFee", out s) ? s.GetDecimal() : 0);
+                var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
+                restaurantId = Guid.Parse(restEl.GetString()!);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "PlaceOrder: Could not parse order details for checkout");
+                return Ok(new { orderId, checkoutUrl = (string?)null, error = "Order placed but could not initiate payment" });
+            }
+
+            // Create Stripe Checkout session (destination charge + app fee + manual capture)
+            var baseUrl = _configuration["AppBaseUrl"] ?? Request.Scheme + "://" + Request.Host;
+            var successUrl = baseUrl.TrimEnd('/') + "/orders?payment=success";
+            var cancelUrl = baseUrl.TrimEnd('/') + "/cart?payment=cancelled";
+            var paymentClient = _httpClientFactory.CreateClient("PaymentService");
+            var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
+            if (Request.Headers.TryGetValue("Authorization", out authHeader))
+                checkoutRequest.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            checkoutRequest.Content = System.Net.Http.Json.JsonContent.Create(new
+            {
+                orderId,
+                amount = total,
+                serviceFee,
+                restaurantId,
+                successUrl,
+                cancelUrl
+            });
+
+            var checkoutResponse = await paymentClient.SendAsync(checkoutRequest);
+            var checkoutContent = await checkoutResponse.Content.ReadAsStringAsync();
+            if (checkoutResponse.IsSuccessStatusCode)
+            {
+                var checkoutDoc = System.Text.Json.JsonDocument.Parse(checkoutContent);
+                var url = checkoutDoc.RootElement.TryGetProperty("url", out var u) ? u.GetString() : null;
+                return Ok(new { orderId, checkoutUrl = url });
+            }
+            _logger.LogWarning("PlaceOrder: Checkout session failed for order {OrderId}: {Content}", orderId, checkoutContent);
+            return Ok(new { orderId, checkoutUrl = (string?)null, error = checkoutResponse.StatusCode == System.Net.HttpStatusCode.BadRequest ? checkoutContent : "Vendor cannot accept payments yet. Order was placed." });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error placing order");
             return StatusCode(500, new { error = "Failed to place order" });
+        }
+    }
+
+    [HttpGet("payments/vendor/onboarding-status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorStripeOnboardingStatus()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/payment/vendor/onboarding-status");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor Stripe onboarding status");
+            return StatusCode(500, new { error = "Failed to fetch onboarding status" });
+        }
+    }
+
+    [HttpPost("payments/vendor/connect-link")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateVendorStripeConnectLink()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync("/api/payment/vendor/connect-link", null);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating vendor Stripe connect link");
+            return StatusCode(500, new { error = "Failed to create Stripe connect link" });
         }
     }
 

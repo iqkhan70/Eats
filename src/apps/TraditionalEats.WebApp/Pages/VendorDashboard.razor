@@ -27,6 +27,36 @@
         </RadzenStack>
     </RadzenStack>
 
+    @* Stripe onboarding banner (vendors only): show until Stripe setup is complete *@
+    @if (isAuthChecked && isVendor && !string.IsNullOrEmpty(stripeOnboardingStatus) && !stripeOnboardingStatus.Equals("Complete", StringComparison.OrdinalIgnoreCase))
+    {
+        <RadzenCard Style="background: var(--rz-warning); color: #000; border: none;">
+            <RadzenStack Gap="1rem">
+                @if (!string.IsNullOrEmpty(stripeConnectError))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Why you see 400" ShowIcon="true" Style="margin: 0;">
+                        <div style="white-space: pre-wrap; word-break: break-word;">@stripeConnectError</div>
+                        <RadzenText TextStyle="TextStyle.Caption">Fix the issue above, or use a remediation link from Stripe below.</RadzenText>
+                    </RadzenAlert>
+                }
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Gap="1rem">
+                    <RadzenStack Gap="0.25rem">
+                        <RadzenText TextStyle="TextStyle.Subtitle1" Style="font-weight: bold;">Stripe setup incomplete</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2">Complete the short Stripe Connect flow so you can accept paid orders. In test mode use Stripe's test data—no real bank details needed until you go live.</RadzenText>
+                    </RadzenStack>
+                    <RadzenButton Text="Finish Stripe setup" Icon="link" Click="ConnectStripe" Variant="Variant.Filled" Style="background: #000; color: #fff;" />
+                </RadzenStack>
+                <RadzenStack Gap="0.5rem" Style="margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(0,0,0,0.2);">
+                    <RadzenText TextStyle="TextStyle.Caption">If you got a <strong>remediation link</strong> from Stripe (e.g. from the Dashboard), paste it below and open it to complete setup:</RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                        <RadzenTextBox @bind-Value="remediationLinkInput" Placeholder="https://connect.stripe.com/..." Style="flex: 1; min-width: 200px;" />
+                        <RadzenButton Text="Open link" Icon="open_in_new" Click="OpenRemediationLink" Variant="Variant.Outlined" Style="border-color: #000; color: #000;" />
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+    }
+
     @* -------------------------
        AUTH / LOADING GATES
        ------------------------- *@
@@ -406,6 +436,10 @@
 
     private string errorMessage = string.Empty;
 
+    private string? stripeOnboardingStatus = null;
+    private string? remediationLinkInput = null;
+    private string? stripeConnectError = null;
+
     private string HeaderText => isAdmin ? "All Restaurants" : "My Restaurants";
     private string PageTitleText => isAdmin ? "Admin Restaurants - TraditionalEats" : "Vendor Dashboard - TraditionalEats";
     private string EmptyStateText => isAdmin ? "No restaurants exist yet." : "You don't have any restaurants yet.";
@@ -423,8 +457,9 @@
 
         if (isAuthenticated && (isVendor || isAdmin))
         {
-            // Load in parallel to reduce waiting time
             await Task.WhenAll(LoadRestaurants(), LoadCategories());
+            if (isVendor)
+                await LoadStripeOnboardingStatus();
         }
 
         isLoading = false;
@@ -447,6 +482,78 @@
             isVendor = false;
             isAdmin = false;
         }
+    }
+
+    private async Task LoadStripeOnboardingStatus()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<StripeOnboardingStatusResponse>("WebBff/payments/vendor/onboarding-status");
+            stripeOnboardingStatus = response?.Status ?? "Pending";
+        }
+        catch
+        {
+            stripeOnboardingStatus = "Pending";
+        }
+    }
+
+    private async Task ConnectStripe()
+    {
+        stripeConnectError = null;
+        try
+        {
+            var response = await Http.PostAsync("WebBff/payments/vendor/connect-link", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                string? apiMessage = null;
+                string? stripeErrorCode = null;
+                try
+                {
+                    var err = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(body);
+                    if (err.TryGetProperty("message", out var m)) apiMessage = m.GetString();
+                    else if (err.TryGetProperty("error", out var e)) apiMessage = e.GetString();
+                    if (err.TryGetProperty("stripeErrorCode", out var c)) stripeErrorCode = c.GetString();
+                }
+                catch { /* use fallback */ }
+                var detail = apiMessage ?? $"Request failed ({(int)response.StatusCode}). Check PaymentService logs for details.";
+                if (!string.IsNullOrEmpty(stripeErrorCode))
+                    detail += " [Code: " + stripeErrorCode + "]";
+                stripeConnectError = detail;
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Stripe setup failed (400)",
+                    Detail = detail
+                });
+                return;
+            }
+            var json = await response.Content.ReadFromJsonAsync<StripeConnectLinkResponse>();
+            if (!string.IsNullOrEmpty(json?.Url))
+                Navigation.NavigateTo(json.Url, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Connect Stripe failed");
+            stripeConnectError = ex.Message;
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = "Failed to start Stripe setup." });
+        }
+    }
+
+    private void OpenRemediationLink()
+    {
+        var url = (remediationLinkInput ?? "").Trim();
+        if (string.IsNullOrEmpty(url))
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "No link", Detail = "Paste a Stripe remediation link first." });
+            return;
+        }
+        if (!url.StartsWith("https://connect.stripe.com/", StringComparison.OrdinalIgnoreCase))
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Invalid link", Detail = "Link should start with https://connect.stripe.com/" });
+            return;
+        }
+        Navigation.NavigateTo(url, forceLoad: true);
     }
 
     private async Task LoadRestaurants()
@@ -904,6 +1011,9 @@
         public double Longitude { get; set; }
         public bool IsActive { get; set; }
     }
+
+    private class StripeOnboardingStatusResponse { public string? Status { get; set; } }
+    private class StripeConnectLinkResponse { public string? Url { get; set; } }
 
     public class MenuItemForm
     {

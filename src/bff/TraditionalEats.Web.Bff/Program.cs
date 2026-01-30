@@ -20,7 +20,7 @@ builder.Services.AddRedis(builder.Configuration);
 builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Redis.ICartSessionService, TraditionalEats.BuildingBlocks.Redis.CartSessionService>();
 
 // JWT Authentication (optional - allows extracting customerId from token)
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
 
@@ -29,7 +29,7 @@ var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
 
 // Log JWT configuration for debugging
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger<Program>();
-logger.LogInformation("BFF JWT Configuration - Issuer: {Issuer}, Audience: {Audience}, Secret Length: {SecretLength}", 
+logger.LogInformation("BFF JWT Configuration - Issuer: {Issuer}, Audience: {Audience}, Secret Length: {SecretLength}",
     jwtIssuer, jwtAudience, jwtSecret?.Length ?? 0);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -72,28 +72,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Add CORS for Blazor WebAssembly
-// Allow connections from localhost and any IP address (for mobile browser access)
+// Allow connections from localhost (HTTP and HTTPS) and any IP address (for mobile browser access)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         policy.WithOrigins(
-                "http://localhost:5300", 
-                "http://localhost:5301", 
-                "http://127.0.0.1:5300", 
-                "http://127.0.0.1:5301")
+                "http://localhost:5300",
+                "http://localhost:5301",
+                "https://localhost:5300",
+                "https://localhost:5301",
+                "http://127.0.0.1:5300",
+                "http://127.0.0.1:5301",
+                "https://127.0.0.1:5300",
+                "https://127.0.0.1:5301")
               .SetIsOriginAllowed(origin =>
               {
                   // Allow any origin that matches the pattern (for IP access from mobile)
-                  // This allows http://192.168.x.x:5300, http://10.x.x.x:5300, etc.
+                  // This allows http(s)://localhost:5300|5301 and http://192.168.x.x:5300, etc.
                   var uri = new Uri(origin);
-                  return uri.Scheme == "http" && 
-                         (uri.Host == "localhost" || 
-                          uri.Host == "127.0.0.1" || 
-                          uri.Host.StartsWith("192.168.") ||
-                          uri.Host.StartsWith("10.") ||
-                          uri.Host.StartsWith("172.")) &&
-                         (uri.Port == 5300 || uri.Port == 5301);
+                  var validHost = uri.Host == "localhost" ||
+                                 uri.Host == "127.0.0.1" ||
+                                 uri.Host.StartsWith("192.168.") ||
+                                 uri.Host.StartsWith("10.") ||
+                                 uri.Host.StartsWith("172.");
+                  var validPort = uri.Port == 5300 || uri.Port == 5301;
+                  var validScheme = uri.Scheme == "http" || uri.Scheme == "https";
+                  return validScheme && validHost && validPort;
               })
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -154,15 +159,15 @@ builder.Services.AddHttpClient("PromotionService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:PromotionService"] ?? "http://localhost:5008");
 });
 
-    builder.Services.AddHttpClient("ReviewService", client =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
-    });
+builder.Services.AddHttpClient("ReviewService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
+});
 
-    builder.Services.AddHttpClient("OrderService", client =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");
-    });
+builder.Services.AddHttpClient("OrderService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");
+});
 
 var app = builder.Build();
 
@@ -182,8 +187,9 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Root endpoint for testing
-app.MapGet("/", () => new { 
-    service = "TraditionalEats.Web.Bff", 
+app.MapGet("/", () => new
+{
+    service = "TraditionalEats.Web.Bff",
     status = "running",
     endpoints = new[] {
         "/api/WebBff/health",

@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Stripe;
+using Stripe.Checkout;
 using TraditionalEats.BuildingBlocks.Messaging;
 using TraditionalEats.Contracts.Events;
 using TraditionalEats.PaymentService.Data;
@@ -9,10 +11,20 @@ namespace TraditionalEats.PaymentService.Services;
 
 public interface IPaymentService
 {
+    // Stripe Connect (vendor onboarding)
+    Task<string> CreateVendorConnectLinkAsync(Guid userId);
+    Task<(string? StripeAccountId, string Status)> GetVendorOnboardingStatusAsync(Guid userId);
+    Task UpdateVendorOnboardingFromStripeAsync(string stripeAccountId);
+
     Task<Guid> CreatePaymentIntentAsync(Guid orderId, decimal amount, string currency = "USD");
     Task<bool> AuthorizePaymentAsync(Guid paymentIntentId, string paymentMethodId);
     Task<bool> CapturePaymentAsync(Guid paymentIntentId);
+    Task<bool> CapturePaymentByOrderIdAsync(Guid orderId);
     Task<Guid> CreateRefundAsync(Guid paymentIntentId, Guid orderId, decimal amount, string reason);
+    /// <summary>Called from Stripe webhook: update our PaymentIntent by Stripe PI id.</summary>
+    Task UpdatePaymentIntentStatusFromStripeAsync(string stripePaymentIntentId, string status, string? failureReason);
+    /// <summary>Create Stripe Checkout Session (destination charge + app fee + manual capture). Returns checkout URL.</summary>
+    Task<string> CreateCheckoutSessionAsync(Guid orderId, decimal amount, decimal serviceFee, Guid restaurantId, string successUrl, string cancelUrl);
 }
 
 public class PaymentService : IPaymentService
@@ -21,20 +33,107 @@ public class PaymentService : IPaymentService
     private readonly IMessagePublisher _messagePublisher;
     private readonly ILogger<PaymentService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public PaymentService(
         PaymentDbContext context,
         IMessagePublisher messagePublisher,
         ILogger<PaymentService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _messagePublisher = messagePublisher;
         _logger = logger;
         _configuration = configuration;
+        _httpClientFactory = httpClientFactory;
 
         // Initialize Stripe
         StripeConfiguration.ApiKey = _configuration["Stripe:SecretKey"];
+    }
+
+    public async Task<string> CreateVendorConnectLinkAsync(Guid userId)
+    {
+        var secretKey = _configuration["Stripe:SecretKey"];
+        if (string.IsNullOrWhiteSpace(secretKey))
+        {
+            _logger.LogError("Stripe:SecretKey is not set in configuration");
+            throw new InvalidOperationException("Stripe is not configured. Please set Stripe:SecretKey.");
+        }
+        StripeConfiguration.ApiKey = secretKey;
+
+        var vendor = await _context.Vendors.FirstOrDefaultAsync(v => v.UserId == userId);
+        if (vendor == null)
+        {
+            vendor = new Vendor
+            {
+                VendorId = Guid.NewGuid(),
+                UserId = userId,
+                StripeOnboardingStatus = "Pending",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _context.Vendors.Add(vendor);
+        }
+
+        string? stripeAccountId = vendor.StripeAccountId;
+        if (string.IsNullOrEmpty(stripeAccountId))
+        {
+            var accountService = new AccountService();
+            var accountOptions = new AccountCreateOptions
+            {
+                Type = "standard",
+                Country = "US"
+            };
+            var account = await accountService.CreateAsync(accountOptions);
+            stripeAccountId = account.Id;
+            vendor.StripeAccountId = stripeAccountId;
+            vendor.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Created Stripe connected account {StripeAccountId} for vendor UserId={UserId}", stripeAccountId, userId);
+        }
+
+        var baseUrl = (_configuration["Stripe:ConnectReturnUrl"] ?? _configuration["AppBaseUrl"] ?? "https://localhost:5301").TrimEnd('/');
+        var returnUrl = baseUrl + "/vendor?stripe=return";
+        var refreshUrl = baseUrl + "/vendor?stripe=refresh";
+
+        var linkService = new AccountLinkService();
+        var linkOptions = new AccountLinkCreateOptions
+        {
+            Account = stripeAccountId,
+            Type = "account_onboarding",
+            ReturnUrl = returnUrl,
+            RefreshUrl = refreshUrl
+        };
+        var link = await linkService.CreateAsync(linkOptions);
+        _logger.LogInformation("Created account link for vendor UserId={UserId}, StripeAccountId={StripeAccountId}", userId, stripeAccountId);
+        return link.Url;
+    }
+
+    public async Task<(string? StripeAccountId, string Status)> GetVendorOnboardingStatusAsync(Guid userId)
+    {
+        var vendor = await _context.Vendors.FirstOrDefaultAsync(v => v.UserId == userId);
+        if (vendor == null)
+            return (null, "Pending");
+        return (vendor.StripeAccountId, vendor.StripeOnboardingStatus);
+    }
+
+    public async Task UpdateVendorOnboardingFromStripeAsync(string stripeAccountId)
+    {
+        var vendor = await _context.Vendors.FirstOrDefaultAsync(v => v.StripeAccountId == stripeAccountId);
+        if (vendor == null)
+        {
+            _logger.LogWarning("Vendor not found for StripeAccountId={StripeAccountId}", stripeAccountId);
+            return;
+        }
+        var accountService = new AccountService();
+        var account = await accountService.GetAsync(stripeAccountId);
+        var status = (account.ChargesEnabled == true && account.PayoutsEnabled == true) ? "Complete"
+            : (account.DetailsSubmitted == true ? "Restricted" : "Pending");
+        vendor.StripeOnboardingStatus = status;
+        vendor.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Updated vendor StripeAccountId={StripeAccountId} onboarding status to {Status}", stripeAccountId, status);
     }
 
     public async Task<Guid> CreatePaymentIntentAsync(Guid orderId, decimal amount, string currency = "USD")
@@ -176,6 +275,128 @@ public class PaymentService : IPaymentService
             _logger.LogError(ex, "Failed to capture payment {PaymentIntentId}", paymentIntentId);
             return false;
         }
+    }
+
+    public async Task<bool> CapturePaymentByOrderIdAsync(Guid orderId)
+    {
+        var paymentIntent = await _context.PaymentIntents
+            .FirstOrDefaultAsync(pi => pi.OrderId == orderId && (pi.Status == "Authorized" || pi.Status == "Pending"));
+
+        if (paymentIntent == null)
+        {
+            _logger.LogWarning("No authorizable payment intent found for OrderId={OrderId}", orderId);
+            return false;
+        }
+        return await CapturePaymentAsync(paymentIntent.PaymentIntentId);
+    }
+
+    public async Task UpdatePaymentIntentStatusFromStripeAsync(string stripePaymentIntentId, string status, string? failureReason)
+    {
+        var paymentIntent = await _context.PaymentIntents
+            .FirstOrDefaultAsync(pi => pi.ProviderIntentId == stripePaymentIntentId);
+        if (paymentIntent == null)
+        {
+            _logger.LogWarning("PaymentIntent not found for Stripe PI id={StripeId}", stripePaymentIntentId);
+            return;
+        }
+        paymentIntent.Status = status;
+        if (failureReason != null)
+            paymentIntent.FailureReason = failureReason;
+        if (status == "Authorized")
+            paymentIntent.AuthorizedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Updated PaymentIntent {PaymentIntentId} status to {Status} from webhook", paymentIntent.PaymentIntentId, status);
+    }
+
+    public async Task<string> CreateCheckoutSessionAsync(Guid orderId, decimal amount, decimal serviceFee, Guid restaurantId, string successUrl, string cancelUrl)
+    {
+        var restaurantBaseUrl = _configuration["Services:RestaurantService:BaseUrl"] ?? "http://localhost:5007";
+        using var http = _httpClientFactory.CreateClient();
+        var restaurantResponse = await http.GetAsync($"{restaurantBaseUrl.TrimEnd('/')}/api/restaurant/{restaurantId}");
+        if (!restaurantResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Restaurant {RestaurantId} not found when creating checkout", restaurantId);
+            throw new InvalidOperationException("Restaurant not found");
+        }
+        var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(restaurantJson);
+        var root = doc.RootElement;
+        if (!root.TryGetProperty("ownerId", out var ownerIdEl))
+            root.TryGetProperty("OwnerId", out ownerIdEl);
+        if (!ownerIdEl.TryGetGuid(out Guid ownerId))
+            throw new InvalidOperationException("Restaurant has no owner");
+        var vendor = await _context.Vendors.FirstOrDefaultAsync(v => v.UserId == ownerId);
+        if (vendor == null || string.IsNullOrEmpty(vendor.StripeAccountId))
+        {
+            _logger.LogWarning("Vendor not connected for restaurant {RestaurantId} owner {OwnerId}", restaurantId, ownerId);
+            throw new InvalidOperationException("Vendor has not connected Stripe. They cannot accept paid orders yet.");
+        }
+        if (vendor.StripeOnboardingStatus != "Complete")
+        {
+            _logger.LogWarning("Vendor Stripe onboarding incomplete for restaurant {RestaurantId}", restaurantId);
+            throw new InvalidOperationException("Vendor Stripe setup is incomplete. They cannot accept paid orders yet.");
+        }
+        var amountCents = (long)Math.Round(amount * 100);
+        var serviceFeeCents = (long)Math.Round(serviceFee * 100);
+        var sessionService = new SessionService();
+        var options = new SessionCreateOptions
+        {
+            Mode = "payment",
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = orderId.ToString(),
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new()
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = "usd",
+                        UnitAmount = amountCents,
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = $"Order {orderId:N}".Substring(0, 24),
+                            Description = "TraditionalEats order"
+                        }
+                    },
+                    Quantity = 1
+                }
+            },
+            PaymentIntentData = new SessionPaymentIntentDataOptions
+            {
+                CaptureMethod = "manual",
+                ApplicationFeeAmount = serviceFeeCents,
+                TransferData = new SessionPaymentIntentDataTransferDataOptions
+                {
+                    Destination = vendor.StripeAccountId
+                },
+                Metadata = new Dictionary<string, string> { { "OrderId", orderId.ToString() } }
+            }
+        };
+        options.Expand = new List<string> { "payment_intent" };
+        var session = await sessionService.CreateAsync(options);
+        var stripePiId = session.PaymentIntentId ?? (session.PaymentIntent as Stripe.PaymentIntent)?.Id;
+        if (!string.IsNullOrEmpty(stripePiId))
+        {
+            var ourPiId = Guid.NewGuid();
+            _context.PaymentIntents.Add(new Entities.PaymentIntent
+            {
+                PaymentIntentId = ourPiId,
+                OrderId = orderId,
+                Amount = amount,
+                ServiceFee = serviceFee,
+                Currency = "USD",
+                Status = "Pending",
+                Provider = "Stripe",
+                ProviderIntentId = stripePiId,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Created PaymentIntent {PaymentIntentId} for OrderId={OrderId}, Stripe PI={StripeId}", ourPiId, orderId, stripePiId);
+        }
+        if (string.IsNullOrEmpty(session.Url))
+            throw new InvalidOperationException("Stripe did not return a checkout URL");
+        return session.Url;
     }
 
     public async Task<Guid> CreateRefundAsync(Guid paymentIntentId, Guid orderId, decimal amount, string reason)

@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -205,7 +206,7 @@ export default function CartScreen() {
     try {
       setPlacingOrder(true);
 
-      const orderId = await cartService.placeOrder(
+      const result = await cartService.placeOrder(
         cart.cartId,
         deliveryAddress,
         specialInstructions.trim() || undefined,
@@ -218,17 +219,32 @@ export default function CartScreen() {
       );
       setSpecialInstructions("");
 
-      Alert.alert(
-        "Success",
-        `Order placed! Order ID: ${orderId.substring(0, 8)}`,
-        [
-          {
-            text: "OK",
-            // ✅ Force Orders screen to "refresh" by changing the URL each time
-            onPress: () => router.push(`/(tabs)/orders?refresh=${Date.now()}`),
-          },
-        ],
-      );
+      if (result.checkoutUrl) {
+        // Open Stripe Checkout in browser (authorize now; capture when vendor marks order Completed)
+        await Linking.openURL(result.checkoutUrl);
+        Alert.alert(
+          "Complete payment",
+          "Complete your payment in the browser, then return to the app.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                router.push(`/(tabs)/orders?refresh=${Date.now()}`),
+            },
+          ],
+        );
+        return;
+      }
+
+      const message = result.error
+        ? `Order #${result.orderId.substring(0, 8)} placed. ${result.error}`
+        : `Order placed! Order ID: ${result.orderId.substring(0, 8)}`;
+      Alert.alert(result.error ? "Order placed" : "Success", message, [
+        {
+          text: "OK",
+          onPress: () => router.push(`/(tabs)/orders?refresh=${Date.now()}`),
+        },
+      ]);
     } catch (error: any) {
       if (error.response?.status === 401) {
         Alert.alert(
