@@ -11,7 +11,7 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 
@@ -42,6 +42,15 @@ export default function VendorDashboardScreen() {
   useEffect(() => {
     checkAuthAndLoad();
   }, []);
+
+  // Reload restaurants when screen gains focus (e.g. after creating a new restaurant)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated && isVendor) {
+        loadRestaurants();
+      }
+    }, [isAuthenticated, isVendor]),
+  );
 
   const checkAuthAndLoad = async () => {
     const authenticated = await authService.isAuthenticated();
