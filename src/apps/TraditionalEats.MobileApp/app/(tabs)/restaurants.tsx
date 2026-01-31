@@ -162,10 +162,15 @@ export default function RestaurantsScreen() {
     } catch (error: any) {
       console.error("Error loading restaurants:", error);
       setRestaurants([]);
-      const msg =
-        error?.response?.data?.error ?? error?.message ?? "Request failed";
+      const status = error?.response?.status;
+      const bodyMessage =
+        error?.response?.data?.message ?? error?.response?.data?.error;
+      const friendlyMessage =
+        status === 404 || bodyMessage?.toLowerCase().includes("not found")
+          ? "No restaurants found for this area. Try another location or browse all restaurants."
+          : (bodyMessage ?? error?.message ?? "Request failed");
       setLoadError(
-        `Could not load restaurants. ${msg} Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/app.config.ts.`,
+        `Could not load restaurants. ${friendlyMessage}${status && status !== 404 ? ` Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/app.config.ts.` : ""}`,
       );
     } finally {
       setLoading(false);

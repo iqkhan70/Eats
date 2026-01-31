@@ -130,18 +130,30 @@ public class RestaurantService : IRestaurantService
 
     public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20)
     {
+        // List endpoint: no Include(DeliveryZones/Hours) — list view doesn't need them; reduces data and query cost
         var query = _context.Restaurants
             .Where(r => r.IsActive)
-            .Include(r => r.DeliveryZones)
-            .Include(r => r.Hours)
             .AsQueryable();
 
         // When searching by coordinates (ZIP/near me), use ONLY radius + cuisine — do NOT filter by location text.
-        // Otherwise we pull in restaurants whose address contains the zip but have wrong coordinates (e.g. seed data from another city).
         if (!latitude.HasValue || !longitude.HasValue)
         {
             if (!string.IsNullOrWhiteSpace(location))
                 query = query.Where(r => r.Address.Contains(location) || r.Name.Contains(location));
+        }
+        else
+        {
+            // Bounding-box filter in DB so we don't load all restaurants: ~1 deg lat ≈ 69 mi, 1 deg lon ≈ 69*cos(lat) mi
+            var lat = latitude.Value;
+            var lon = longitude.Value;
+            var radiusMi = Math.Max(1, Math.Min(150, radiusMiles ?? 100));
+            var buffer = 1.15; // small buffer so we don't miss edge cases
+            var deltaLat = (radiusMi / 69.0) * buffer;
+            var cosLat = Math.Cos(lat * Math.PI / 180.0);
+            var deltaLon = cosLat > 0.01 ? (radiusMi / (69.0 * cosLat)) * buffer : deltaLat;
+            query = query.Where(r =>
+                r.Latitude >= lat - deltaLat && r.Latitude <= lat + deltaLat &&
+                r.Longitude >= lon - deltaLon && r.Longitude <= lon + deltaLon);
         }
 
         // Filter by cuisine type
@@ -152,20 +164,17 @@ public class RestaurantService : IRestaurantService
 
         var restaurants = await query.ToListAsync();
 
-        // If coordinates provided, filter by radius (Haversine) and order by distance
+        // If coordinates provided, filter by exact Haversine radius and order by distance (in-memory on already-reduced set)
         if (latitude.HasValue && longitude.HasValue)
         {
             var lat = latitude.Value;
             var lon = longitude.Value;
-            // Cap radius to 1–150 miles so we never return restaurants thousands of miles away
             var radiusMi = Math.Max(1, Math.Min(150, radiusMiles ?? 100));
 
-            // Restaurants with distance
             var withDistance = restaurants
                 .Select(r => new { Restaurant = r, DistanceMiles = HaversineMiles(lat, lon, r.Latitude, r.Longitude) })
                 .ToList();
 
-            // When user searched by ZIP, also include restaurants whose address contains that ZIP (same-ZIP fallback for wrong/missing coords)
             var zipTrim = zip?.Trim();
             var isZipSearch = !string.IsNullOrEmpty(zipTrim) && zipTrim.Length >= 5;
             var zip5 = isZipSearch ? (zipTrim!.Length >= 5 ? zipTrim[..5] : zipTrim) : "";
@@ -541,7 +550,7 @@ public class RestaurantService : IRestaurantService
             ReviewCount = restaurant.ReviewCount,
             CreatedAt = restaurant.CreatedAt,
             UpdatedAt = restaurant.UpdatedAt,
-            DeliveryZones = restaurant.DeliveryZones.Select(z => new DeliveryZoneDto
+            DeliveryZones = (restaurant.DeliveryZones ?? Enumerable.Empty<DeliveryZone>()).Select(z => new DeliveryZoneDto
             {
                 ZoneId = z.ZoneId,
                 Name = z.Name,
@@ -550,7 +559,7 @@ public class RestaurantService : IRestaurantService
                 EstimatedMinutes = z.EstimatedMinutes,
                 MinimumOrderAmount = z.MinimumOrderAmount
             }).ToList(),
-            Hours = restaurant.Hours.Select(h => new RestaurantHoursDto
+            Hours = (restaurant.Hours ?? Enumerable.Empty<RestaurantHours>()).Select(h => new RestaurantHoursDto
             {
                 DayOfWeek = h.DayOfWeek,
                 OpenTime = h.OpenTime,

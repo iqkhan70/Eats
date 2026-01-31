@@ -78,6 +78,7 @@ public class MobileBffController : ControllerBase
     // ----------------------------
 
     [HttpGet("geocode-zip")]
+    [AllowAnonymous]
     public async Task<IActionResult> GeocodeZip([FromQuery] string zip)
     {
         if (string.IsNullOrWhiteSpace(zip))
@@ -85,30 +86,30 @@ public class MobileBffController : ControllerBase
         var zipClean = zip.Trim();
         if (zipClean.Length < 5)
             return BadRequest(new { message = "zip must be at least 5 digits" });
+        var zip5 = zipClean.Length >= 5 ? zipClean[..5] : zipClean;
+
         try
         {
-            var client = _httpClientFactory.CreateClient("Geocoding");
-            var url = $"https://nominatim.openstreetmap.org/search?postalcode={Uri.EscapeDataString(zipClean)}&country=United%20States&format=json&limit=1";
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.TryAddWithoutValidation("User-Agent", "TraditionalEats/1.0");
-            var response = await client.SendAsync(request);
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            var response = await client.GetAsync($"/api/ZipCode/{Uri.EscapeDataString(zip5)}");
             if (!response.IsSuccessStatusCode)
-                return StatusCode((int)response.StatusCode, new { message = "Geocoding service error" });
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    return NotFound(new { message = "ZIP code not found. Add it to the ZipCodeLookup table (same as mental health app)." });
+                return StatusCode((int)response.StatusCode, new { message = "ZIP lookup failed" });
+            }
             var json = await response.Content.ReadAsStringAsync();
-            var arr = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(json);
-            if (arr == null || arr.Length == 0)
-                return NotFound(new { message = "ZIP code not found" });
-            var first = arr[0];
-            var lat = first.GetProperty("lat").GetString();
-            var lon = first.GetProperty("lon").GetString();
-            if (string.IsNullOrEmpty(lat) || string.IsNullOrEmpty(lon) || !double.TryParse(lat, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var latitude) || !double.TryParse(lon, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var longitude))
-                return NotFound(new { message = "ZIP code not found" });
-            return Ok(new { latitude, longitude });
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("latitude", out var latProp) && root.TryGetProperty("longitude", out var lonProp)
+                && latProp.TryGetDouble(out var latitude) && lonProp.TryGetDouble(out var longitude))
+                return Ok(new { latitude, longitude });
+            return NotFound(new { message = "ZIP code not found" });
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Geocode zip failed for {Zip}", zipClean);
-            return StatusCode(500, new { message = "Geocoding failed" });
+            _logger.LogWarning(ex, "Geocode zip failed for {Zip}", zip5);
+            return StatusCode(500, new { message = "ZIP lookup failed" });
         }
     }
 
