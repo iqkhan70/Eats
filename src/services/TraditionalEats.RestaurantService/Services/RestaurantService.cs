@@ -60,6 +60,13 @@ public class RestaurantService : IRestaurantService
         if ((dto.Latitude == null || dto.Longitude == null) && !string.IsNullOrWhiteSpace(dto.Address))
         {
             var geocodeResult = await _geocoding.GeocodeAddressAsync(dto.Address);
+            if (!geocodeResult.HasValue)
+            {
+                // Fallback: try ZIP-only lookup (e.g. address format didn't match in GeocodeAddressAsync)
+                var zip5 = ExtractZip5FromAddress(dto.Address);
+                if (!string.IsNullOrEmpty(zip5))
+                    geocodeResult = await _geocoding.GeocodeZipCodeAsync(zip5);
+            }
             if (geocodeResult.HasValue)
             {
                 latitude = geocodeResult.Value.Latitude;
@@ -231,6 +238,26 @@ public class RestaurantService : IRestaurantService
         if (dto.Latitude.HasValue) restaurant.Latitude = dto.Latitude.Value;
         if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
         if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
+
+        // Re-geocode when coordinates are 0,0 but we have an address (from dto or existing) - fixes existing rows with bad lat/lon
+        var addressToUse = !string.IsNullOrWhiteSpace(restaurant.Address) ? restaurant.Address : null;
+        var shouldRegeocode = addressToUse != null && restaurant.Latitude == 0 && restaurant.Longitude == 0;
+        if (shouldRegeocode)
+        {
+            var geo = await _geocoding.GeocodeAddressAsync(addressToUse);
+            if (!geo.HasValue)
+            {
+                var zip5 = ExtractZip5FromAddress(addressToUse);
+                if (!string.IsNullOrEmpty(zip5))
+                    geo = await _geocoding.GeocodeZipCodeAsync(zip5);
+            }
+            if (geo.HasValue)
+            {
+                restaurant.Latitude = geo.Value.Latitude;
+                restaurant.Longitude = geo.Value.Longitude;
+                _logger.LogInformation("Re-geocoded restaurant {RestaurantId} address to lat={Lat}, lon={Lon}", restaurantId, restaurant.Latitude, restaurant.Longitude);
+            }
+        }
 
         restaurant.UpdatedAt = DateTime.UtcNow;
 
@@ -478,6 +505,27 @@ public class RestaurantService : IRestaurantService
         if (dto.Latitude.HasValue) restaurant.Latitude = dto.Latitude.Value;
         if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
         if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
+
+        // Re-geocode when coordinates are 0,0 but we have an address (from dto or existing)
+        var addressToUseAdmin = !string.IsNullOrWhiteSpace(restaurant.Address) ? restaurant.Address : null;
+        var shouldRegeocodeAdmin = addressToUseAdmin != null && restaurant.Latitude == 0 && restaurant.Longitude == 0;
+        if (shouldRegeocodeAdmin)
+        {
+            var geo = await _geocoding.GeocodeAddressAsync(addressToUseAdmin);
+            if (!geo.HasValue)
+            {
+                var zip5 = ExtractZip5FromAddress(addressToUseAdmin);
+                if (!string.IsNullOrEmpty(zip5))
+                    geo = await _geocoding.GeocodeZipCodeAsync(zip5);
+            }
+            if (geo.HasValue)
+            {
+                restaurant.Latitude = geo.Value.Latitude;
+                restaurant.Longitude = geo.Value.Longitude;
+                _logger.LogInformation("Admin: re-geocoded restaurant {RestaurantId} to lat={Lat}, lon={Lon}", restaurantId, restaurant.Latitude, restaurant.Longitude);
+            }
+        }
+
         restaurant.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -528,6 +576,18 @@ public class RestaurantService : IRestaurantService
 
         _logger.LogInformation("Admin toggled restaurant {RestaurantId} status to {IsActive}", restaurantId, isActive);
         return true;
+    }
+
+    /// <summary>Extract 5-digit US ZIP from address for geocoding fallback.</summary>
+    /// <summary>Extract 5-digit US ZIP; use last match so "15120 Perry St... 66221" yields 66221 not 15120.</summary>
+    private static string? ExtractZip5FromAddress(string? address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return null;
+        var zipPattern = @"\b\d{5}(?:-\d{4})?\b";
+        var zipMatches = System.Text.RegularExpressions.Regex.Matches(address, zipPattern);
+        if (zipMatches.Count > 0) return zipMatches[zipMatches.Count - 1].Value.Substring(0, 5);
+        var standaloneFive = System.Text.RegularExpressions.Regex.Matches(address, @"\d{5}(?!\d)");
+        return standaloneFive.Count > 0 ? standaloneFive[standaloneFive.Count - 1].Value : null;
     }
 
     private RestaurantDto MapToDto(Restaurant restaurant)
