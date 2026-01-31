@@ -17,6 +17,7 @@ builder.Configuration.AddSharedConfiguration(builder.Environment);
 
 // Add services
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -87,11 +88,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created and seeded
+// Apply migrations and seed
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
     await SeedData.SeedAsync(db);
 }
 

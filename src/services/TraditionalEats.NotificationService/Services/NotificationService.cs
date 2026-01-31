@@ -14,6 +14,8 @@ public interface INotificationService
     Task<NotificationTemplateDto?> GetTemplateAsync(Guid templateId);
     Task<List<NotificationTemplateDto>> GetTemplatesAsync(string? type = null);
     Task<bool> SendNotificationAsync(SendNotificationDto dto);
+    /// <summary>Send a raw email (e.g. password reset). No user preference check. Used by IdentityService.</summary>
+    Task<bool> SendEmailToAddressAsync(string to, string subject, string body);
     Task<List<NotificationDto>> GetUserNotificationsAsync(Guid userId, int skip = 0, int take = 20);
     Task<bool> SetNotificationPreferenceAsync(Guid userId, SetNotificationPreferenceDto dto);
     Task<List<NotificationPreferenceDto>> GetNotificationPreferencesAsync(Guid userId);
@@ -89,13 +91,13 @@ public class NotificationService : INotificationService
     {
         // Check user preferences
         var preference = await _context.Preferences
-            .FirstOrDefaultAsync(p => p.UserId == dto.UserId 
-                && p.Channel == dto.Channel 
+            .FirstOrDefaultAsync(p => p.UserId == dto.UserId
+                && p.Channel == dto.Channel
                 && p.NotificationType == dto.Type);
 
         if (preference != null && !preference.IsEnabled)
         {
-            _logger.LogInformation("Notification disabled by user preference for user {UserId}, channel {Channel}, type {Type}", 
+            _logger.LogInformation("Notification disabled by user preference for user {UserId}, channel {Channel}, type {Type}",
                 dto.UserId, dto.Channel, dto.Type);
             return false;
         }
@@ -153,6 +155,13 @@ public class NotificationService : INotificationService
         return notification.Status == "Sent";
     }
 
+    public async Task<bool> SendEmailToAddressAsync(string to, string subject, string body)
+    {
+        if (string.IsNullOrWhiteSpace(to))
+            return false;
+        return await SendEmailAsync(to, subject, body);
+    }
+
     public async Task<List<NotificationDto>> GetUserNotificationsAsync(Guid userId, int skip = 0, int take = 20)
     {
         var notifications = await _context.Notifications
@@ -168,8 +177,8 @@ public class NotificationService : INotificationService
     public async Task<bool> SetNotificationPreferenceAsync(Guid userId, SetNotificationPreferenceDto dto)
     {
         var preference = await _context.Preferences
-            .FirstOrDefaultAsync(p => p.UserId == userId 
-                && p.Channel == dto.Channel 
+            .FirstOrDefaultAsync(p => p.UserId == userId
+                && p.Channel == dto.Channel
                 && p.NotificationType == dto.NotificationType);
 
         if (preference == null)

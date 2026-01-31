@@ -1758,6 +1758,56 @@ public class WebBffController : ControllerBase
             return StatusCode(500, new { error = "Failed to logout" });
         }
     }
+
+    [HttpPost("auth/forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { success = false, message = "Email is required." });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/forgot-password", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Forgot password: IdentityService unreachable. Ensure it is running (e.g. port 5000).");
+            return StatusCode(503, new { success = false, message = "Authentication service is temporarily unavailable. Please try again later." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during forgot password");
+            return StatusCode(500, new { success = false, message = "Failed to process request. Please try again later." });
+        }
+    }
+
+    [HttpPost("auth/reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(new { success = false, message = "Email, token, and new password are required." });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/reset-password", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Reset password: IdentityService unreachable. Ensure it is running (e.g. port 5000).");
+            return StatusCode(503, new { success = false, message = "Authentication service is temporarily unavailable. Please try again later." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during reset password");
+            return StatusCode(500, new { success = false, message = "Failed to process request. Please try again later." });
+        }
+    }
 }
 
 // ----------------------------
@@ -1788,6 +1838,8 @@ public record PlaceOrderRequest(
 public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
+public record ForgotPasswordRequest(string Email);
+public record ResetPasswordRequest(string Token, string Email, string NewPassword, string ConfirmPassword);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
 public record UpdateOrderStatusRequest(string Status, string? Notes);

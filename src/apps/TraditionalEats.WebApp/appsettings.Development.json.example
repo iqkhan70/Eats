@@ -1,6 +1,7 @@
 {
-  "ApiBaseUrl": "http://localhost:5101/api/",
-  "ApiBaseUrlHttps": "https://localhost:5143/api/",
+  "ApiBaseUrl": "http://YOUR_IP:5101/api/",
+  "ApiBaseUrlHttps": "https://YOUR_IP:5143/api/",
+  "_comment": "Replace YOUR_IP with your machine IP for phone testing (macOS: ipconfig getifaddr en0). Web BFF must listen on 0.0.0.0. Run WebApp with launch profile 'https-phone' so it listens on 0.0.0.0:5301.",
   "Logging": {
     "LogLevel": {
       "Default": "Debug",

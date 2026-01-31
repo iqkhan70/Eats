@@ -2,6 +2,13 @@
   "ConnectionStrings": {
     "IdentityDb": "server=localhost;port=3306;database=traditional_eats_identity;user=root;password=YOUR_PASSWORD_HERE"
   },
+  "AppSettings": {
+    "BaseUrl": "https://YOUR_IP:5301",
+    "_comment": "Reset link in email. Replace YOUR_IP with your machine IP for phone testing (macOS: ipconfig getifaddr en0). Use HTTPS:5301 for WebApp https profile. For production use DNS."
+  },
+  "Services": {
+    "NotificationService": "http://localhost:5006"
+  },
   "Kestrel": {
     "Endpoints": {
       "Http": {

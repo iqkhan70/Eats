@@ -43,6 +43,19 @@ class AuthService {
     }
   }
 
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await api.post<{ success: boolean; message: string }>(
+        '/MobileBff/auth/forgot-password',
+        { email }
+      );
+      return response.data ?? { success: true, message: 'If an account with that email exists, a password reset link has been sent.' };
+    } catch (error: any) {
+      const msg = error.response?.data?.message ?? 'Failed to send reset link. Please try again.';
+      throw new Error(msg);
+    }
+  }
+
   async register(credentials: RegisterCredentials): Promise<void> {
     try {
       const response = await api.post('/MobileBff/auth/register', credentials);

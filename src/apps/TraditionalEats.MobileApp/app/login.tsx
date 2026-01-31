@@ -1,18 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { authService, LoginCredentials } from '../services/auth';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { authService, LoginCredentials } from "../services/auth";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      Alert.alert("Error", "Please enter both email and password");
       return;
     }
 
@@ -20,9 +27,9 @@ export default function LoginScreen() {
       setLoading(true);
       const credentials: LoginCredentials = { email, password };
       await authService.login(credentials);
-      router.replace('/(tabs)');
+      router.replace("/(tabs)");
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      Alert.alert("Login Failed", error.message || "Invalid credentials");
     } finally {
       setLoading(false);
     }
@@ -31,7 +38,10 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/profile")}
+          style={styles.backButton}
+        >
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Sign In</Text>
@@ -39,7 +49,12 @@ export default function LoginScreen() {
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
+          <Ionicons
+            name="mail-outline"
+            size={20}
+            color="#666"
+            style={styles.inputIcon}
+          />
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -52,7 +67,12 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+          <Ionicons
+            name="lock-closed-outline"
+            size={20}
+            color="#666"
+            style={styles.inputIcon}
+          />
           <TextInput
             style={styles.input}
             placeholder="Password"
@@ -65,21 +85,29 @@ export default function LoginScreen() {
         </View>
 
         <TouchableOpacity
+          style={styles.forgotLink}
+          onPress={() => router.push("/forgot-password")}
+        >
+          <Text style={styles.forgotLinkText}>Forgot password?</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.loginButton, loading && styles.loginButtonDisabled]}
           onPress={handleLogin}
           disabled={loading}
         >
           <Text style={styles.loginButtonText}>
-            {loading ? 'Signing In...' : 'Sign In'}
+            {loading ? "Signing In..." : "Sign In"}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.registerLink}
-          onPress={() => router.push('/register')}
+          onPress={() => router.push("/register")}
         >
           <Text style={styles.registerLinkText}>
-            Don't have an account? <Text style={styles.registerLinkBold}>Sign Up</Text>
+            Don't have an account?{" "}
+            <Text style={styles.registerLinkBold}>Sign Up</Text>
           </Text>
         </TouchableOpacity>
       </View>
@@ -90,32 +118,32 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 20,
     paddingTop: 60,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: "#e0e0e0",
   },
   backButton: {
     marginRight: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   form: {
     padding: 20,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
     borderRadius: 8,
     marginBottom: 16,
     paddingHorizontal: 12,
@@ -128,31 +156,40 @@ const styles = StyleSheet.create({
     height: 48,
     fontSize: 16,
   },
+  forgotLink: {
+    alignSelf: "flex-end",
+    marginBottom: 8,
+  },
+  forgotLinkText: {
+    fontSize: 14,
+    color: "#6200ee",
+    fontWeight: "500",
+  },
   loginButton: {
-    backgroundColor: '#6200ee',
+    backgroundColor: "#6200ee",
     padding: 16,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 8,
   },
   loginButtonDisabled: {
     opacity: 0.6,
   },
   loginButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   registerLink: {
     marginTop: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   registerLinkText: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   registerLinkBold: {
-    fontWeight: '600',
-    color: '#6200ee',
+    fontWeight: "600",
+    color: "#6200ee",
   },
 });
