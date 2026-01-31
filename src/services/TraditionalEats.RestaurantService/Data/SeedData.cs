@@ -6,7 +6,41 @@ public static class SeedData
 {
     public static async Task SeedAsync(RestaurantDbContext context)
     {
-        // Check if data already exists
+        // Seed ZipCodeLookup (same data as mental health app) if table exists and is empty
+        try
+        {
+            if (!context.ZipCodeLookups.Any())
+            {
+                var zipNow = DateTime.UtcNow;
+                var zipCodes = new List<ZipCodeLookup>
+                {
+                    new() { ZipCode = "66221", Latitude = 38.97170000m, Longitude = -94.70140000m, City = "Overland Park", State = "KS", CreatedAt = zipNow },
+                    new() { ZipCode = "66062", Latitude = 38.88330000m, Longitude = -94.81670000m, City = "Olathe", State = "KS", CreatedAt = zipNow },
+                    new() { ZipCode = "64138", Latitude = 38.95860000m, Longitude = -94.52380000m, City = "Kansas City", State = "MO", CreatedAt = zipNow },
+                    new() { ZipCode = "64110", Latitude = 39.03540000m, Longitude = -94.57670000m, City = "Kansas City", State = "MO", CreatedAt = zipNow },
+                    new() { ZipCode = "64111", Latitude = 39.05970000m, Longitude = -94.59390000m, City = "Kansas City", State = "MO", CreatedAt = zipNow },
+                    new() { ZipCode = "90210", Latitude = 34.09010000m, Longitude = -118.40650000m, City = "Beverly Hills", State = "CA", CreatedAt = zipNow },
+                    new() { ZipCode = "90001", Latitude = 33.97310000m, Longitude = -118.24790000m, City = "Los Angeles", State = "CA", CreatedAt = zipNow },
+                    new() { ZipCode = "94102", Latitude = 37.77930000m, Longitude = -122.41930000m, City = "San Francisco", State = "CA", CreatedAt = zipNow },
+                    new() { ZipCode = "92101", Latitude = 32.72130000m, Longitude = -117.16520000m, City = "San Diego", State = "CA", CreatedAt = zipNow },
+                    new() { ZipCode = "10001", Latitude = 40.75060000m, Longitude = -73.99720000m, City = "New York", State = "NY", CreatedAt = zipNow },
+                    new() { ZipCode = "10002", Latitude = 40.71580000m, Longitude = -73.98700000m, City = "New York", State = "NY", CreatedAt = zipNow },
+                    new() { ZipCode = "75201", Latitude = 32.78760000m, Longitude = -96.79940000m, City = "Dallas", State = "TX", CreatedAt = zipNow },
+                    new() { ZipCode = "77001", Latitude = 29.83010000m, Longitude = -95.43420000m, City = "Houston", State = "TX", CreatedAt = zipNow },
+                    new() { ZipCode = "60601", Latitude = 41.88530000m, Longitude = -87.62290000m, City = "Chicago", State = "IL", CreatedAt = zipNow },
+                    new() { ZipCode = "60602", Latitude = 41.88370000m, Longitude = -87.62980000m, City = "Chicago", State = "IL", CreatedAt = zipNow },
+                };
+                context.ZipCodeLookups.AddRange(zipCodes);
+                await context.SaveChangesAsync();
+            }
+        }
+        catch (Exception)
+        {
+            // ZipCodeLookup table may not exist yet (run migration or delete __EFMigrationsHistory row for AddZipCodeLookup and restart)
+            // Continue so app starts; restaurant list will still work
+        }
+
+        // Check if restaurant data already exists
         if (context.Restaurants.Any())
         {
             return; // Data already seeded

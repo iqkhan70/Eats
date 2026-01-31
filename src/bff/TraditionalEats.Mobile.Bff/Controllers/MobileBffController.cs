@@ -152,8 +152,8 @@ public class MobileBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurants");
-            return StatusCode(500, new { error = "Failed to fetch restaurants" });
+            _logger.LogError(ex, "Error fetching restaurants. Ensure RestaurantService is running (e.g. port 5007).");
+            return StatusCode(500, new { error = "Failed to fetch restaurants", detail = ex.Message });
         }
     }
 

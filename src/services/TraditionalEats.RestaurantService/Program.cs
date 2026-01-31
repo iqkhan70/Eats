@@ -33,7 +33,7 @@ builder.Services.AddRabbitMq(builder.Configuration);
 builder.Services.AddOpenTelemetry("RestaurantService", builder.Configuration);
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
@@ -77,13 +77,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created and seed data
+// Run migrations (creates/updates schema including ZipCodeLookup) and seed data
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<RestaurantDbContext>();
-    db.Database.EnsureCreated();
-    
-    // Seed initial data
+    db.Database.Migrate();
     await SeedData.SeedAsync(db);
 }
 

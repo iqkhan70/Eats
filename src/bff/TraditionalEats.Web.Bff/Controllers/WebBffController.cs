@@ -173,12 +173,14 @@ public class WebBffController : ControllerBase
             var response = await client.GetAsync($"/api/restaurant{queryString}");
             var content = await response.Content.ReadAsStringAsync();
 
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("RestaurantService returned {StatusCode}: {Content}", response.StatusCode, content);
             return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurants");
-            return StatusCode(500, new { error = "Failed to fetch restaurants" });
+            _logger.LogError(ex, "Error fetching restaurants. Ensure RestaurantService is running (e.g. port 5007).");
+            return StatusCode(500, new { error = "Failed to fetch restaurants", detail = ex.Message });
         }
     }
 

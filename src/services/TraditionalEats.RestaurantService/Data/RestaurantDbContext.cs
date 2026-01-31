@@ -12,6 +12,7 @@ public class RestaurantDbContext : DbContext
     public DbSet<Restaurant> Restaurants { get; set; }
     public DbSet<DeliveryZone> DeliveryZones { get; set; }
     public DbSet<RestaurantHours> RestaurantHours { get; set; }
+    public DbSet<ZipCodeLookup> ZipCodeLookups { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +50,18 @@ public class RestaurantDbContext : DbContext
             entity.HasOne(e => e.Restaurant)
                 .WithMany(r => r.Hours)
                 .HasForeignKey(e => e.RestaurantId);
+        });
+
+        modelBuilder.Entity<ZipCodeLookup>(entity =>
+        {
+            entity.ToTable("ZipCodeLookup");
+            entity.HasKey(e => e.ZipCode);
+            entity.Property(e => e.ZipCode).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.Latitude).IsRequired().HasColumnType("DECIMAL(10, 8)");
+            entity.Property(e => e.Longitude).IsRequired().HasColumnType("DECIMAL(11, 8)");
+            entity.Property(e => e.City).HasMaxLength(100);
+            entity.Property(e => e.State).HasMaxLength(2);
+            entity.HasIndex(e => e.State);
         });
     }
 }
