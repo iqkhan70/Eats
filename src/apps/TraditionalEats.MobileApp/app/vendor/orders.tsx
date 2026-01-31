@@ -8,6 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import axios from "axios";
@@ -153,8 +158,6 @@ async function putUpdateOrderStatus(
     notes: notes ?? null,
   };
 
-  // If your api baseURL does NOT already include "/api",
-  // Base URL already includes /api, so use /MobileBff/... not /api/MobileBff/...
   const url = `/MobileBff/orders/${orderId}/status`;
 
   logJson("Updating order status (PUT)", { url, payload });
@@ -183,6 +186,10 @@ export default function VendorOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
+  // ✅ SEARCH
+  const [searchText, setSearchText] = useState("");
+  const [searchTextDebounced, setSearchTextDebounced] = useState("");
+
   const didInitRef = useRef(false);
   const isMountedRef = useRef(true);
 
@@ -205,6 +212,12 @@ export default function VendorOrdersScreen() {
     didInitRef.current = true;
     void checkAuthAndLoad();
   }, []);
+
+  // ✅ SEARCH: tiny debounce
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTextDebounced(searchText), 150);
+    return () => clearTimeout(t);
+  }, [searchText]);
 
   const checkAuthAndLoad = async () => {
     try {
@@ -365,6 +378,68 @@ export default function VendorOrdersScreen() {
     ]);
   };
 
+  // ✅ Map restaurantId -> restaurant name
+  const restaurantNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of restaurants) map.set(r.restaurantId, r.name ?? "");
+    return map;
+  }, [restaurants]);
+
+  // ✅ Filter restaurant chips by search
+  const filteredRestaurantsForChips = useMemo(() => {
+    const q = searchTextDebounced.trim().toLowerCase();
+    if (!q) return restaurants;
+
+    const filtered = restaurants.filter((r) =>
+      (r.name ?? "").toLowerCase().includes(q),
+    );
+
+    // keep selected visible even if it doesn't match
+    if (selectedRestaurantId) {
+      const selected = restaurants.find(
+        (r) => r.restaurantId === selectedRestaurantId,
+      );
+      if (
+        selected &&
+        !filtered.some((r) => r.restaurantId === selected.restaurantId)
+      ) {
+        return [selected, ...filtered];
+      }
+    }
+
+    return filtered;
+  }, [restaurants, searchTextDebounced, selectedRestaurantId]);
+
+  // ✅ Filter orders (also matches restaurant name)
+  const filteredOrders = useMemo(() => {
+    const q = searchTextDebounced.trim().toLowerCase();
+    if (!q) return orders;
+
+    return orders.filter((o) => {
+      const orderId = (o.orderId ?? "").toLowerCase();
+      const status = (o.status ?? "").toLowerCase();
+      const delivery = (o.deliveryAddress ?? "").toLowerCase();
+      const notes = (o.specialInstructions ?? "").toLowerCase();
+
+      const items = (o.items ?? [])
+        .map((i) => (i.name ?? "").toLowerCase())
+        .join(" ");
+
+      const restaurantName = (
+        restaurantNameById.get(o.restaurantId) ?? ""
+      ).toLowerCase();
+
+      return (
+        orderId.includes(q) ||
+        status.includes(q) ||
+        delivery.includes(q) ||
+        notes.includes(q) ||
+        items.includes(q) ||
+        restaurantName.includes(q)
+      );
+    });
+  }, [orders, searchTextDebounced, restaurantNameById]);
+
   if (!isAuthenticated || !isVendor) {
     return (
       <View style={styles.container}>
@@ -395,164 +470,224 @@ export default function VendorOrdersScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Vendor Orders</Text>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View style={styles.filterContainer}>
-          <Text style={styles.filterLabel}>Filter by Restaurant:</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.restaurantFilter}
-          >
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.container}>
+          <View style={styles.header}>
             <TouchableOpacity
-              style={[
-                styles.filterChip,
-                !selectedRestaurantId && styles.filterChipActive,
-              ]}
-              onPress={() => setSelectedRestaurantId(null)}
+              onPress={() => router.back()}
+              style={styles.backButton}
             >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  !selectedRestaurantId && styles.filterChipTextActive,
-                ]}
-              >
-                All
-              </Text>
+              <Text style={styles.backButtonText}>← Back</Text>
             </TouchableOpacity>
+            <Text style={styles.title}>Vendor Orders</Text>
+          </View>
 
-            {restaurants.map((restaurant) => (
-              <TouchableOpacity
-                key={restaurant.restaurantId}
-                style={[
-                  styles.filterChip,
-                  selectedRestaurantId === restaurant.restaurantId &&
-                    styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedRestaurantId(restaurant.restaurantId)}
+          <ScrollView
+            style={styles.scrollView}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={
+              Platform.OS === "ios" ? "interactive" : "on-drag"
+            }
+            contentInsetAdjustmentBehavior="automatic"
+          >
+            {/* ✅ SEARCH BAR */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder="Search orders or restaurants..."
+                placeholderTextColor="#888"
+                autoCorrect={false}
+                autoCapitalize="none"
+                style={styles.searchInput}
+                returnKeyType="search"
+              />
+              {!!searchText && (
+                <TouchableOpacity
+                  onPress={() => setSearchText("")}
+                  style={styles.clearButton}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Text style={styles.clearButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.filterContainer}>
+              <View style={styles.filterHeaderRow}>
+                <Text style={styles.filterLabel}>Filter by Restaurant:</Text>
+                {!!searchTextDebounced && (
+                  <Text style={styles.resultsText}>
+                    {filteredOrders.length} result
+                    {filteredOrders.length === 1 ? "" : "s"}
+                  </Text>
+                )}
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.restaurantFilter}
+                keyboardShouldPersistTaps="handled"
               >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedRestaurantId === restaurant.restaurantId &&
-                      styles.filterChipTextActive,
-                  ]}
-                >
-                  {restaurant.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {loadingOrders ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Loading orders...</Text>
-          </View>
-        ) : orders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No orders found</Text>
-          </View>
-        ) : (
-          orders.map((order) => (
-            <TouchableOpacity
-              key={order.orderId}
-              style={styles.orderCard}
-              onPress={() => router.push(`/orders/${order.orderId}`)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.orderHeader}>
-                <View>
-                  <Text style={styles.orderId}>
-                    Order #{order.orderId.substring(0, 8)}
-                  </Text>
-                  <Text style={styles.orderDate}>
-                    {new Date(order.createdAt).toLocaleString()}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(order.status) },
-                  ]}
-                >
-                  <Text style={styles.statusText}>{order.status}</Text>
-                </View>
-              </View>
-
-              <View style={styles.orderItems}>
-                {order.items.map((item) => (
-                  <Text key={item.orderItemId} style={styles.orderItem}>
-                    {item.quantity}x {item.name} - ${item.totalPrice.toFixed(2)}
-                  </Text>
-                ))}
-              </View>
-
-              {order.specialInstructions && (
-                <View style={styles.specialInstructionsContainer}>
-                  <Text style={styles.specialInstructionsLabel}>
-                    Special Instructions:
-                  </Text>
-                  <Text style={styles.specialInstructionsText}>
-                    {order.specialInstructions}
-                  </Text>
-                </View>
-              )}
-              {order.deliveryAddress && (
-                <Text style={styles.deliveryAddress}>
-                  📍 {order.deliveryAddress}
-                </Text>
-              )}
-
-              <View style={styles.orderFooter}>
-                <Text style={styles.orderTotal}>
-                  Total: ${order.total.toFixed(2)}
-                </Text>
-
                 <TouchableOpacity
                   style={[
-                    styles.statusButton,
-                    { backgroundColor: getStatusColor(order.status) },
-                    updatingStatus === order.orderId &&
-                      styles.statusButtonDisabled,
+                    styles.filterChip,
+                    !selectedRestaurantId && styles.filterChipActive,
                   ]}
-                  onPress={() => showStatusPicker(order)}
-                  disabled={updatingStatus === order.orderId}
-                  activeOpacity={0.8}
+                  onPress={() => setSelectedRestaurantId(null)}
                 >
-                  {updatingStatus === order.orderId ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.statusButtonText}>Update Status</Text>
-                  )}
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      !selectedRestaurantId && styles.filterChipTextActive,
+                    ]}
+                  >
+                    All
+                  </Text>
                 </TouchableOpacity>
+
+                {filteredRestaurantsForChips.map((restaurant) => (
+                  <TouchableOpacity
+                    key={restaurant.restaurantId}
+                    style={[
+                      styles.filterChip,
+                      selectedRestaurantId === restaurant.restaurantId &&
+                        styles.filterChipActive,
+                    ]}
+                    onPress={() =>
+                      setSelectedRestaurantId(restaurant.restaurantId)
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedRestaurantId === restaurant.restaurantId &&
+                          styles.filterChipTextActive,
+                      ]}
+                    >
+                      {restaurant.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {loadingOrders ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Loading orders...</Text>
               </View>
-            </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
-    </View>
+            ) : filteredOrders.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  {searchTextDebounced
+                    ? "No matching orders"
+                    : "No orders found"}
+                </Text>
+              </View>
+            ) : (
+              filteredOrders.map((order) => (
+                <TouchableOpacity
+                  key={order.orderId}
+                  style={styles.orderCard}
+                  onPress={() => router.push(`/orders/${order.orderId}`)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.orderHeader}>
+                    <View>
+                      <Text style={styles.orderId}>
+                        Order #{order.orderId.substring(0, 8)}
+                      </Text>
+                      <Text style={styles.orderDate}>
+                        {new Date(order.createdAt).toLocaleString()}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: getStatusColor(order.status) },
+                      ]}
+                    >
+                      <Text style={styles.statusText}>{order.status}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.orderItems}>
+                    {order.items.map((item) => (
+                      <Text key={item.orderItemId} style={styles.orderItem}>
+                        {item.quantity}x {item.name} - $
+                        {item.totalPrice.toFixed(2)}
+                      </Text>
+                    ))}
+                  </View>
+
+                  {order.specialInstructions && (
+                    <View style={styles.specialInstructionsContainer}>
+                      <Text style={styles.specialInstructionsLabel}>
+                        Special Instructions:
+                      </Text>
+                      <Text style={styles.specialInstructionsText}>
+                        {order.specialInstructions}
+                      </Text>
+                    </View>
+                  )}
+
+                  {order.deliveryAddress && (
+                    <Text style={styles.deliveryAddress}>
+                      📍 {order.deliveryAddress}
+                    </Text>
+                  )}
+
+                  <View style={styles.orderFooter}>
+                    <Text style={styles.orderTotal}>
+                      Total: ${order.total.toFixed(2)}
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.statusButton,
+                        { backgroundColor: getStatusColor(order.status) },
+                        updatingStatus === order.orderId &&
+                          styles.statusButtonDisabled,
+                      ]}
+                      onPress={() => showStatusPicker(order)}
+                      disabled={updatingStatus === order.orderId}
+                      activeOpacity={0.8}
+                    >
+                      {updatingStatus === order.orderId ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <Text style={styles.statusButtonText}>
+                          Update Status
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#F5F5F5",
+  },
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
@@ -579,16 +714,62 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+
+  // ✅ SEARCH STYLES
+  searchContainer: {
+    margin: 16,
+    marginBottom: 8,
+    backgroundColor: "white",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111",
+    padding: 0,
+  },
+  clearButton: {
+    marginLeft: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0F0F0",
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: "#444",
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+
   filterContainer: {
     backgroundColor: "white",
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
+    paddingTop: 12,
+  },
+  filterHeaderRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  resultsText: {
+    fontSize: 12,
+    color: "#666",
   },
   filterLabel: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 8,
     color: "#333",
   },
   restaurantFilter: {
@@ -671,6 +852,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#333",
     marginBottom: 4,
+  },
+  specialInstructionsContainer: {
+    marginBottom: 10,
+    backgroundColor: "#FAFAFA",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#EFEFEF",
+  },
+  specialInstructionsLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#444",
+    marginBottom: 4,
+  },
+  specialInstructionsText: {
+    fontSize: 12,
+    color: "#555",
   },
   deliveryAddress: {
     fontSize: 12,
