@@ -869,17 +869,16 @@
             HttpResponseMessage response;
 
             // Decide endpoints based on role (Admin must use admin endpoints)
-            var createUrl = isAdmin ? "WebBff/admin/restaurants" : "WebBff/vendor/restaurants";
-            var updateUrl = isAdmin
-                ? $"WebBff/admin/restaurants/{editingRestaurant!.RestaurantId}"
-                : $"WebBff/vendor/restaurants/{editingRestaurant!.RestaurantId}";
-
             if (editingRestaurant != null)
             {
+                var updateUrl = isAdmin
+                    ? $"WebBff/admin/restaurants/{editingRestaurant.RestaurantId}"
+                    : $"WebBff/vendor/restaurants/{editingRestaurant.RestaurantId}";
                 response = await Http.PutAsJsonAsync(updateUrl, restaurantForm);
             }
             else
             {
+                var createUrl = isAdmin ? "WebBff/admin/restaurants" : "WebBff/vendor/restaurants";
                 response = await Http.PostAsJsonAsync(createUrl, restaurantForm);
             }
 

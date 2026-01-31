@@ -20,11 +20,21 @@ public class RestaurantController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> CreateRestaurant([FromBody] CreateRestaurantDto dto)
+    public async Task<IActionResult> CreateRestaurant([FromBody] CreateRestaurantDto? dto)
     {
+        if (dto == null)
+        {
+            return BadRequest(new { message = "Request body is required" });
+        }
+        var userIdClaim = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User?.FindFirstValue("sub");
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var ownerId))
+        {
+            _logger.LogWarning("CreateRestaurant: Missing or invalid user id claim");
+            return Unauthorized(new { message = "Invalid or missing user identity" });
+        }
         try
         {
-            var ownerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var restaurantId = await _restaurantService.CreateRestaurantAsync(ownerId, dto);
             return Ok(new { restaurantId });
         }

@@ -1196,8 +1196,12 @@ public class WebBffController : ControllerBase
 
     [HttpPost("vendor/restaurants")]
     [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> CreateRestaurant([FromBody] object request)
+    public async Task<IActionResult> CreateRestaurant([FromBody] object? request)
     {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request body is required" });
+        }
         try
         {
             var client = _httpClientFactory.CreateClient("RestaurantService");
@@ -1281,6 +1285,33 @@ public class WebBffController : ControllerBase
         {
             _logger.LogError(ex, "Error fetching all restaurants");
             return StatusCode(500, new { error = "Failed to fetch all restaurants" });
+        }
+    }
+
+    [HttpPost("admin/restaurants")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminCreateRestaurant([FromBody] object? request)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request body is required" });
+        }
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/restaurant", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to create restaurant" });
         }
     }
 
