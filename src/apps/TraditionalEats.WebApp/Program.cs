@@ -48,10 +48,20 @@ builder.Services.AddScoped(sp =>
     }
     else
     {
-        // Build from current host: HTTPS page -> HTTPS BFF (5102), HTTP page -> HTTP BFF (5101)
-        var port = isHttps ? apiPortHttps : apiPortHttp;
-        var scheme = isHttps ? "https" : "http";
-        apiBaseUri = new UriBuilder(scheme, baseUri.Host, port, "/api/").Uri;
+        // No API URL configured: use same-origin /api/ when not on localhost (production behind Nginx).
+        // On localhost, use host + BFF ports so dev works without editing appsettings.
+        var isLocalhost = string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || baseUri.Host == "127.0.0.1";
+        if (isLocalhost)
+        {
+            var port = isHttps ? apiPortHttps : apiPortHttp;
+            var scheme = isHttps ? "https" : "http";
+            apiBaseUri = new UriBuilder(scheme, baseUri.Host, port, "/api/").Uri;
+        }
+        else
+        {
+            apiBaseUri = new Uri(new Uri(baseUri.GetLeftPart(UriPartial.Authority)), "api/");
+        }
     }
 
     // Create HttpClient with message handler that adds auth tokens and cart session ID

@@ -1,0 +1,9 @@
+# Droplet IP files (user-specific; do not commit)
+DROPLET_IP
+DROPLET_IP_STAGING
+DROPLET_IP_PRODUCTION
+# Optional secrets (do not commit)
+secrets.env
+.env
+# Generated at deploy time
+nginx/nginx.generated.conf

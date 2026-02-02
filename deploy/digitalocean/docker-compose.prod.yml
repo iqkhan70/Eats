@@ -1,0 +1,481 @@
+# TraditionalEats – Compose for both staging and production
+# Single registry repo (DOCR 1-repo limit): REGISTRY/REPO_NAME:service-tag (e.g. registry.digitalocean.com/cha-registry/traditionaleats:identity-service)
+# Set REGISTRY=registry.digitalocean.com/cha-registry, REPO_NAME=traditionaleats in .env
+# Run: docker compose -f docker-compose.prod.yml --env-file .env up -d
+# name: ensures project/volume names are "traditionaleats_*" (used by setup-https.sh)
+
+name: traditionaleats
+
+version: "3.8"
+
+services:
+  # ---------- Data & messaging (internal only) ----------
+  mysql:
+    image: mysql:8.0
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: traditional_eats
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    networks:
+      - internal
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 45s
+    networks:
+      - internal
+    restart: unless-stopped
+
+  # ---------- Microservices (internal only, HTTP) ----------
+  identity-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.IdentityService/TraditionalEats.IdentityService.csproj
+        PROJECT_NAME: TraditionalEats.IdentityService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:identity-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    environment:
+      PROJECT_NAME: TraditionalEats.IdentityService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=traditional_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
+      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      AppSettings__BaseUrl: ${APP_BASE_URL}
+      Services__NotificationService: "http://notification-service:5006"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  customer-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.CustomerService/TraditionalEats.CustomerService.csproj
+        PROJECT_NAME: TraditionalEats.CustomerService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:customer-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.CustomerService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5001
+      ConnectionStrings__CustomerDb: "server=mysql;port=3306;database=traditional_eats_customer;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.OrderService/TraditionalEats.OrderService.csproj
+        PROJECT_NAME: TraditionalEats.OrderService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:order-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.OrderService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5002
+      ConnectionStrings__OrderDb: "server=mysql;port=3306;database=traditional_eats_order;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  catalog-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.CatalogService/TraditionalEats.CatalogService.csproj
+        PROJECT_NAME: TraditionalEats.CatalogService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:catalog-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.CatalogService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5003
+      ConnectionStrings__CatalogDb: "server=mysql;port=3306;database=traditional_eats_catalog;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.NotificationService/TraditionalEats.NotificationService.csproj
+        PROJECT_NAME: TraditionalEats.NotificationService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:notification-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.NotificationService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5006
+      ConnectionStrings__NotificationDb: "server=mysql;port=3306;database=traditional_eats_notification;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+      Services__CustomerService: "http://customer-service:5001"
+      Email__Enabled: ${EMAIL_ENABLED:-true}
+      Email__Provider: ${EMAIL_PROVIDER:-Mailgun}
+      Email__MailgunApiKey: ${EMAIL_MAILGUN_API_KEY:-}
+      Email__MailgunDomain: ${EMAIL_MAILGUN_DOMAIN:-}
+      Email__FromEmail: ${EMAIL_FROM_EMAIL:-noreply@traditionaleats.com}
+      Email__FromName: ${EMAIL_FROM_NAME:-TraditionalEats}
+      Email__SmtpHost: ${EMAIL_SMTP_HOST:-}
+      Email__SmtpPort: ${EMAIL_SMTP_PORT:-587}
+      Email__SmtpUsername: ${EMAIL_SMTP_USERNAME:-}
+      Email__SmtpPassword: ${EMAIL_SMTP_PASSWORD:-}
+      Email__EnableSsl: ${EMAIL_ENABLE_SSL:-true}
+      Vonage__Enabled: ${VONAGE_ENABLED:-false}
+      Vonage__ApiKey: ${VONAGE_API_KEY:-}
+      Vonage__ApiSecret: ${VONAGE_API_SECRET:-}
+      Vonage__FromNumber: ${VONAGE_FROM_NUMBER:-}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  restaurant-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.RestaurantService/TraditionalEats.RestaurantService.csproj
+        PROJECT_NAME: TraditionalEats.RestaurantService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:restaurant-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.RestaurantService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5007
+      ConnectionStrings__RestaurantDb: "server=mysql;port=3306;database=traditional_eats_restaurant;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.PaymentService/TraditionalEats.PaymentService.csproj
+        PROJECT_NAME: TraditionalEats.PaymentService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:payment-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.PaymentService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5004
+      ConnectionStrings__PaymentDb: "server=mysql;port=3306;database=traditional_eats_payment;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      Stripe__SecretKey: ${STRIPE_SECRET_KEY:-}
+      Stripe__WebhookSecret: ${STRIPE_WEBHOOK_SECRET:-}
+      Stripe__PublishableKey: ${STRIPE_PUBLISHABLE_KEY:-}
+      Stripe__ConnectReturnUrl: ${STRIPE_CONNECT_RETURN_URL:-}
+      AppBaseUrl: ${APP_BASE_URL}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.ChatService/TraditionalEats.ChatService.csproj
+        PROJECT_NAME: TraditionalEats.ChatService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:chat-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.ChatService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5012
+      ConnectionStrings__ChatDb: "server=mysql;port=3306;database=traditional_eats_chat;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
+      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      HttpClients__OrderService__BaseAddress: "http://order-service:5002"
+      HttpClients__RestaurantService__BaseAddress: "http://restaurant-service:5007"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  # ---------- Ollama (optional; pull models when needed: docker exec -it <ollama> ollama pull <model>) ----------
+  ollama:
+    image: ollama/ollama:latest
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - internal
+    restart: unless-stopped
+
+  # ---------- AIService (OpenAI + Ollama; light use for now) ----------
+  ai-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.AIService/TraditionalEats.AIService.csproj
+        PROJECT_NAME: TraditionalEats.AIService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:ai-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.AIService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5011
+      ConnectionStrings__AIDb: "server=mysql;port=3306;database=traditional_eats_ai;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
+      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OpenAI__ApiKey: ${OPENAI_API_KEY:-}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      ollama: { condition: service_started }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  # ---------- BFFs (internal only, HTTP) ----------
+  web-bff:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/bff/TraditionalEats.Web.Bff/TraditionalEats.Web.Bff.csproj
+        PROJECT_NAME: TraditionalEats.Web.Bff
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:web-bff
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    environment:
+      PROJECT_NAME: TraditionalEats.Web.Bff
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5101
+      Services__IdentityService: "http://identity-service:5000"
+      Services__CustomerService: "http://customer-service:5001"
+      Services__OrderService: "http://order-service:5002"
+      Services__CatalogService: "http://catalog-service:5003"
+      Services__PaymentService: "http://payment-service:5004"
+      Services__NotificationService: "http://notification-service:5006"
+      Services__RestaurantService: "http://restaurant-service:5007"
+      Services__ChatService: "http://chat-service:5012"
+      Services__AIService: "http://ai-service:5011"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
+      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+    depends_on:
+      - identity-service
+      - customer-service
+      - order-service
+      - restaurant-service
+      - catalog-service
+      - notification-service
+      - payment-service
+      - chat-service
+      - ai-service
+    networks:
+      - internal
+    restart: unless-stopped
+
+  mobile-bff:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/bff/TraditionalEats.Mobile.Bff/TraditionalEats.Mobile.Bff.csproj
+        PROJECT_NAME: TraditionalEats.Mobile.Bff
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:mobile-bff
+    platform: linux/amd64
+    environment:
+      PROJECT_NAME: TraditionalEats.Mobile.Bff
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5102
+      Services__IdentityService: "http://identity-service:5000"
+      Services__CustomerService: "http://customer-service:5001"
+      Services__OrderService: "http://order-service:5002"
+      Services__CatalogService: "http://catalog-service:5003"
+      Services__PaymentService: "http://payment-service:5004"
+      Services__NotificationService: "http://notification-service:5006"
+      Services__RestaurantService: "http://restaurant-service:5007"
+      Services__ChatService: "http://chat-service:5012"
+      Services__AIService: "http://ai-service:5011"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
+      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+    depends_on:
+      - identity-service
+      - customer-service
+      - order-service
+      - restaurant-service
+      - ai-service
+    networks:
+      - internal
+    restart: unless-stopped
+
+  # ---------- Edge: Nginx + WebApp static (HTTPS termination; only public-facing) ----------
+  edge:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.edge
+      args:
+        API_BASE_URL: ${APP_BASE_URL}/api/
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:edge
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - web-bff
+    networks:
+      - internal
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  ollama_data:
+  certbot_www:
+  certbot_certs:
