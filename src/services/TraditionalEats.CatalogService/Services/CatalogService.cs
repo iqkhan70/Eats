@@ -177,40 +177,63 @@ public class CatalogService : ICatalogService
 
     public async Task<List<MenuItemDto>> GetMenuItemsByRestaurantAsync(Guid restaurantId, Guid? categoryId = null)
     {
-        var cacheKey = categoryId.HasValue 
+        var cacheKey = categoryId.HasValue
             ? $"menu:restaurant:{restaurantId}:category:{categoryId}"
             : $"menu:restaurant:{restaurantId}";
 
-        // Try cache first
-        var cached = await _redis.GetAsync<List<MenuItemDto>>(cacheKey);
-        if (cached != null)
+        // Try cache first (fail silently if Redis is unavailable)
+        try
         {
-            return cached;
+            var cached = await _redis.GetAsync<List<MenuItemDto>>(cacheKey);
+            if (cached != null)
+            {
+                return cached;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Redis cache unavailable, fetching from database");
         }
 
-        var query = _context.MenuItems
-            .Where(m => m.RestaurantId == restaurantId)
-            .Include(m => m.Category)
-            .Include(m => m.Options)
-            .Include(m => m.Prices)
-            .AsQueryable();
-
-        if (categoryId.HasValue)
+        try
         {
-            query = query.Where(m => m.CategoryId == categoryId.Value);
+            var query = _context.MenuItems
+                .Where(m => m.RestaurantId == restaurantId)
+                .Include(m => m.Category)
+                .Include(m => m.Options)
+                .Include(m => m.Prices)
+                .AsQueryable();
+
+            if (categoryId.HasValue)
+            {
+                query = query.Where(m => m.CategoryId == categoryId.Value);
+            }
+
+            var menuItems = await query
+                .OrderBy(m => m.Category!.DisplayOrder)
+                .ThenBy(m => m.Name)
+                .ToListAsync();
+
+            var dtos = menuItems.Select(MapToDto).ToList();
+
+            // Cache for 15 minutes (fail silently if Redis is unavailable)
+            try
+            {
+                await _redis.SetAsync(cacheKey, dtos, TimeSpan.FromMinutes(15));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cache menu items, continuing without cache");
+            }
+
+            return dtos;
         }
-
-        var menuItems = await query
-            .OrderBy(m => m.Category!.DisplayOrder)
-            .ThenBy(m => m.Name)
-            .ToListAsync();
-
-        var dtos = menuItems.Select(MapToDto).ToList();
-
-        // Cache for 15 minutes
-        await _redis.SetAsync(cacheKey, dtos, TimeSpan.FromMinutes(15));
-
-        return dtos;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching menu items from database");
+            // Return empty list instead of throwing - allows frontend to show "No items" message
+            return new List<MenuItemDto>();
+        }
     }
 
     public async Task<bool> UpdateMenuItemAsync(Guid menuItemId, Guid restaurantId, UpdateMenuItemDto dto)
@@ -345,8 +368,8 @@ public class CatalogService : ICatalogService
     {
         var now = DateTime.UtcNow;
         var prices = await _context.MenuItemPrices
-            .Where(p => p.MenuItemId == menuItemId 
-                && p.EffectiveFrom <= now 
+            .Where(p => p.MenuItemId == menuItemId
+                && p.EffectiveFrom <= now
                 && (p.EffectiveTo == null || p.EffectiveTo >= now))
             .OrderByDescending(p => p.EffectiveFrom)
             .ToListAsync();

@@ -88,7 +88,25 @@ public class WebBffController : ControllerBase
             existingSessionId = cookieSessionId;
         }
 
-        var sessionId = await _cartSessionService.GetOrCreateSessionIdAsync(existingSessionId);
+        string sessionId;
+        try
+        {
+            sessionId = await _cartSessionService.GetOrCreateSessionIdAsync(existingSessionId);
+        }
+        catch (Exception ex)
+        {
+            // Redis unavailable - generate a fallback session ID
+            _logger.LogWarning(ex, "Redis unavailable when getting session ID, generating fallback");
+            if (!string.IsNullOrEmpty(existingSessionId))
+            {
+                sessionId = existingSessionId;
+            }
+            else
+            {
+                // Generate a new session ID (GUID)
+                sessionId = Guid.NewGuid().ToString();
+            }
+        }
 
         // If new, set cookie (server-side)
         if (existingSessionId != sessionId && string.IsNullOrEmpty(existingSessionId))
@@ -721,12 +739,27 @@ public class WebBffController : ControllerBase
             var queryString = categoryId.HasValue ? $"?categoryId={categoryId.Value}" : "";
             var response = await client.GetAsync($"/api/catalog/restaurants/{restaurantId}/menu-items{queryString}");
             var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonContent(content, 200);
+            }
+
+            // For errors (including 500), return empty list instead of forwarding error
+            // This allows the frontend to display "No menu items" instead of an error
+            _logger.LogWarning("CatalogService returned error for restaurant menu: Status={StatusCode}, RestaurantId={RestaurantId}, Content={Content}",
+                response.StatusCode, restaurantId, content);
+            return JsonContent("[]", 200); // Return empty array
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "CatalogService unavailable when fetching restaurant menu, returning empty list");
+            return JsonContent("[]", 200); // Return empty array
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurant menu");
-            return StatusCode(500, new { error = "Failed to fetch restaurant menu" });
+            _logger.LogError(ex, "Unexpected error fetching restaurant menu");
+            return JsonContent("[]", 200); // Return empty array instead of 500
         }
     }
 
@@ -738,12 +771,26 @@ public class WebBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("CatalogService");
             var response = await client.GetAsync("/api/catalog/categories");
             var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonContent(content, 200);
+            }
+
+            // For errors, return empty list instead of forwarding error
+            _logger.LogWarning("CatalogService returned error for categories: Status={StatusCode}, Content={Content}",
+                response.StatusCode, content);
+            return JsonContent("[]", 200); // Return empty array
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "CatalogService unavailable when fetching categories, returning empty list");
+            return JsonContent("[]", 200); // Return empty array
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching categories");
-            return StatusCode(500, new { error = "Failed to fetch categories" });
+            _logger.LogError(ex, "Unexpected error fetching categories");
+            return JsonContent("[]", 200); // Return empty array instead of 500
         }
     }
 
@@ -800,27 +847,51 @@ public class WebBffController : ControllerBase
                     {
                         if (Guid.TryParse(cartIdElement.GetString(), out var cartId))
                         {
-                            var sessionId = await GetOrCreateSessionIdAsync();
-                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                            try
+                            {
+                                var sessionId = await GetOrCreateSessionIdAsync();
+                                await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                            }
+                            catch (Exception redisEx)
+                            {
+                                _logger.LogWarning(redisEx, "Redis unavailable when storing cart session, continuing");
+                            }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to parse cartId from response");
+                    _logger.LogWarning(ex, "Failed to parse cartId from response, but cart was created");
                 }
+
+                return JsonContent(content, 200);
             }
             else
             {
                 _logger.LogWarning("OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
+                // Return error response from OrderService, but ensure it's valid JSON
+                try
+                {
+                    // Try to parse as JSON to ensure it's valid
+                    JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+                    return JsonContent(content, (int)response.StatusCode);
+                }
+                catch
+                {
+                    // If not valid JSON, return a proper error object
+                    return StatusCode((int)response.StatusCode, new { error = "Failed to create cart", message = content });
+                }
             }
-
-            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "OrderService unavailable when creating cart");
+            return StatusCode(503, new { error = "Cart service unavailable", message = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating cart: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
+            return StatusCode(500, new { error = "Failed to create cart", message = ex.Message });
         }
     }
 
@@ -832,44 +903,86 @@ public class WebBffController : ControllerBase
         {
             if (User.Identity?.IsAuthenticated == true)
             {
-                var client = _httpClientFactory.CreateClient("OrderService");
-
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
-                if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-                {
-                    httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-                }
-
-                var response = await client.SendAsync(httpRequestMessage);
-                var content = await response.Content.ReadAsStringAsync();
-
-                if (response.IsSuccessStatusCode)
-                    return JsonContent(content, 200);
-
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    return Ok((object?)null);
-
-                return JsonContent(content, (int)response.StatusCode);
-            }
-
-            // guest user
-            try
-            {
-                var sessionId = await GetOrCreateSessionIdAsync();
-                var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-
-                if (cartId.HasValue)
+                try
                 {
                     var client = _httpClientFactory.CreateClient("OrderService");
-                    var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
+
+                    var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
+                    if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                    {
+                        httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+                    }
+
+                    var response = await client.SendAsync(httpRequestMessage);
                     var content = await response.Content.ReadAsStringAsync();
 
                     if (response.IsSuccessStatusCode)
                         return JsonContent(content, 200);
 
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        return Ok((object?)null);
+
+                    _logger.LogWarning("OrderService returned error for authenticated cart: Status={StatusCode}, Content={Content}",
+                        response.StatusCode, content);
+                    return JsonContent(content, (int)response.StatusCode);
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(ex, "OrderService unavailable when getting authenticated cart");
+                    return Ok((object?)null);
+                }
+            }
+
+            // guest user
+            try
+            {
+                string sessionId;
+                try
+                {
+                    sessionId = await GetOrCreateSessionIdAsync();
+                }
+                catch (Exception sessionEx)
+                {
+                    _logger.LogWarning(sessionEx, "Failed to get or create session ID, returning empty cart");
+                    return Ok((object?)null);
+                }
+
+                Guid? cartId;
+                try
+                {
+                    cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+                }
+                catch (Exception redisEx)
+                {
+                    _logger.LogWarning(redisEx, "Redis unavailable when getting cart ID, returning empty cart");
+                    return Ok((object?)null);
+                }
+
+                if (cartId.HasValue)
+                {
+                    try
                     {
-                        try { await _cartSessionService.ClearSessionCartAsync(sessionId); } catch { }
+                        var client = _httpClientFactory.CreateClient("OrderService");
+                        var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
+                        var content = await response.Content.ReadAsStringAsync();
+
+                        if (response.IsSuccessStatusCode)
+                            return JsonContent(content, 200);
+
+                        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        {
+                            try { await _cartSessionService.ClearSessionCartAsync(sessionId); } catch { }
+                            return Ok((object?)null);
+                        }
+
+                        // For any other error (including 500), log and return empty cart instead of forwarding error
+                        _logger.LogWarning("OrderService returned error for guest cart: Status={StatusCode}, Content={Content}",
+                            response.StatusCode, content);
+                        return Ok((object?)null);
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        _logger.LogError(ex, "OrderService unavailable when getting guest cart");
                         return Ok((object?)null);
                     }
                 }
@@ -884,7 +997,8 @@ public class WebBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error getting cart, returning empty cart: {Message}", ex.Message);
+            _logger.LogError(ex, "Unexpected error getting cart: {Message}", ex.Message);
+            // Return empty cart instead of 500 to prevent frontend errors
             return Ok((object?)null);
         }
     }
@@ -951,23 +1065,48 @@ public class WebBffController : ControllerBase
             {
                 if (User.Identity?.IsAuthenticated != true)
                 {
-                    var sessionId = await GetOrCreateSessionIdAsync();
-                    var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-                    if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                    try
                     {
-                        await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                        var sessionId = await GetOrCreateSessionIdAsync();
+                        var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+                        if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                        {
+                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                        }
+                    }
+                    catch (Exception redisEx)
+                    {
+                        _logger.LogWarning(redisEx, "Redis unavailable when storing cart session, continuing");
                     }
                 }
 
                 return Ok(new { success = true, cartId });
             }
 
-            return JsonContent(content, (int)response.StatusCode);
+            // For errors, ensure we return valid JSON
+            _logger.LogWarning("OrderService returned error when adding item to cart: Status={StatusCode}, Content={Content}",
+                response.StatusCode, content);
+            try
+            {
+                // Try to parse as JSON to ensure it's valid
+                JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+                return JsonContent(content, (int)response.StatusCode);
+            }
+            catch
+            {
+                // If not valid JSON, return a proper error object
+                return StatusCode((int)response.StatusCode, new { error = "Failed to add item to cart", message = content });
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "OrderService unavailable when adding item to cart");
+            return StatusCode(503, new { error = "Cart service unavailable", message = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "AddItemToCart error: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
+            return StatusCode(500, new { error = "Failed to add item to cart", message = ex.Message });
         }
     }
 
@@ -1632,12 +1771,25 @@ public class WebBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/register", request);
             var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("IdentityService registration failed: Status={StatusCode}, Content={Content}",
+                    response.StatusCode, content);
+            }
+
             return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error during registration - IdentityService may be unreachable. URL: {Url}",
+                _configuration["Services:IdentityService"] ?? "http://identity-service:5000");
+            return StatusCode(500, new { error = "Registration service unavailable", message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during registration");
-            return StatusCode(500, new { error = "Failed to register" });
+            _logger.LogError(ex, "Error during registration: {Message}", ex.Message);
+            return StatusCode(500, new { error = "Failed to register", message = ex.Message });
         }
     }
 

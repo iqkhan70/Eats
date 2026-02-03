@@ -90,12 +90,17 @@ services:
       ConnectionStrings__IdentityDb: "server=mysql;port=3306;database=traditional_eats_identity;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
       Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
       AppSettings__BaseUrl: ${APP_BASE_URL}
+      Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:-YourSuperSecretEncryptionKeyThatIsAtLeast32CharactersLong!}
+      Services__CustomerService: "http://customer-service:5001"
       Services__NotificationService: "http://notification-service:5006"
     depends_on:
+      customer-service: { condition: service_started }
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
     networks:
@@ -122,6 +127,9 @@ services:
       ConnectionStrings__CustomerDb: "server=mysql;port=3306;database=traditional_eats_customer;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+      Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:-YourSuperSecretEncryptionKeyThatIsAtLeast32CharactersLong!}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -149,6 +157,8 @@ services:
       ConnectionStrings__OrderDb: "server=mysql;port=3306;database=traditional_eats_order;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -203,6 +213,8 @@ services:
       ConnectionStrings__NotificationDb: "server=mysql;port=3306;database=traditional_eats_notification;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Services__CustomerService: "http://customer-service:5001"
       Email__Enabled: ${EMAIL_ENABLED:-true}
       Email__Provider: ${EMAIL_PROVIDER:-Mailgun}
@@ -349,6 +361,8 @@ services:
       ConnectionStrings__AIDb: "server=mysql;port=3306;database=traditional_eats_ai;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
       Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}

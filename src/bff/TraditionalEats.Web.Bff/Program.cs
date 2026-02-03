@@ -199,9 +199,13 @@ app.Use(async (context, next) =>
         // Only return JSON for API endpoints
         if (context.Request.Path.StartsWithSegments("/api"))
         {
-            context.Response.StatusCode = 500;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsJsonAsync(new { error = "An internal server error occurred", message = ex.Message });
+            // Don't modify response if it has already started
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = 500;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new { error = "An internal server error occurred", message = ex.Message });
+            }
             return;
         }
         throw; // Re-throw for non-API endpoints

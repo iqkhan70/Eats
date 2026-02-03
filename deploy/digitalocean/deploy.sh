@@ -191,6 +191,7 @@ ENDSWAP
     MYSQL_ROOT_PASSWORD=$(get_var MYSQL_ROOT_PASSWORD)
     JWT_SECRET=$(get_var JWT_SECRET)
     RABBITMQ_PASSWORD=$(get_var RABBITMQ_PASSWORD)
+    ENCRYPTION_MASTER_KEY=$(get_var ENCRYPTION_MASTER_KEY)
     APP_BASE_URL=$(get_var APP_BASE_URL)
     REGISTRY=$(get_var REGISTRY)
     REPO_NAME=$(get_var REPO_NAME)
@@ -198,6 +199,7 @@ ENDSWAP
   [ -z "$MYSQL_ROOT_PASSWORD" ] && MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
   [ -z "$JWT_SECRET" ] && JWT_SECRET=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-48)
   [ -z "$RABBITMQ_PASSWORD" ] && RABBITMQ_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-24)
+  [ -z "$ENCRYPTION_MASTER_KEY" ] && ENCRYPTION_MASTER_KEY=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
   if [ -z "$APP_BASE_URL" ]; then
     [ "$ENV_ARG" = "staging" ] && APP_BASE_URL="${STAGING_BASE_URL:-https://www.caseflowstage.store}" || APP_BASE_URL="${PRODUCTION_BASE_URL:-http://$DROPLET_IP}"
   fi
@@ -432,6 +434,7 @@ ENDSWAP
     MYSQL_ROOT_PASSWORD=$(get_var MYSQL_ROOT_PASSWORD)
     JWT_SECRET=$(get_var JWT_SECRET)
     RABBITMQ_PASSWORD=$(get_var RABBITMQ_PASSWORD)
+    ENCRYPTION_MASTER_KEY=$(get_var ENCRYPTION_MASTER_KEY)
     APP_BASE_URL=$(get_var APP_BASE_URL)
     EMAIL_MAILGUN_API_KEY=$(get_var EMAIL_MAILGUN_API_KEY)
     EMAIL_MAILGUN_DOMAIN=$(get_var EMAIL_MAILGUN_DOMAIN)
@@ -450,6 +453,7 @@ ENDSWAP
   [ -z "$MYSQL_ROOT_PASSWORD" ] && MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
   [ -z "$JWT_SECRET" ] && JWT_SECRET=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-48)
   [ -z "$RABBITMQ_PASSWORD" ] && RABBITMQ_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-24)
+  [ -z "$ENCRYPTION_MASTER_KEY" ] && ENCRYPTION_MASTER_KEY=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
   # APP_BASE_URL = public URL (DROPLET_IP or domain); port 80/443 used by Nginx
   # APP_BASE_URL: staging defaults to domain (https://www.caseflowstage.store), prod/default to IP; override in secrets.env
   if [ -z "$APP_BASE_URL" ]; then
@@ -533,6 +537,7 @@ RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD
 JWT_SECRET=$JWT_SECRET
 JWT_ISSUER=$JWT_ISSUER
 JWT_AUDIENCE=$JWT_AUDIENCE
+ENCRYPTION_MASTER_KEY=$ENCRYPTION_MASTER_KEY
 EMAIL_ENABLED=$EMAIL_ENABLED
 EMAIL_PROVIDER=$EMAIL_PROVIDER
 EMAIL_MAILGUN_API_KEY=$EMAIL_MAILGUN_API_KEY

@@ -99,14 +99,14 @@ public class CatalogController : ControllerBase
             // Verify vendor owns the restaurant (unless admin)
             var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var isAdmin = User.IsInRole("Admin");
-            
+
             if (!isAdmin)
             {
                 // For vendors, verify restaurant ownership via RestaurantService
                 // This will be handled by the BFF or we can add a check here
                 // For now, we'll trust the restaurantId parameter and verify in service layer
             }
-            
+
             var menuItemId = await _catalogService.CreateMenuItemAsync(restaurantId, dto);
             return Ok(new { menuItemId });
         }
@@ -144,12 +144,14 @@ public class CatalogController : ControllerBase
         try
         {
             var menuItems = await _catalogService.GetMenuItemsByRestaurantAsync(restaurantId, categoryId);
-            return Ok(menuItems);
+            // Always return 200 OK with list (empty list if no items) - never return error
+            return Ok(menuItems ?? new List<MenuItemDto>());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get menu items");
-            return StatusCode(500, new { message = "Failed to get menu items" });
+            _logger.LogError(ex, "Failed to get menu items, returning empty list");
+            // Return empty list instead of 500 error - allows frontend to show "No items" message
+            return Ok(new List<MenuItemDto>());
         }
     }
 
@@ -196,10 +198,10 @@ public class CatalogController : ControllerBase
             }
 
             var success = await _catalogService.SetMenuItemAvailabilityAsync(
-                menuItemId, 
-                menuItem.RestaurantId, 
+                menuItemId,
+                menuItem.RestaurantId,
                 request.IsAvailable);
-            
+
             if (!success)
             {
                 return NotFound(new { message = "Menu item not found or you don't have permission" });
