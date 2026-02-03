@@ -60,6 +60,7 @@ If the Droplet still locks up (SSH stops responding, deploy hangs):
 - **`./deploy.sh staging`** / **`./deploy.sh production`**: Same as above using `DROPLET_IP_STAGING` or `DROPLET_IP_PRODUCTION`.
 - **`./deploy.sh build-on-server`**: Sync repo to Droplet, build **on the server**, push to DOCR (if REGISTRY+token set), then pull and up. Like mental health app; ~15–30 min. No build on your Mac.
 - **`./deploy.sh staging`** / **`./deploy.sh production`**: Deploy only – copy files, DOCR login, pull, up. **~5 min.** Images must already be in the registry (from a previous build-on-server or CI).
+- **`./deploy.sh setup-https [staging|production] [domain]`**: Get Let's Encrypt certificates and enable HTTPS. Example: `./deploy.sh setup-https staging www.caseflowstage.store`. Domain is auto-detected from server `.env` if not provided.
 - **`./deploy.sh build`**: Build and push **on your Mac** (slow on Apple Silicon). Use only for CI or one-off; prefer build-on-server.
 - **`./deploy.sh app-platform`**: Create/update App Platform app from `app-spec.yaml` (requires doctl and `APP_ID`).
 
@@ -101,7 +102,11 @@ If `DOMAIN` is empty (e.g. you use only an IP), Nginx stays HTTP-only. The gener
 
 1. **Use a domain, not an IP** – Let's Encrypt does not issue certs for raw IPs. Point a hostname (e.g. `www.caseflowstage.store` or `staging.yourdomain.com`) to your Droplet's IP in DNS.
 2. **Deploy with HTTP first** – Run `./deploy.sh build-on-server` or `./deploy.sh staging` **without** setting `STAGING_DOMAIN` in `secrets.env` so the edge starts with HTTP only (no 443 block yet).
-3. **Get a cert on the server** – SSH in and run the setup script (replace with your domain):
+3. **Get a cert** – Run the setup command (domain auto-detected from server `.env`, or specify):
+   ```bash
+   ./deploy.sh setup-https staging www.caseflowstage.store
+   ```
+   Or manually on the server:
    ```bash
    ssh root@YOUR_DROPLET_IP
    cd /opt/traditionaleats
@@ -118,6 +123,40 @@ Create `secrets.env` and set any of: `APP_BASE_URL`, `STAGING_DOMAIN`, `PRODUCTI
 ## MySQL databases
 
 The script runs `scripts/mysql-init.sh` on the server after `docker compose up -d`, creating all eight databases (identity, customer, order, catalog, notification, restaurant, payment, chat) if they don't exist. Each service runs EF migrations on startup. If init fails (e.g. MySQL not ready yet), on the server run: `cd /opt/traditionaleats && ./scripts/mysql-init.sh`.
+
+**MySQL is exposed on port 3306** for direct access from your Mac. Connect using:
+
+- **Host:** Your Droplet IP (e.g. `165.227.182.46`)
+- **Port:** `3306`
+- **User:** `root`
+- **Password:** Value of `MYSQL_ROOT_PASSWORD` from your server `.env` file
+
+Example connection string: `server=165.227.182.46;port=3306;user=root;password=YOUR_PASSWORD`
+
+## Admin user seeding
+
+After database creation, the deploy script automatically seeds an admin user (enabled by default):
+
+- **Email:** `admin@traditionaleats.com` (default, configurable via `ADMIN_EMAIL` in `secrets.env`)
+- **Password:** `Admin123!` (default, **change this in production** via `ADMIN_PASSWORD` in `secrets.env`)
+- **Role:** Admin (full system access)
+
+**To customize:** Add to `secrets.env`:
+
+```bash
+ADMIN_EMAIL=your-admin@example.com
+ADMIN_PASSWORD=YourSecurePassword123!
+SEED_ADMIN=true  # Set to false to skip seeding
+```
+
+**To seed manually:** On the server:
+
+```bash
+cd /opt/traditionaleats
+bash deploy/digitalocean/scripts/seed-admin.sh [email] [password]
+```
+
+The script is idempotent - it won't create duplicates if the admin user already exists, but will ensure the Admin role is assigned.
 
 ## App Platform
 
@@ -139,9 +178,91 @@ Docker is trying to pull from DigitalOcean Container Registry without being logg
   ```
   Then run your compose command with the same `REGISTRY`/`REPO_NAME` in `.env`.
 
+### 502 Bad Gateway when pushing to DOCR (attestation)
+
+Push fails with `502 Bad Gateway` on PUTs to `.../blobs/uploads/...attestation-sha256...`. Docker Buildx pushes **provenance attestations** by default; some registries (including DOCR under load) can 502 on those.
+
+The deploy script now sets **`BUILDX_NO_DEFAULT_ATTESTATIONS=1`** for both local and server builds so attestations are not created and push should succeed. If you still see 502, build and push with attestations disabled manually:
+
+```bash
+BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env build
+# then push as usual
+```
+
+### 503 Service Unavailable when pulling from DOCR
+
+Pull fails with `503 Service Unavailable` from `nyc3.digitaloceanspaces.com`. This is a **DigitalOcean Container Registry infrastructure issue** (temporary unavailability or rate limiting), not a code problem.
+
+**The deploy script now retries pulls automatically (3 attempts).** If it still fails:
+
+**Option 1 – Skip pull, use existing images:**
+
+```bash
+# On server, if images are already there from a previous build-on-server:
+cd /opt/traditionaleats
+docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d
+```
+
+**Option 2 – Use build-on-server (no registry pull needed):**
+
+```bash
+./deploy.sh build-on-server staging
+# This builds on the server, so no pull from DOCR is needed
+```
+
+**Option 3 – Wait and retry:**
+DOCR 503s are usually temporary. Wait 5–10 minutes and run `./deploy.sh staging` again.
+
+### 520 / 5xx errors when pushing to DOCR
+
+Push fails with `520` or other `5xx` status codes when uploading layers to DOCR. This is a **DigitalOcean Container Registry infrastructure issue** (temporary unavailability, rate limiting, or network issues), not a code problem.
+
+**The deploy script now retries pushes automatically (3 attempts with 15s delays).** If it still fails:
+
+**What happens:**
+
+- Some images may have been pushed successfully (partial success)
+- The same layer may fail across multiple services if it's a shared base layer
+- DOCR may be experiencing temporary issues with that specific blob
+
+**Options:**
+
+**Option 1 – Retry the push:**
+
+```bash
+# On server, retry pushing:
+cd /opt/traditionaleats
+export BUILDX_NO_DEFAULT_ATTESTATIONS=1
+docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env push
+```
+
+**Option 2 – Continue deployment (images already on server):**
+If you used `build-on-server`, the images are already on the Droplet, so you can skip the push and continue:
+
+```bash
+# On server:
+cd /opt/traditionaleats
+docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d
+```
+
+**Option 3 – Wait and retry:**
+DOCR 520/5xx errors are usually temporary. Wait 5–10 minutes and retry the push or redeploy.
+
 ### Droplet locks up / SSH stops responding
 
 The box is likely **out of memory (OOM)**. The deploy script now adds a 2 GB swap file, builds one image at a time on the server, and sets container memory limits. Prefer **8 GB RAM** for this stack, or use **`./deploy.sh build-on-server`** so builds run sequentially. See [Droplet size and memory](#droplet-size-and-memory-oom-lockup).
+
+### cannot load certificate .../fullchain.pem (No such file or directory)
+
+Nginx is configured for HTTPS with your domain but the Let's Encrypt certs don't exist yet. The deploy script now generates **HTTP-only** nginx when a domain is set (so Nginx can start); you then run `setup-https.sh` to obtain certs and switch to HTTPS.
+
+**Fix now (on the server):**
+
+- **Option A – Redeploy:** Run `./deploy.sh staging` (or your usual deploy) so the updated `generate-nginx-conf.sh` is copied; it will generate HTTP-only nginx and edge will start. Then on the server run `bash deploy/digitalocean/scripts/setup-https.sh www.caseflowstage.store` to get certs and enable HTTPS.
+
+- **Option B – No redeploy:** Edit `deploy/digitalocean/nginx/nginx.conf` on the server and remove the entire `server { listen 443 ssl; ... }` block (the block that contains `ssl_certificate` and `listen 443`). Save, then restart edge (`docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env -p digitalocean up -d edge` if your project is `digitalocean`). Then run `bash deploy/digitalocean/scripts/setup-https.sh www.caseflowstage.store` to obtain certs and regenerate nginx with HTTPS.
+
+After a **fresh deploy**, the generated nginx is already HTTP-only until you run `setup-https.sh <domain>`.
 
 ### HTTPS not working
 

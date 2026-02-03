@@ -2,6 +2,7 @@ using TraditionalEats.BuildingBlocks.Configuration;
 using TraditionalEats.BuildingBlocks.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Logging;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -72,7 +73,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Add CORS for Blazor WebAssembly
-// Allow connections from localhost (HTTP and HTTPS) and any IP address (for mobile browser access)
+// Allow connections from localhost (HTTP and HTTPS), production domains, and any IP address (for mobile browser access)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -85,12 +86,24 @@ builder.Services.AddCors(options =>
                 "http://127.0.0.1:5300",
                 "http://127.0.0.1:5301",
                 "https://127.0.0.1:5300",
-                "https://127.0.0.1:5301")
+                "https://127.0.0.1:5301",
+                "https://www.caseflowstage.store",
+                "http://www.caseflowstage.store",
+                "https://caseflowstage.store",
+                "http://caseflowstage.store")
               .SetIsOriginAllowed(origin =>
               {
                   // Allow any origin that matches the pattern (for IP access from mobile)
                   // This allows http(s)://localhost:5300|5301 and http://192.168.x.x:5300, etc.
                   var uri = new Uri(origin);
+
+                  // Allow production domains
+                  if (uri.Host == "www.caseflowstage.store" || uri.Host == "caseflowstage.store")
+                  {
+                      return true;
+                  }
+
+                  // Allow localhost and private IPs on dev ports
                   var validHost = uri.Host == "localhost" ||
                                  uri.Host == "127.0.0.1" ||
                                  uri.Host.StartsWith("192.168.") ||
@@ -170,6 +183,30 @@ builder.Services.AddHttpClient("OrderService", client =>
 });
 
 var app = builder.Build();
+
+// Global exception handler for API endpoints - always return JSON
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Unhandled exception in BFF");
+
+        // Only return JSON for API endpoints
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new { error = "An internal server error occurred", message = ex.Message });
+            return;
+        }
+        throw; // Re-throw for non-API endpoints
+    }
+});
 
 if (app.Environment.IsDevelopment())
 {

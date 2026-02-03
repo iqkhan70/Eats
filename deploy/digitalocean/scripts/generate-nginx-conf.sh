@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Generate nginx.conf from DOMAIN and HTTPS_ONLY (env vars).
+# Generate nginx.conf from DOMAIN, HTTPS_ONLY, and CERTS_READY (env vars).
+# When DOMAIN is set but CERTS_READY is not 1, only HTTP (port 80) is generated so Nginx can start without certs.
+# After running setup-https.sh, regenerate with CERTS_READY=1 to include the 443 SSL block.
 # Staging: HTTPS_ONLY=false → HTTP + HTTPS. Production: HTTPS_ONLY=true → redirect HTTP to HTTPS only.
-# When DOMAIN is empty, only HTTP (port 80) is configured.
 
 DOMAIN="${DOMAIN:-}"
 HTTPS_ONLY="${HTTPS_ONLY:-false}"
+CERTS_READY="${CERTS_READY:-0}"
 
 # Only use DOMAIN for SSL when it looks like a hostname (has a dot); "http"/"https" are invalid
 if [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [ -z "$DOMAIN" ] || [[ "$DOMAIN" != *.* ]]; then
@@ -38,7 +40,7 @@ NGINX_HEAD
 if [ "$HTTPS_ONLY" = "true" ]; then
   cat << 'NGINX_80_REDIRECT'
     server {
-        listen 80;
+        listen 80 default_server;
         server_name _;
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -52,7 +54,7 @@ NGINX_80_REDIRECT
 else
   cat << 'NGINX_80_SERVE'
     server {
-        listen 80;
+        listen 80 default_server;
         server_name _;
         root /usr/share/nginx/html;
         index index.html;
@@ -89,8 +91,9 @@ else
 NGINX_80_SERVE
 fi
 
-# Server 443: only when DOMAIN is set
-if [ -n "$DOMAIN" ]; then
+# Server 443: only when DOMAIN is set AND certs exist (CERTS_READY=1).
+# Deploy generates HTTP-only so Nginx can start; run setup-https.sh to get certs then regenerate with CERTS_READY=1.
+if [ -n "$DOMAIN" ] && [ "${CERTS_READY:-0}" = "1" ]; then
   cat << NGINX_443
     server {
         listen 443 ssl;

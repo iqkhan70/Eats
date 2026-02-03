@@ -94,8 +94,26 @@
             }
             else
             {
-                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-                errorMessage = error?.Message ?? "Login failed. Please check your credentials.";
+                // Check if response is JSON before parsing
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
+                var content = await response.Content.ReadAsStringAsync();
+                
+                if (contentType.Contains("json") && !string.IsNullOrWhiteSpace(content))
+                {
+                    try
+                    {
+                        var error = System.Text.Json.JsonSerializer.Deserialize<ErrorResponse>(content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        errorMessage = error?.Message ?? "Login failed. Please check your credentials.";
+                    }
+                    catch
+                    {
+                        errorMessage = $"Login failed (Status: {(int)response.StatusCode}). {content.Substring(0, Math.Min(200, content.Length))}";
+                    }
+                }
+                else
+                {
+                    errorMessage = $"Login failed (Status: {(int)response.StatusCode}). {content.Substring(0, Math.Min(200, content.Length))}";
+                }
             }
         }
         catch (Exception ex)

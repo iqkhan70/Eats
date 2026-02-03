@@ -49,13 +49,14 @@ fi
 export ENV_FILE="$SCRIPT_DIR/.env"
 
 usage() {
-  echo "Usage: $0 [staging|production|build|build-on-server|app-platform]"
+  echo "Usage: $0 [staging|production|build|build-on-server|app-platform|setup-https]"
   echo "  (no args)        – Full deploy using DROPLET_IP file"
   echo "  staging          – Full deploy using DROPLET_IP_STAGING file"
   echo "  production       – Full deploy using DROPLET_IP_PRODUCTION file"
   echo "  build            – Build all images and push to DOCR (slow on Mac/ARM)"
   echo "  build-on-server  – Sync repo to Droplet, build there, then up (fast; no DOCR needed)"
   echo "  app-platform     – Deploy via doctl (create/update from app-spec.yaml)"
+  echo "  setup-https       – Get Let's Encrypt certs and enable HTTPS (run after deploy)"
   exit 1
 }
 
@@ -64,6 +65,8 @@ cmd_build() {
   echo -e "${BLUE}Building images (from repo root: $REPO_ROOT)...${NC}"
   cd "$REPO_ROOT"
   export DOCKER_BUILDKIT=1
+  # Disable attestations so DOCR doesn't 502 on attestation blob uploads
+  export BUILDX_NO_DEFAULT_ATTESTATIONS=1
   if [ -z "$REGISTRY" ]; then
     echo -e "${YELLOW}REGISTRY not set; building with default tag. Set REGISTRY in secrets.env for push.${NC}"
   fi
@@ -77,10 +80,32 @@ cmd_build() {
     echo "Logging in to $REGISTRY..."
     echo "$DIGITALOCEAN_ACCESS_TOKEN" | docker login "$REGISTRY" -u "$DIGITALOCEAN_ACCESS_TOKEN" --password-stdin 2>/dev/null || true
     echo "Pushing images..."
-    if [ -f "$ENV_FILE" ]; then
-      docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" push
-    else
-      REGISTRY="$REGISTRY" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" push
+    # Retry push if DOCR returns 520, 503, or other 5xx errors (temporary unavailability)
+    MAX_RETRIES=3
+    RETRY=0
+    PUSH_FAILED=false
+    while [ $RETRY -lt $MAX_RETRIES ]; do
+      if [ -f "$ENV_FILE" ]; then
+        PUSH_OUTPUT=$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" push 2>&1 || echo "PUSH_FAILED")
+      else
+        PUSH_OUTPUT=$(REGISTRY="$REGISTRY" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" push 2>&1 || echo "PUSH_FAILED")
+      fi
+      if echo "$PUSH_OUTPUT" | grep -qE "(520|503|502|504|5[0-9]{2})"; then
+        RETRY=$((RETRY + 1))
+        if [ $RETRY -lt $MAX_RETRIES ]; then
+          echo -e "${YELLOW}DOCR error (520/503/5xx), retrying push ($RETRY/$MAX_RETRIES) in 15s...${NC}"
+          sleep 15
+        else
+          echo -e "${YELLOW}WARNING: Push failed after $MAX_RETRIES retries due to DOCR errors.${NC}"
+          echo -e "${YELLOW}Some images may have been pushed successfully. Check output above.${NC}"
+          PUSH_FAILED=true
+        fi
+      else
+        break
+      fi
+    done
+    if [ "$PUSH_FAILED" = "false" ]; then
+      echo -e "${GREEN}Push completed successfully.${NC}"
     fi
   fi
   echo -e "${GREEN}Build done.${NC}"
@@ -236,11 +261,12 @@ HTTPS_ONLY=$HTTPS_ONLY
   echo ""
 
   echo -e "${GREEN}Step 2b: Generating nginx.conf (DOMAIN=$DOMAIN, HTTPS_ONLY=$HTTPS_ONLY)${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && source .env 2>/dev/null; export DOMAIN HTTPS_ONLY; bash deploy/digitalocean/scripts/generate-nginx-conf.sh > deploy/digitalocean/nginx/nginx.conf"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && source .env 2>/dev/null; export DOMAIN HTTPS_ONLY; bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf"
   echo ""
 
   echo -e "${GREEN}Step 3: Building images on server (one at a time to avoid OOM, ~10–25 min)${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && COMPOSE_PARALLEL_LIMIT=1 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env build"
+  # Export BUILDX_NO_DEFAULT_ATTESTATIONS to prevent 502 errors on DOCR attestation uploads
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && export BUILDX_NO_DEFAULT_ATTESTATIONS=1 && COMPOSE_PARALLEL_LIMIT=1 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env build"
   echo ""
 
   # Step 3b: Push to registry from server (like mental health app – images in DOCR, no build on Mac)
@@ -249,14 +275,54 @@ HTTPS_ONLY=$HTTPS_ONLY
     if ! echo "$DIGITALOCEAN_ACCESS_TOKEN" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" 'read -r token; echo "$token" | docker login registry.digitalocean.com -u "$token" --password-stdin'; then
       echo -e "${YELLOW}DOCR login failed; skipping push. Images stay on server only. Set DIGITALOCEAN_ACCESS_TOKEN in secrets.env to push.${NC}"
     else
-      $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env push"
-      echo -e "${GREEN}Push done. Images are in the registry.${NC}"
+      # Retry push if DOCR returns 520, 503, or other 5xx errors (temporary unavailability)
+      MAX_RETRIES=3
+      RETRY=0
+      PUSH_FAILED=false
+      while [ $RETRY -lt $MAX_RETRIES ]; do
+        PUSH_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && export BUILDX_NO_DEFAULT_ATTESTATIONS=1 && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env push 2>&1" || echo "PUSH_FAILED")
+        if echo "$PUSH_OUTPUT" | grep -qE "(520|503|502|504|5[0-9]{2})"; then
+          RETRY=$((RETRY + 1))
+          if [ $RETRY -lt $MAX_RETRIES ]; then
+            echo -e "${YELLOW}DOCR error (520/503/5xx), retrying push ($RETRY/$MAX_RETRIES) in 15s...${NC}"
+            sleep 15
+          else
+            echo -e "${YELLOW}WARNING: Push failed after $MAX_RETRIES retries due to DOCR errors.${NC}"
+            echo -e "${YELLOW}Some images may have been pushed successfully. Check output above.${NC}"
+            echo -e "${YELLOW}You can retry the push manually or continue with existing images on server.${NC}"
+            PUSH_FAILED=true
+          fi
+        else
+          break
+        fi
+      done
+      if [ "$PUSH_FAILED" = "false" ]; then
+        echo -e "${GREEN}Push done. Images are in the registry.${NC}"
+      fi
     fi
     echo ""
   fi
 
   echo -e "${GREEN}Step 4: Pull and start containers (from registry when available)${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
+  # Retry pull if DOCR returns 503 (temporary unavailability)
+  MAX_RETRIES=3
+  RETRY=0
+  while [ $RETRY -lt $MAX_RETRIES ]; do
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
+    if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
+      RETRY=$((RETRY + 1))
+      if [ $RETRY -lt $MAX_RETRIES ]; then
+        echo -e "${YELLOW}DOCR 503 error, retrying ($RETRY/$MAX_RETRIES) in 10s...${NC}"
+        sleep 10
+      else
+        echo -e "${YELLOW}WARNING: Pull failed after $MAX_RETRIES retries. DOCR may be experiencing issues.${NC}"
+        echo -e "${YELLOW}Continuing with existing images on server...${NC}"
+      fi
+    else
+      break
+    fi
+  done
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
   echo ""
 
   echo -e "${GREEN}Step 5: Creating databases${NC}"
@@ -499,7 +565,7 @@ HTTPS_ONLY=$HTTPS_ONLY
 
   # Step 3: Copy compose, nginx (generated), scripts
   echo -e "${GREEN}Step 3: Copying files to server${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats/nginx /opt/traditionaleats/scripts"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats/nginx /opt/traditionaleats/deploy/digitalocean/scripts"
   $SCP_CMD "$COMPOSE_FILE" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/docker-compose.prod.yml"
   DOMAIN="$DOMAIN" HTTPS_ONLY="$HTTPS_ONLY" bash "$SCRIPT_DIR/scripts/generate-nginx-conf.sh" > "$SCRIPT_DIR/nginx/nginx.generated.conf" 2>/dev/null || true
   if [ -f "$SCRIPT_DIR/nginx/nginx.generated.conf" ] && [ -s "$SCRIPT_DIR/nginx/nginx.generated.conf" ]; then
@@ -507,8 +573,14 @@ HTTPS_ONLY=$HTTPS_ONLY
   else
     $SCP_CMD "$SCRIPT_DIR/nginx/nginx.conf" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/nginx/nginx.conf"
   fi
-  $SCP_CMD "$SCRIPT_DIR/scripts/mysql-init.sh" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/scripts/mysql-init.sh"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/traditionaleats/scripts/mysql-init.sh"
+  # Copy all scripts to server (needed for setup-https.sh, seed-admin.sh, etc.)
+  for script in "$SCRIPT_DIR/scripts"/*.sh; do
+    if [ -f "$script" ]; then
+      script_name=$(basename "$script")
+      $SCP_CMD "$script" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/deploy/digitalocean/scripts/$script_name"
+      $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/traditionaleats/deploy/digitalocean/scripts/$script_name"
+    fi
+  done
   echo -e "${GREEN}Files copied${NC}"
   echo ""
 
@@ -524,8 +596,40 @@ HTTPS_ONLY=$HTTPS_ONLY
   fi
 
   # Step 4: Pull and start containers
-  echo -e "${GREEN}Step 4: Starting containers${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f docker-compose.prod.yml --env-file .env pull && docker compose -f docker-compose.prod.yml --env-file .env up -d"
+  echo -e "${GREEN}Step 4: Pulling images from registry${NC}"
+  # Retry pull up to 3 times if DOCR returns 503 (temporary unavailability)
+  MAX_RETRIES=3
+  RETRY=0
+  PULL_FAILED=false
+  
+  while [ $RETRY -lt $MAX_RETRIES ]; do
+    if [ $RETRY -gt 0 ]; then
+      echo -e "${YELLOW}Retry $RETRY/$MAX_RETRIES after DOCR 503 error (waiting 10s)...${NC}"
+      sleep 10
+    fi
+    
+    # Try pull, capture output
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
+    
+    # Check if it's a 503 error
+    if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
+      RETRY=$((RETRY + 1))
+      if [ $RETRY -lt $MAX_RETRIES ]; then
+        echo -e "${YELLOW}DOCR returned 503 (temporary unavailability). Will retry...${NC}"
+        continue
+      else
+        echo -e "${YELLOW}WARNING: Pull failed after $MAX_RETRIES retries due to DOCR 503 errors.${NC}"
+        echo -e "${YELLOW}DOCR may be experiencing temporary issues. Continuing with existing images on server...${NC}"
+        PULL_FAILED=true
+      fi
+    else
+      # Not a 503, either success or different error - proceed
+      break
+    fi
+  done
+  
+  echo -e "${GREEN}Starting containers${NC}"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f docker-compose.prod.yml --env-file .env up -d"
   echo ""
 
   # Step 5: MySQL init (create DBs)
@@ -536,9 +640,110 @@ HTTPS_ONLY=$HTTPS_ONLY
   else
     echo -e "${YELLOW}If a service fails to start, on the server run: cd /opt/traditionaleats && ./scripts/mysql-init.sh${NC}"
   fi
+  echo ""
+
+  # Step 6: Seed admin user (if enabled)
+  if [ "${SEED_ADMIN:-true}" = "true" ]; then
+    echo -e "${GREEN}Step 6: Seeding admin user${NC}"
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@traditionaleats.com}"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin123!}"
+    sleep 5  # Wait for identity-service to be fully ready
+    if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && bash deploy/digitalocean/scripts/seed-admin.sh '$ADMIN_EMAIL' '$ADMIN_PASSWORD'" 2>/dev/null; then
+      echo -e "${GREEN}Admin user seeded${NC}"
+    else
+      echo -e "${YELLOW}Admin seeding failed or skipped. To seed manually, on server run:${NC}"
+      echo -e "${YELLOW}  cd /opt/traditionaleats && bash deploy/digitalocean/scripts/seed-admin.sh${NC}"
+    fi
+    echo ""
+  fi
 
   echo ""
   echo -e "${GREEN}Done. App: $APP_BASE_URL (ports 80/443). Allow firewall 80, 443, 22.${NC}"
+  
+  # Step 7: Optional HTTPS setup if DOMAIN is set
+  if [ -n "$DOMAIN" ] && [[ "$DOMAIN" == *.* ]] && [ "$DOMAIN" != "http" ] && [ "$DOMAIN" != "https" ]; then
+    echo ""
+    echo -e "${YELLOW}Domain detected: $DOMAIN${NC}"
+    echo -e "${YELLOW}To enable HTTPS, run: ./deploy.sh setup-https $ENV_ARG${NC}"
+    echo -e "${YELLOW}Or on the server: cd /opt/traditionaleats && bash deploy/digitalocean/scripts/setup-https.sh $DOMAIN${NC}"
+  fi
+}
+
+# ----- Setup HTTPS (get Let's Encrypt certs) -----
+cmd_setup_https() {
+  local ENV_ARG="${1:-default}"
+  source "$SCRIPT_DIR/load-droplet-ip.sh" "$ENV_ARG"
+  DROPLET_USER="${DROPLET_USER:-root}"
+  SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/id_rsa}"
+  SSH_CMD="ssh -o StrictHostKeyChecking=accept-new"
+  if [ -f "$SSH_KEY_PATH" ]; then
+    SSH_CMD="ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=accept-new"
+  fi
+
+  # Get DOMAIN from server .env or ask user
+  DOMAIN=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-" || true)
+  
+  if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [[ "$DOMAIN" != *.* ]]; then
+    if [ -z "$2" ]; then
+      echo -e "${RED}DOMAIN not set in server .env or invalid.${NC}"
+      echo "Usage: $0 setup-https [staging|production] <domain>"
+      echo "Example: $0 setup-https staging www.caseflowstage.store"
+      exit 1
+    fi
+    DOMAIN="$2"
+  fi
+
+  echo -e "${GREEN}Setting up HTTPS for $DOMAIN...${NC}"
+  echo -e "${YELLOW}Ensure DNS for $DOMAIN points to $DROPLET_IP${NC}"
+  echo ""
+  
+  # Ensure scripts directory exists and copy scripts if needed
+  SCP_CMD="scp -o StrictHostKeyChecking=accept-new"
+  if [ -f "$SSH_KEY_PATH" ]; then
+    SCP_CMD="scp -i $SSH_KEY_PATH -o StrictHostKeyChecking=accept-new"
+  fi
+  
+  echo -e "${BLUE}Ensuring scripts are on server...${NC}"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats/deploy/digitalocean/scripts"
+  
+  if [ ! -d "$SCRIPT_DIR/scripts" ]; then
+    echo -e "${RED}ERROR: Scripts directory not found at $SCRIPT_DIR/scripts${NC}"
+    exit 1
+  fi
+  
+  SCRIPT_COUNT=0
+  for script in "$SCRIPT_DIR/scripts"/*.sh; do
+    if [ -f "$script" ]; then
+      script_name=$(basename "$script")
+      echo -e "${BLUE}Copying $script_name...${NC}"
+      if $SCP_CMD "$script" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/deploy/digitalocean/scripts/$script_name"; then
+        $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/traditionaleats/deploy/digitalocean/scripts/$script_name"
+        SCRIPT_COUNT=$((SCRIPT_COUNT + 1))
+      else
+        echo -e "${RED}Failed to copy $script_name${NC}"
+        exit 1
+      fi
+    fi
+  done
+  
+  if [ $SCRIPT_COUNT -eq 0 ]; then
+    echo -e "${RED}ERROR: No scripts found to copy${NC}"
+    exit 1
+  fi
+  
+  # Verify critical script exists
+  if ! $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "test -f /opt/traditionaleats/deploy/digitalocean/scripts/generate-nginx-conf.sh"; then
+    echo -e "${RED}ERROR: generate-nginx-conf.sh not found on server after copy${NC}"
+    exit 1
+  fi
+  
+  echo -e "${GREEN}✓ Copied $SCRIPT_COUNT script(s) to server${NC}"
+  echo ""
+  
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && bash deploy/digitalocean/scripts/setup-https.sh $DOMAIN"
+  
+  echo ""
+  echo -e "${GREEN}HTTPS setup complete. Test: https://$DOMAIN${NC}"
 }
 
 # Parse first argument
@@ -548,6 +753,7 @@ case "${1:-}" in
   build)     cmd_build ;;
   build-on-server) cmd_build_on_server default ;;
   app-platform) cmd_app_platform ;;
+  setup-https) cmd_setup_https "${2:-default}" "${3:-}" ;;
   "")        cmd_droplet default ;;
   *)         usage ;;
 esac
