@@ -33,6 +33,9 @@ http {
     upstream mobile_bff {
         server mobile-bff:5102;
     }
+    upstream chat_service {
+        server chat-service:5012;
+    }
 
 NGINX_HEAD
 
@@ -116,6 +119,28 @@ if [ -n "$DOMAIN" ] && [ "${CERTS_READY:-0}" = "1" ]; then
         }
         location /api/MobileBff/ {
             proxy_pass http://mobile_bff/api/MobileBff/;
+            proxy_http_version 1.1;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+        # SignalR Chat Hub (ChatService) - WebSocket/LongPolling support
+        location /chatHub {
+            proxy_pass http://chat_service/chatHub;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_read_timeout 86400;
+            proxy_send_timeout 86400;
+        }
+        # ChatService REST API endpoints
+        location /api/Chat/ {
+            proxy_pass http://chat_service/api/Chat/;
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;

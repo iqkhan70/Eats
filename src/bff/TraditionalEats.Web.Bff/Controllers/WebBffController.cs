@@ -278,8 +278,12 @@ public class WebBffController : ControllerBase
             // Which restaurants can this user access?
             var allowedRestaurantIds = await GetAllowedRestaurantIdsAsync(isAdmin);
 
+            _logger.LogInformation("GetVendorOrders: User isAdmin={IsAdmin}, AllowedRestaurantIds={RestaurantIds}", 
+                isAdmin, string.Join(", ", allowedRestaurantIds));
+
             if (allowedRestaurantIds.Count == 0)
             {
+                _logger.LogWarning("GetVendorOrders: No allowed restaurants found for user. User may not have any restaurants assigned.");
                 var empty = new PagedResult<OrderDto>(Array.Empty<OrderDto>(), 0);
                 return JsonContent(JsonSerializer.Serialize(empty, JsonOptions), 200);
             }
@@ -594,6 +598,9 @@ public class WebBffController : ControllerBase
 
         try
         {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            _logger.LogInformation("GetAllowedRestaurantIdsAsync: isAdmin={IsAdmin}, UserId={UserId}", isAdmin, userIdClaim);
+
             var client = _httpClientFactory.CreateClient("RestaurantService");
             ForwardBearerToken(client);
 
@@ -601,9 +608,15 @@ public class WebBffController : ControllerBase
             {
                 var resp = await client.GetAsync("/api/restaurant/admin/all?skip=0&take=5000");
                 var json = await resp.Content.ReadAsStringAsync();
-                if (!resp.IsSuccessStatusCode) return ids;
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GetAllowedRestaurantIdsAsync: Failed to fetch admin restaurants. Status={Status}, Response={Response}", 
+                        resp.StatusCode, json);
+                    return ids;
+                }
 
                 var restaurants = JsonSerializer.Deserialize<List<RestaurantLight>>(json, JsonOptions) ?? new();
+                _logger.LogInformation("GetAllowedRestaurantIdsAsync: Admin - found {Count} restaurants", restaurants.Count);
                 foreach (var r in restaurants)
                 {
                     if (r.RestaurantId != Guid.Empty) ids.Add(r.RestaurantId);
@@ -614,9 +627,16 @@ public class WebBffController : ControllerBase
             {
                 var resp = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
                 var json = await resp.Content.ReadAsStringAsync();
-                if (!resp.IsSuccessStatusCode) return ids;
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GetAllowedRestaurantIdsAsync: Failed to fetch vendor restaurants. Status={Status}, Response={Response}", 
+                        resp.StatusCode, json);
+                    return ids;
+                }
 
                 var restaurants = JsonSerializer.Deserialize<List<RestaurantLight>>(json, JsonOptions) ?? new();
+                _logger.LogInformation("GetAllowedRestaurantIdsAsync: Vendor UserId={UserId} - found {Count} restaurants: {RestaurantIds}", 
+                    userIdClaim, restaurants.Count, string.Join(", ", restaurants.Select(r => r.RestaurantId)));
                 foreach (var r in restaurants)
                 {
                     if (r.RestaurantId != Guid.Empty) ids.Add(r.RestaurantId);

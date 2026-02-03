@@ -140,7 +140,22 @@ public class ChatService : IAsyncDisposable
     {
         if (_hubConnection?.State == HubConnectionState.Connected)
         {
-            await _hubConnection.InvokeAsync("JoinOrderChat", orderId);
+            try
+            {
+                _logger?.LogInformation("Calling JoinOrderChat for order {OrderId}", orderId);
+                await _hubConnection.InvokeAsync("JoinOrderChat", orderId);
+                _logger?.LogInformation("Successfully joined chat for order {OrderId}", orderId);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error joining chat for order {OrderId}", orderId);
+                Error?.Invoke($"Failed to join chat: {ex.Message}");
+            }
+        }
+        else
+        {
+            _logger?.LogWarning("Cannot join chat: Hub connection is not connected. State: {State}", _hubConnection?.State);
+            Error?.Invoke("Not connected to chat server");
         }
     }
 

@@ -20,13 +20,20 @@ public class OrderChatHub : Hub
     public override async Task OnConnectedAsync()
     {
         var userId = GetUserId();
+        var userRoles = GetUserRoles();
+        var bearerToken = GetBearerToken();
+        
+        _logger.LogInformation("OnConnectedAsync: UserId={UserId}, Roles={Roles}, BearerTokenPresent={HasToken}, ConnectionId={ConnectionId}", 
+            userId, userRoles != null ? string.Join(",", userRoles) : "none", !string.IsNullOrWhiteSpace(bearerToken), Context.ConnectionId);
+        
         if (userId == null)
         {
+            _logger.LogWarning("OnConnectedAsync: Aborting connection - UserId is null. ConnectionId={ConnectionId}", Context.ConnectionId);
             Context.Abort();
             return;
         }
 
-        _logger.LogInformation("User {UserId} connected to chat hub", userId);
+        _logger.LogInformation("User {UserId} connected to chat hub successfully", userId);
         await base.OnConnectedAsync();
     }
 
@@ -35,7 +42,13 @@ public class OrderChatHub : Hub
         var userId = GetUserId();
         if (userId != null)
         {
-            _logger.LogInformation("User {UserId} disconnected from chat hub", userId);
+            _logger.LogInformation("User {UserId} disconnected from chat hub. Exception: {Exception}, ConnectionId={ConnectionId}", 
+                userId, exception?.Message ?? "None", Context.ConnectionId);
+        }
+        else
+        {
+            _logger.LogWarning("OnDisconnectedAsync: User disconnected but UserId is null. Exception: {Exception}, ConnectionId={ConnectionId}", 
+                exception?.Message ?? "None", Context.ConnectionId);
         }
         await base.OnDisconnectedAsync(exception);
     }
@@ -59,13 +72,22 @@ public class OrderChatHub : Hub
             return;
         }
 
+        // Extract bearer token from SignalR connection (for forwarding to OrderService/RestaurantService)
+        var bearerToken = GetBearerToken();
+        _logger.LogInformation("JoinOrderChat: OrderId={OrderId}, UserId={UserId}, Roles={Roles}, BearerTokenPresent={HasToken}",
+            orderId, userId, string.Join(",", userRoles), !string.IsNullOrWhiteSpace(bearerToken));
+
         // Verify user has access to this order (any role: Customer, Vendor, or Admin)
-        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles);
+        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles, bearerToken);
         if (!hasAccess)
         {
+            _logger.LogWarning("JoinOrderChat: User {UserId} with roles {Roles} denied access to order {OrderId} chat. Check logs above for details.",
+                userId, string.Join(",", userRoles), orderId);
             await Clients.Caller.SendAsync("Error", "You don't have access to this order's chat");
             return;
         }
+
+        _logger.LogInformation("JoinOrderChat: User {UserId} granted access to order {OrderId} chat", userId, orderId);
 
         // Add user to the order chat group (use first role for participant label)
         var userRole = userRoles.First();
@@ -131,10 +153,14 @@ public class OrderChatHub : Hub
             return;
         }
 
+        // Extract bearer token from SignalR connection
+        var bearerToken = GetBearerToken();
+
         // Verify user has access to this order (any role: Customer, Vendor, or Admin)
-        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles);
+        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles, bearerToken);
         if (!hasAccess)
         {
+            _logger.LogWarning("User {UserId} denied access to send message to order {OrderId} chat", userId, orderId);
             await Clients.Caller.SendAsync("Error", "You don't have access to this order's chat");
             return;
         }
@@ -172,8 +198,11 @@ public class OrderChatHub : Hub
         var userRoles = GetUserRoles();
         if (userRoles == null || !userRoles.Any()) return;
 
+        // Extract bearer token from SignalR connection
+        var bearerToken = GetBearerToken();
+
         // Verify access (any role: Customer, Vendor, or Admin)
-        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles);
+        var hasAccess = await _chatService.VerifyOrderAccessAsync(orderId, userId.Value, userRoles, bearerToken);
         if (!hasAccess) return;
 
         // Mark messages as read
@@ -232,4 +261,23 @@ public class OrderChatHub : Hub
     }
 
     private static string GetOrderGroupName(Guid orderId) => $"order_chat_{orderId}";
+
+    private string? GetBearerToken()
+    {
+        // Try to get token from query string (SignalR connection)
+        var accessToken = Context.GetHttpContext()?.Request.Query["access_token"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            return accessToken;
+        }
+
+        // Try to get from Authorization header
+        var authHeader = Context.GetHttpContext()?.Request.Headers["Authorization"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return authHeader.Substring("Bearer ".Length).Trim();
+        }
+
+        return null;
+    }
 }

@@ -93,9 +93,30 @@ public class PaymentService : IPaymentService
             _logger.LogInformation("Created Stripe connected account {StripeAccountId} for vendor UserId={UserId}", stripeAccountId, userId);
         }
 
-        var baseUrl = (_configuration["Stripe:ConnectReturnUrl"] ?? _configuration["AppBaseUrl"] ?? "https://localhost:5301").TrimEnd('/');
+        // Get base URL for Stripe Connect return URLs
+        var baseUrl = _configuration["Stripe:ConnectReturnUrl"] ?? _configuration["AppBaseUrl"] ?? "https://localhost:5301";
+        
+        // Ensure URL has protocol (default to https for production)
+        if (!baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+            !baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            // If no protocol, assume HTTPS for production (non-localhost domains)
+            if (!baseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) && 
+                !baseUrl.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+            {
+                baseUrl = "https://" + baseUrl;
+            }
+            else
+            {
+                baseUrl = "https://" + baseUrl;
+            }
+        }
+        
+        baseUrl = baseUrl.TrimEnd('/');
         var returnUrl = baseUrl + "/vendor?stripe=return";
         var refreshUrl = baseUrl + "/vendor?stripe=refresh";
+        
+        _logger.LogInformation("Creating Stripe Connect link with returnUrl={ReturnUrl}, refreshUrl={RefreshUrl}", returnUrl, refreshUrl);
 
         var linkService = new AccountLinkService();
         var linkOptions = new AccountLinkCreateOptions
@@ -311,13 +332,27 @@ public class PaymentService : IPaymentService
     public async Task<string> CreateCheckoutSessionAsync(Guid orderId, decimal amount, decimal serviceFee, Guid restaurantId, string successUrl, string cancelUrl)
     {
         var restaurantBaseUrl = _configuration["Services:RestaurantService:BaseUrl"] ?? "http://localhost:5007";
+        var restaurantUrl = $"{restaurantBaseUrl.TrimEnd('/')}/api/restaurant/{restaurantId}";
+        _logger.LogInformation("CreateCheckoutSessionAsync: Fetching restaurant {RestaurantId} from {RestaurantUrl}", restaurantId, restaurantUrl);
+        
         using var http = _httpClientFactory.CreateClient();
-        var restaurantResponse = await http.GetAsync($"{restaurantBaseUrl.TrimEnd('/')}/api/restaurant/{restaurantId}");
-        if (!restaurantResponse.IsSuccessStatusCode)
+        HttpResponseMessage restaurantResponse;
+        try
         {
-            _logger.LogWarning("Restaurant {RestaurantId} not found when creating checkout", restaurantId);
-            throw new InvalidOperationException("Restaurant not found");
+            restaurantResponse = await http.GetAsync(restaurantUrl);
+            if (!restaurantResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Restaurant {RestaurantId} not found when creating checkout. Status={Status}, Url={Url}", 
+                    restaurantId, restaurantResponse.StatusCode, restaurantUrl);
+                throw new InvalidOperationException($"Restaurant not found (HTTP {restaurantResponse.StatusCode})");
+            }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Failed to connect to RestaurantService at {RestaurantUrl}. Check that Services:RestaurantService:BaseUrl is configured correctly.", restaurantUrl);
+            throw new InvalidOperationException($"Failed to connect to RestaurantService: {ex.Message}", ex);
+        }
+        
         var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(restaurantJson);
         var root = doc.RootElement;

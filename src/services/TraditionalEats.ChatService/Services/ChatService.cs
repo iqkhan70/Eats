@@ -24,21 +24,42 @@ public class ChatService : IChatService
         _configuration = configuration;
     }
 
-    public async Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, string userRole)
+    public async Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, string userRole, string? bearerToken = null)
     {
         try
         {
             // Call OrderService to verify user has access to this order
             var client = _httpClientFactory.CreateClient("OrderService");
-            var response = await client.GetAsync($"/api/order/{orderId}");
+
+            // Forward bearer token if provided (from SignalR connection)
+            if (!string.IsNullOrWhiteSpace(bearerToken))
+            {
+                client.DefaultRequestHeaders.Remove("Authorization");
+                client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {bearerToken.Trim()}");
+            }
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await client.GetAsync($"/api/order/{orderId}");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Failed to connect to OrderService when verifying order access for order {OrderId}. Check that HttpClients:OrderService:BaseAddress is configured correctly.", orderId);
+                return false;
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("OrderService returned {StatusCode} for order {OrderId}", response.StatusCode, orderId);
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("OrderService returned {StatusCode} for order {OrderId}. Response: {Response}",
+                    response.StatusCode, orderId, errorContent);
                 return false;
             }
 
             var orderJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("OrderService returned order data for order {OrderId}: {OrderJson}", orderId, orderJson);
+
             using var orderDoc = System.Text.Json.JsonDocument.Parse(orderJson);
             var root = orderDoc.RootElement;
 
@@ -48,13 +69,27 @@ public class ChatService : IChatService
             var restaurantId = root.TryGetProperty("restaurantId", out var rProp) ? rProp.GetString()
                 : root.TryGetProperty("RestaurantId", out var rPProp) ? rPProp.GetString() : null;
 
+            _logger.LogInformation("VerifyOrderAccessAsync: OrderId={OrderId}, UserId={UserId}, Role={Role}, OrderCustomerId={CustomerId}, OrderRestaurantId={RestaurantId}",
+                orderId, userId, userRole, customerId, restaurantId);
+
             var role = userRole?.Trim() ?? string.Empty;
 
             // Verify access based on role (case-insensitive)
             if (string.Equals(role, "Customer", StringComparison.OrdinalIgnoreCase))
             {
                 // Customer can only access their own orders
-                return customerId != null && Guid.TryParse(customerId, out var custId) && custId == userId;
+                var hasAccess = false;
+                if (customerId != null && Guid.TryParse(customerId, out var custId))
+                {
+                    hasAccess = custId == userId;
+                    _logger.LogInformation("Customer access check: UserId={UserId} (from JWT), OrderCustomerId={CustomerId} (from order), Match={Match}, HasAccess={HasAccess}",
+                        userId, custId, custId == userId, hasAccess);
+                }
+                else
+                {
+                    _logger.LogWarning("Customer access check failed: Could not parse customerId '{CustomerId}' as Guid", customerId);
+                }
+                return hasAccess;
             }
             else if (string.Equals(role, "Vendor", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
             {
@@ -68,7 +103,16 @@ public class ChatService : IChatService
                 if (restaurantId != null && Guid.TryParse(restaurantId, out var restId))
                 {
                     var restaurantClient = _httpClientFactory.CreateClient("RestaurantService");
-                    var restaurantResponse = await restaurantClient.GetAsync($"/api/restaurant/{restId}");
+                    HttpResponseMessage restaurantResponse;
+                    try
+                    {
+                        restaurantResponse = await restaurantClient.GetAsync($"/api/restaurant/{restId}");
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        _logger.LogError(ex, "Failed to connect to RestaurantService when verifying restaurant access for restaurant {RestaurantId}. Check that HttpClients:RestaurantService:BaseAddress is configured correctly.", restId);
+                        return false;
+                    }
 
                     if (restaurantResponse.IsSuccessStatusCode)
                     {
@@ -82,11 +126,16 @@ public class ChatService : IChatService
                             : restaurantRoot.TryGetProperty("vendorId", out var vProp) ? vProp.GetString()
                             : restaurantRoot.TryGetProperty("VendorId", out var vPProp) ? vPProp.GetString() : null;
 
-                        return ownerId != null && Guid.TryParse(ownerId, out var ownerGuid) && ownerGuid == userId;
+                        var hasAccess = ownerId != null && Guid.TryParse(ownerId, out var ownerGuid) && ownerGuid == userId;
+                        _logger.LogInformation("Vendor access check: UserId={UserId}, RestaurantOwnerId={OwnerId}, HasAccess={HasAccess}",
+                            userId, ownerId, hasAccess);
+                        return hasAccess;
                     }
                 }
             }
 
+            _logger.LogWarning("Access denied: OrderId={OrderId}, UserId={UserId}, Role={Role} - No matching access rule",
+                orderId, userId, userRole);
             return false;
         }
         catch (Exception ex)
@@ -97,15 +146,29 @@ public class ChatService : IChatService
         }
     }
 
-    public async Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles)
+    public async Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null)
     {
-        if (userRoles == null) return false;
+        if (userRoles == null || !userRoles.Any())
+        {
+            _logger.LogWarning("VerifyOrderAccessAsync: No roles provided for UserId={UserId}, OrderId={OrderId}", userId, orderId);
+            return false;
+        }
+
+        _logger.LogInformation("VerifyOrderAccessAsync: Checking access for UserId={UserId}, OrderId={OrderId}, Roles={Roles}",
+            userId, orderId, string.Join(",", userRoles));
+
         foreach (var role in userRoles)
         {
             if (string.IsNullOrWhiteSpace(role)) continue;
-            var hasAccess = await VerifyOrderAccessAsync(orderId, userId, role.Trim());
-            if (hasAccess) return true;
+            var hasAccess = await VerifyOrderAccessAsync(orderId, userId, role.Trim(), bearerToken);
+            if (hasAccess)
+            {
+                _logger.LogInformation("VerifyOrderAccessAsync: Access granted via role {Role}", role);
+                return true;
+            }
         }
+
+        _logger.LogWarning("VerifyOrderAccessAsync: Access denied for all roles. UserId={UserId}, OrderId={OrderId}", userId, orderId);
         return false;
     }
 
@@ -132,10 +195,10 @@ public class ChatService : IChatService
         return chatMessage;
     }
 
-    public async Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, string userRole)
+    public async Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, string userRole, string? bearerToken = null)
     {
         // Verify access first
-        var hasAccess = await VerifyOrderAccessAsync(orderId, userId, userRole);
+        var hasAccess = await VerifyOrderAccessAsync(orderId, userId, userRole, bearerToken);
         if (!hasAccess)
         {
             _logger.LogWarning("User {UserId} ({Role}) attempted to access messages for order {OrderId} without permission",
@@ -151,14 +214,14 @@ public class ChatService : IChatService
         return messages;
     }
 
-    public async Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles)
+    public async Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null)
     {
         if (userRoles == null || !userRoles.Any())
         {
             _logger.LogWarning("User {UserId} attempted to access messages for order {OrderId} with no roles", userId, orderId);
             return new List<ChatMessage>();
         }
-        var hasAccess = await VerifyOrderAccessAsync(orderId, userId, userRoles);
+        var hasAccess = await VerifyOrderAccessAsync(orderId, userId, userRoles, bearerToken);
         if (!hasAccess)
         {
             _logger.LogWarning("User {UserId} attempted to access messages for order {OrderId} without permission",

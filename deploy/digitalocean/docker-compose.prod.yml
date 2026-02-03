@@ -289,7 +289,9 @@ services:
       Stripe__PublishableKey: ${STRIPE_PUBLISHABLE_KEY:-}
       Stripe__ConnectReturnUrl: ${STRIPE_CONNECT_RETURN_URL:-}
       AppBaseUrl: ${APP_BASE_URL}
+      Services__RestaurantService__BaseUrl: "http://restaurant-service:5007"
     depends_on:
+      restaurant-service: { condition: service_started }
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
     networks:
@@ -323,6 +325,8 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
+      order-service: { condition: service_started }
+      restaurant-service: { condition: service_started }
     networks:
       - internal
     restart: unless-stopped
