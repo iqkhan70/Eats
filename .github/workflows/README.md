@@ -45,7 +45,7 @@ Automatically deploys TraditionalEats to staging when code is pushed to the `dev
 3. **Staging Server IP (choose one):**
    - **Option A:** Commit `deploy/digitalocean/DROPLET_IP_STAGING` file with the staging server IP
    - **Option B:** Set `STAGING_SERVER_IP` GitHub secret with the staging server IP address
-   
+
    Note: The workflow will use the file if it exists, otherwise it will use the secret.
 
 **Workflow Triggers:**
