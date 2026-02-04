@@ -45,11 +45,25 @@ npx expo install --fix
    This ensures all Expo packages are compatible with SDK 54. The `.npmrc` file is configured to use `legacy-peer-deps` by default.
 
 3. **Start the development server**:
-```bash
-npm start
-```
 
-   This will:
+   **For local development (same WiFi network):**
+   ```bash
+   ./start-local.sh
+   # or
+   npm start
+   ```
+   This uses your local IP address for the API (configured in `config/app.config.ts`).
+
+   **For remote access (away from home or different network):**
+   ```bash
+   ./start-expo-tunnel.sh
+   ```
+   This:
+   - Starts Expo in tunnel mode (works from anywhere)
+   - Automatically sets API to staging (`https://www.caseflowstage.store/api`)
+   - Allows your phone to connect even when not on the same WiFi
+
+   Both scripts will:
    - Start the Expo development server
    - Show a QR code you can scan with Expo Go app
    - Display options to open in iOS simulator, Android emulator, or web
@@ -101,9 +115,21 @@ types/
 
 ## Configuration
 
-Update the API base URL in `services/api.ts`:
-- Development: `http://localhost:5102/api` (Mobile BFF)
-- Production: `https://api.traditionaleats.com/api`
+The API base URL is configured in `config/app.config.ts` and can be controlled via environment variables:
+
+- **Local development (same WiFi)**: Uses your computer's IP address
+  - Set `EXPO_PUBLIC_ENV=ip` or use `./start-local.sh`
+  - API: `http://<your-ip>:5102/api`
+
+- **Staging (remote access)**: Uses staging server
+  - Set `EXPO_PUBLIC_ENV=staging` or use `./start-expo-tunnel.sh`
+  - API: `https://www.caseflowstage.store/api`
+
+- **Production**: Uses production API
+  - Set `EXPO_PUBLIC_ENV=production`
+  - API: `https://api.traditionaleats.com/api`
+
+See `MOBILE_API_SETUP.md` for detailed configuration instructions.
 
 ## Upgrading to SDK 54
 
