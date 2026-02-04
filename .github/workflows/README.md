@@ -23,6 +23,7 @@ Automatically deploys TraditionalEats to staging when code is pushed to the `dev
 
 - `DOCR_TOKEN` - DigitalOcean API token with registry access
 - `SSH_PRIVATE_KEY` - Private SSH key for accessing the staging server
+- `STAGING_SERVER_IP` - (Optional) Staging server IP address (if `DROPLET_IP_STAGING` file is not committed)
 
 **Image Tagging:**
 
@@ -41,8 +42,11 @@ Automatically deploys TraditionalEats to staging when code is pushed to the `dev
    - The `.env` file should exist (run `./deploy/digitalocean/deploy.sh staging` manually once to generate it)
    - The server should be accessible via SSH
 
-3. **Verify `DROPLET_IP_STAGING` file:**
-   - Ensure `deploy/digitalocean/DROPLET_IP_STAGING` contains the staging server IP
+3. **Staging Server IP (choose one):**
+   - **Option A:** Commit `deploy/digitalocean/DROPLET_IP_STAGING` file with the staging server IP
+   - **Option B:** Set `STAGING_SERVER_IP` GitHub secret with the staging server IP address
+   
+   Note: The workflow will use the file if it exists, otherwise it will use the secret.
 
 **Workflow Triggers:**
 

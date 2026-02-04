@@ -37,6 +37,8 @@ jobs:
       # 2. Validate branch & load STAGING IP
       # ------------------------------
       - name: Validate branch and load STAGING server IP
+        env:
+          STAGING_IP_SECRET: ${{ secrets.STAGING_SERVER_IP }}
         run: |
           if [ "${{ github.ref_name }}" != "dev" ]; then
             echo "❌ ERROR: This workflow should only run on 'dev' branch!"
@@ -44,17 +46,31 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "deploy/digitalocean/DROPLET_IP_STAGING" ]; then
-            echo "❌ ERROR: deploy/digitalocean/DROPLET_IP_STAGING file not found!"
+          # Try to get IP from file first, then fall back to secret
+          SSH_HOST_STG=""
+          
+          if [ -f "deploy/digitalocean/DROPLET_IP_STAGING" ]; then
+            echo "📄 Found DROPLET_IP_STAGING file, reading from it..."
+            SSH_HOST_STG=$(grep -v '^#' deploy/digitalocean/DROPLET_IP_STAGING | grep -v '^$' | head -1 | tr -d '[:space:]')
+          elif [ -n "$STAGING_IP_SECRET" ]; then
+            echo "🔐 DROPLET_IP_STAGING file not found, using STAGING_SERVER_IP secret..."
+            SSH_HOST_STG="$STAGING_IP_SECRET"
+          else
+            echo "❌ ERROR: Staging server IP not found!"
+            echo ""
+            echo "Either:"
+            echo "  1. Commit deploy/digitalocean/DROPLET_IP_STAGING file to git, OR"
+            echo "  2. Set STAGING_SERVER_IP secret in GitHub:"
+            echo "     Settings → Secrets and variables → Actions → New repository secret"
             exit 1
           fi
 
-          SSH_HOST_STG=$(grep -v '^#' deploy/digitalocean/DROPLET_IP_STAGING | grep -v '^$' | head -1 | tr -d '[:space:]')
-
           if [ -z "$SSH_HOST_STG" ]; then
             echo "❌ ERROR: STAGING IP address is empty!"
-            echo "File contents:"
-            cat deploy/digitalocean/DROPLET_IP_STAGING
+            if [ -f "deploy/digitalocean/DROPLET_IP_STAGING" ]; then
+              echo "File contents:"
+              cat deploy/digitalocean/DROPLET_IP_STAGING
+            fi
             exit 1
           fi
 
