@@ -49,6 +49,12 @@ jobs:
           # Try to get IP from file first, then fall back to secret
           SSH_HOST_STG=""
           
+          # Debug: List files in deploy/digitalocean directory
+          echo "🔍 Checking for DROPLET_IP_STAGING file..."
+          echo "Current directory: $(pwd)"
+          echo "Files in deploy/digitalocean/:"
+          ls -la deploy/digitalocean/ | grep -i droplet || echo "  (no droplet files found)"
+          
           if [ -f "deploy/digitalocean/DROPLET_IP_STAGING" ]; then
             echo "📄 Found DROPLET_IP_STAGING file, reading from it..."
             SSH_HOST_STG=$(grep -v '^#' deploy/digitalocean/DROPLET_IP_STAGING | grep -v '^$' | head -1 | tr -d '[:space:]')
@@ -62,6 +68,10 @@ jobs:
             echo "  1. Commit deploy/digitalocean/DROPLET_IP_STAGING file to git, OR"
             echo "  2. Set STAGING_SERVER_IP secret in GitHub:"
             echo "     Settings → Secrets and variables → Actions → New repository secret"
+            echo ""
+            echo "Current working directory: $(pwd)"
+            echo "Checking if deploy/digitalocean exists:"
+            ls -la deploy/ 2>&1 || echo "deploy/ directory not found"
             exit 1
           fi
 
