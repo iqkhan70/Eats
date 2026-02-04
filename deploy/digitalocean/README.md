@@ -34,6 +34,20 @@ The same **docker-compose.prod.yml** is used for both; the deploy script sets **
 - **Staging:** Create `DROPLET_IP_STAGING` with the staging Droplet IP. Run `./deploy.sh staging`. → `ASPNETCORE_ENVIRONMENT=Staging`
 - **Production:** Create `DROPLET_IP_PRODUCTION` with the production Droplet IP. Run `./deploy.sh production`. → `ASPNETCORE_ENVIRONMENT=Production`
 
+**Domain configuration:** Set `PRODUCTION_BASE_URL` and `PRODUCTION_DOMAIN` in `secrets.env` for production. The script automatically:
+
+- Uses `PRODUCTION_BASE_URL` for the app base URL (defaults to `http://DROPLET_IP` if not set)
+- Extracts domain from `PRODUCTION_BASE_URL` if `PRODUCTION_DOMAIN` is not set
+- Generates `CORS_ALLOWED_ORIGINS` from the domain (includes both `www.` and non-`www.` variants)
+- Configures Nginx and all services to use the production domain
+
+Example for production:
+
+```bash
+PRODUCTION_BASE_URL=https://www.traditionaleats.com
+PRODUCTION_DOMAIN=www.traditionaleats.com
+```
+
 ## Prerequisites
 
 - DigitalOcean account: a Droplet (and optionally Container Registry)

@@ -73,34 +73,100 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Add CORS for Blazor WebAssembly
-// Allow connections from localhost (HTTP and HTTPS), production domains, and any IP address (for mobile browser access)
+// Allow connections from localhost (HTTP and HTTPS), configured domains, and any IP address (for mobile browser access)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5300",
-                "http://localhost:5301",
-                "https://localhost:5300",
-                "https://localhost:5301",
-                "http://127.0.0.1:5300",
-                "http://127.0.0.1:5301",
-                "https://127.0.0.1:5300",
-                "https://127.0.0.1:5301",
-                "https://www.caseflowstage.store",
-                "http://www.caseflowstage.store",
-                "https://caseflowstage.store",
-                "http://caseflowstage.store")
+        // Get allowed domains from configuration (comma-separated)
+        var allowedDomains = builder.Configuration["Cors:AllowedOrigins"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+        var appBaseUrl = builder.Configuration["AppSettings:BaseUrl"] ?? builder.Configuration["AppBaseUrl"];
+        
+        // Build origins list: localhost + configured domains
+        var origins = new List<string>
+        {
+            "http://localhost:5300",
+            "http://localhost:5301",
+            "https://localhost:5300",
+            "https://localhost:5301",
+            "http://127.0.0.1:5300",
+            "http://127.0.0.1:5301",
+            "https://127.0.0.1:5300",
+            "https://127.0.0.1:5301"
+        };
+        
+        // Add configured domains (with and without www, http and https)
+        foreach (var domain in allowedDomains)
+        {
+            if (!string.IsNullOrWhiteSpace(domain))
+            {
+                var cleanDomain = domain.Trim().TrimEnd('/');
+                // Remove protocol if present
+                cleanDomain = cleanDomain.Replace("https://", "").Replace("http://", "");
+                origins.Add($"https://{cleanDomain}");
+                origins.Add($"http://{cleanDomain}");
+                // Also add www variant if not present
+                if (!cleanDomain.StartsWith("www."))
+                {
+                    origins.Add($"https://www.{cleanDomain}");
+                    origins.Add($"http://www.{cleanDomain}");
+                }
+            }
+        }
+        
+        // Add domain from APP_BASE_URL if set
+        if (!string.IsNullOrWhiteSpace(appBaseUrl))
+        {
+            try
+            {
+                var baseUri = new Uri(appBaseUrl);
+                var host = baseUri.Host;
+                origins.Add($"{baseUri.Scheme}://{host}");
+                if (!host.StartsWith("www."))
+                {
+                    origins.Add($"{baseUri.Scheme}://www.{host}");
+                }
+            }
+            catch { /* Invalid URL, skip */ }
+        }
+        
+        policy.WithOrigins(origins.Distinct().ToArray())
               .SetIsOriginAllowed(origin =>
               {
                   // Allow any origin that matches the pattern (for IP access from mobile)
                   // This allows http(s)://localhost:5300|5301 and http://192.168.x.x:5300, etc.
                   var uri = new Uri(origin);
 
-                  // Allow production domains
-                  if (uri.Host == "www.caseflowstage.store" || uri.Host == "caseflowstage.store")
+                  // Allow configured domains (check both with and without www)
+                  var host = uri.Host;
+                  var hostWithoutWww = host.StartsWith("www.") ? host.Substring(4) : host;
+                  foreach (var allowedDomain in allowedDomains)
                   {
-                      return true;
+                      if (string.IsNullOrWhiteSpace(allowedDomain)) continue;
+                      var cleanDomain = allowedDomain.Trim().Replace("https://", "").Replace("http://", "").TrimEnd('/');
+                      var cleanDomainWithoutWww = cleanDomain.StartsWith("www.") ? cleanDomain.Substring(4) : cleanDomain;
+                      if (host == cleanDomain || host == $"www.{cleanDomain}" || 
+                          hostWithoutWww == cleanDomain || hostWithoutWww == cleanDomainWithoutWww)
+                      {
+                          return true;
+                      }
+                  }
+                  
+                  // Also check APP_BASE_URL domain
+                  if (!string.IsNullOrWhiteSpace(appBaseUrl))
+                  {
+                      try
+                      {
+                          var baseUri = new Uri(appBaseUrl);
+                          var baseHost = baseUri.Host;
+                          var baseHostWithoutWww = baseHost.StartsWith("www.") ? baseHost.Substring(4) : baseHost;
+                          if (host == baseHost || host == $"www.{baseHost}" || 
+                              hostWithoutWww == baseHost || hostWithoutWww == baseHostWithoutWww)
+                          {
+                              return true;
+                          }
+                      }
+                      catch { /* Invalid URL, skip */ }
                   }
 
                   // Allow localhost and private IPs on dev ports
