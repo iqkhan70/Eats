@@ -15,6 +15,7 @@ public interface IPaymentService
     Task<string> CreateVendorConnectLinkAsync(Guid userId);
     Task<(string? StripeAccountId, string Status)> GetVendorOnboardingStatusAsync(Guid userId);
     Task UpdateVendorOnboardingFromStripeAsync(string stripeAccountId);
+    Task<bool> IsVendorPaymentReadyAsync(Guid restaurantId);
 
     Task<Guid> CreatePaymentIntentAsync(Guid orderId, decimal amount, string currency = "USD");
     Task<bool> AuthorizePaymentAsync(Guid paymentIntentId, string paymentMethodId);
@@ -95,13 +96,13 @@ public class PaymentService : IPaymentService
 
         // Get base URL for Stripe Connect return URLs
         var baseUrl = _configuration["Stripe:ConnectReturnUrl"] ?? _configuration["AppBaseUrl"] ?? "https://localhost:5301";
-        
+
         // Ensure URL has protocol (default to https for production)
-        if (!baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+        if (!baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
             !baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             // If no protocol, assume HTTPS for production (non-localhost domains)
-            if (!baseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) && 
+            if (!baseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) &&
                 !baseUrl.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase))
             {
                 baseUrl = "https://" + baseUrl;
@@ -111,11 +112,11 @@ public class PaymentService : IPaymentService
                 baseUrl = "https://" + baseUrl;
             }
         }
-        
+
         baseUrl = baseUrl.TrimEnd('/');
         var returnUrl = baseUrl + "/vendor?stripe=return";
         var refreshUrl = baseUrl + "/vendor?stripe=refresh";
-        
+
         _logger.LogInformation("Creating Stripe Connect link with returnUrl={ReturnUrl}, refreshUrl={RefreshUrl}", returnUrl, refreshUrl);
 
         var linkService = new AccountLinkService();
@@ -137,6 +138,52 @@ public class PaymentService : IPaymentService
         if (vendor == null)
             return (null, "Pending");
         return (vendor.StripeAccountId, vendor.StripeOnboardingStatus);
+    }
+
+    public async Task<bool> IsVendorPaymentReadyAsync(Guid restaurantId)
+    {
+        try
+        {
+            var restaurantBaseUrl = _configuration["Services:RestaurantService:BaseUrl"] ?? "http://localhost:5007";
+            var restaurantUrl = $"{restaurantBaseUrl.TrimEnd('/')}/api/restaurant/{restaurantId}";
+
+            using var http = _httpClientFactory.CreateClient();
+            var restaurantResponse = await http.GetAsync(restaurantUrl);
+            if (!restaurantResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Restaurant {RestaurantId} not found when checking vendor payment status", restaurantId);
+                return false;
+            }
+
+            var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(restaurantJson);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("ownerId", out var ownerIdEl))
+                root.TryGetProperty("OwnerId", out ownerIdEl);
+            if (!ownerIdEl.TryGetGuid(out Guid ownerId))
+            {
+                _logger.LogWarning("Restaurant {RestaurantId} has no owner", restaurantId);
+                return false;
+            }
+
+            var vendor = await _context.Vendors.FirstOrDefaultAsync(v => v.UserId == ownerId);
+            if (vendor == null || string.IsNullOrEmpty(vendor.StripeAccountId))
+            {
+                _logger.LogInformation("Vendor not connected for restaurant {RestaurantId} owner {OwnerId}", restaurantId, ownerId);
+                return false;
+            }
+            if (vendor.StripeOnboardingStatus != "Complete")
+            {
+                _logger.LogInformation("Vendor Stripe onboarding incomplete for restaurant {RestaurantId}, status={Status}", restaurantId, vendor.StripeOnboardingStatus);
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking vendor payment status for restaurant {RestaurantId}", restaurantId);
+            return false;
+        }
     }
 
     public async Task UpdateVendorOnboardingFromStripeAsync(string stripeAccountId)
@@ -334,7 +381,7 @@ public class PaymentService : IPaymentService
         var restaurantBaseUrl = _configuration["Services:RestaurantService:BaseUrl"] ?? "http://localhost:5007";
         var restaurantUrl = $"{restaurantBaseUrl.TrimEnd('/')}/api/restaurant/{restaurantId}";
         _logger.LogInformation("CreateCheckoutSessionAsync: Fetching restaurant {RestaurantId} from {RestaurantUrl}", restaurantId, restaurantUrl);
-        
+
         using var http = _httpClientFactory.CreateClient();
         HttpResponseMessage restaurantResponse;
         try
@@ -342,7 +389,7 @@ public class PaymentService : IPaymentService
             restaurantResponse = await http.GetAsync(restaurantUrl);
             if (!restaurantResponse.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Restaurant {RestaurantId} not found when creating checkout. Status={Status}, Url={Url}", 
+                _logger.LogWarning("Restaurant {RestaurantId} not found when creating checkout. Status={Status}, Url={Url}",
                     restaurantId, restaurantResponse.StatusCode, restaurantUrl);
                 throw new InvalidOperationException($"Restaurant not found (HTTP {restaurantResponse.StatusCode})");
             }
@@ -352,7 +399,7 @@ public class PaymentService : IPaymentService
             _logger.LogError(ex, "Failed to connect to RestaurantService at {RestaurantUrl}. Check that Services:RestaurantService:BaseUrl is configured correctly.", restaurantUrl);
             throw new InvalidOperationException($"Failed to connect to RestaurantService: {ex.Message}", ex);
         }
-        
+
         var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(restaurantJson);
         var root = doc.RootElement;
@@ -364,12 +411,12 @@ public class PaymentService : IPaymentService
         if (vendor == null || string.IsNullOrEmpty(vendor.StripeAccountId))
         {
             _logger.LogWarning("Vendor not connected for restaurant {RestaurantId} owner {OwnerId}", restaurantId, ownerId);
-            throw new InvalidOperationException("Vendor has not connected Stripe. They cannot accept paid orders yet.");
+            throw new InvalidOperationException("This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.");
         }
         if (vendor.StripeOnboardingStatus != "Complete")
         {
             _logger.LogWarning("Vendor Stripe onboarding incomplete for restaurant {RestaurantId}", restaurantId);
-            throw new InvalidOperationException("Vendor Stripe setup is incomplete. They cannot accept paid orders yet.");
+            throw new InvalidOperationException("This restaurant's payment setup is not complete yet. Please contact the restaurant directly or try again later.");
         }
         var amountCents = (long)Math.Round(amount * 100);
         var serviceFeeCents = (long)Math.Round(serviceFee * 100);

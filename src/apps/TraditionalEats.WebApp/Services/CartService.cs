@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Net.Http;
+using System;
 
 namespace TraditionalEats.WebApp.Services;
 
@@ -93,6 +95,35 @@ public class CartService
             IdempotencyKey = (string?)null
         };
         var response = await _httpClient.PostAsJsonAsync("WebBff/orders/place", request);
+
+        // Handle BadRequest (400) - vendor not set up for payments
+        if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            string? errorMessage = null;
+            try
+            {
+                var errorDoc = System.Text.Json.JsonDocument.Parse(errorContent);
+                if (errorDoc.RootElement.TryGetProperty("error", out var errEl))
+                    errorMessage = errEl.GetString();
+                else if (errorDoc.RootElement.TryGetProperty("message", out var msgEl))
+                    errorMessage = msgEl.GetString();
+            }
+            catch 
+            {
+                // If JSON parsing fails, use raw content (truncated)
+                errorMessage = errorContent.Length > 200 ? errorContent.Substring(0, 200) + "..." : errorContent;
+            }
+
+            errorMessage ??= "This restaurant is not set up to accept payments yet. Please contact the restaurant directly.";
+
+            // Throw exception so frontend can catch and show error
+            throw new HttpRequestException(errorMessage);
+        }
+
+        // For other non-success status codes, ensure success or throw
+        response.EnsureSuccessStatusCode();
+
         var result = await response.Content.ReadFromJsonAsync<PlaceOrderResponse>();
         return new PlaceOrderResult
         {

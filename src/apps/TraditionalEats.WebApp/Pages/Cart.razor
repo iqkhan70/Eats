@@ -3,6 +3,7 @@
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
 @using TraditionalEats.WebApp.Services
+@using System.Net.Http.Json
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 @inject CartService CartService
@@ -16,6 +17,21 @@
         <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
         <RadzenText TextStyle="TextStyle.H1">Shopping Cart</RadzenText>
     </RadzenStack>
+
+    @* Payment readiness banner - show if restaurant cannot accept payments AND cart has items *@
+    @if (!loading && cart != null && cart.Items != null && cart.Items.Any() && cart.RestaurantId.HasValue && !paymentReady)
+    {
+        <RadzenCard Style="background: var(--rz-warning); color: #000; border: none;">
+            <RadzenStack Gap="1rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Gap="1rem">
+                    <RadzenStack Gap="0.25rem">
+                        <RadzenText TextStyle="TextStyle.Subtitle1" Style="font-weight: bold;">⚠️ Cannot Place Order</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2">@paymentBlockedMessage</RadzenText>
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+    }
 
     @if (loading)
     {
@@ -100,7 +116,7 @@
                         Rows="3" Style="width: 100%;" />
                 </RadzenFormField>
                 <RadzenButton Text="Place Order" Icon="shopping_cart" Click="@PlaceOrder" Variant="Variant.Filled"
-                    IsLoading="@placingOrder" Disabled="@isPlaceOrderDisabled" Class="w-100" />
+                    IsLoading="@placingOrder" Disabled="@(isPlaceOrderDisabled || !paymentReady)" Class="w-100" />
             </RadzenStack>
         </RadzenCard>
     }
@@ -126,9 +142,10 @@
     private CartDto? cart;
     private string deliveryAddress = "Delivery is not available yet, might be available later based on customer needs. Pickup only!";
     private string specialInstructions = string.Empty;
-    //string.Empty;
+    private bool paymentReady = true; // Default to true, check when cart loads
+    private string paymentBlockedMessage = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.";
 
-    private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress);
+    private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress) || !paymentReady;
 
     protected override async Task OnInitializedAsync()
     {
@@ -141,16 +158,55 @@
         {
             loading = true;
             cart = await CartService.GetCartAsync();
+            
+            // Check payment readiness if cart has a restaurant
+            if (cart != null && cart.RestaurantId.HasValue)
+            {
+                await CheckPaymentReadiness(cart.RestaurantId.Value);
+            }
+            else
+            {
+                paymentReady = true; // Reset if no restaurant
+            }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading cart: {ex.Message}");
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
             cart = null;
+            paymentReady = true; // Default to allowing orders if check fails
         }
         finally
         {
             loading = false;
+        }
+    }
+
+    private async Task CheckPaymentReadiness(Guid restaurantId)
+    {
+        try
+        {
+            var response = await Http.GetAsync($"WebBff/payments/restaurant/{restaurantId}/payment-ready");
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<PaymentReadyResponse>();
+                paymentReady = result?.PaymentReady ?? true;
+                if (!paymentReady)
+                {
+                    paymentBlockedMessage = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.";
+                }
+            }
+            else
+            {
+                // If check fails, allow orders (fail open)
+                paymentReady = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking payment readiness: {ex.Message}");
+            // Fail open - allow orders if check fails
+            paymentReady = true;
         }
     }
 
@@ -210,6 +266,12 @@
         if (cart == null) return;
         await CartService.RemoveCartItemAsync(cart.CartId, item.CartItemId);
         await LoadCart();
+        // Reset payment readiness when cart becomes empty (user might switch restaurants)
+        if (cart == null || cart.Items == null || !cart.Items.Any())
+        {
+            paymentReady = true;
+            paymentBlockedMessage = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.";
+        }
         // Trigger navigation to refresh cart count in MainLayout
         NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
     }
@@ -238,22 +300,38 @@
             }
 
             if (!string.IsNullOrEmpty(result.Error))
+            {
+                // Order was placed but payment cannot be processed
                 NotificationService.Notify(new NotificationMessage
                 {
                     Severity = NotificationSeverity.Warning,
-                    Summary = "Order Placed",
-                    Detail = $"Order #{result.OrderId.ToString().Substring(0, 8)} placed. {result.Error}"
+                    Summary = "Order Placed - Payment Issue",
+                    Detail = $"Your order #{result.OrderId.ToString().Substring(0, 8)} has been placed, but {result.Error} Please contact the restaurant directly to complete payment."
                 });
+            }
             else
+            {
                 NotificationService.Notify(new NotificationMessage
                 {
                     Severity = NotificationSeverity.Success,
                     Summary = "Order Placed",
                     Detail = $"Your order #{result.OrderId.ToString().Substring(0, 8)} has been placed successfully!"
                 });
+            }
 
             await Task.Delay(100);
             NavigationManager.NavigateTo("/orders");
+        }
+        catch (HttpRequestException ex)
+        {
+            // Handle BadRequest (400) - vendor not set up for payments
+            Console.WriteLine($"Order blocked: {ex.Message}");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Cannot Place Order",
+                Detail = ex.Message
+            });
         }
         catch (Exception ex)
         {
@@ -273,5 +351,11 @@
     private void GoBack()
     {
         NavigationManager.NavigateTo("/restaurants");
+    }
+
+    private class PaymentReadyResponse
+    {
+        public Guid RestaurantId { get; set; }
+        public bool PaymentReady { get; set; }
     }
 }

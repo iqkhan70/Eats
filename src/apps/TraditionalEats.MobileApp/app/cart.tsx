@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { cartService, Cart, CartItem } from "../services/cart";
 import { authService } from "../services/auth";
+import { api } from "../services/api";
 
 export default function CartScreen() {
   const router = useRouter();
@@ -29,6 +30,8 @@ export default function CartScreen() {
   const [specialInstructions, setSpecialInstructions] = useState("");
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [paymentReady, setPaymentReady] = useState(true); // Default to true, check when cart loads
+  const [checkingPayment, setCheckingPayment] = useState(false);
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -59,8 +62,15 @@ export default function CartScreen() {
       // If cart is null or has no items, set to null
       if (!cartData || !cartData.items || cartData.items.length === 0) {
         setCart(null);
+        setPaymentReady(true); // Reset when cart is empty
       } else {
         setCart(cartData);
+        // Check payment readiness if cart has a restaurant
+        if (cartData.restaurantId) {
+          await checkPaymentReadiness(cartData.restaurantId);
+        } else {
+          setPaymentReady(true);
+        }
       }
     } catch (error: any) {
       console.error("Error loading cart:", error);
@@ -73,15 +83,33 @@ export default function CartScreen() {
           error.response?.data?.message?.includes("not found"))
       ) {
         setCart(null);
+        setPaymentReady(true);
       } else {
         Alert.alert(
           "Error",
           error.response?.data?.error || "Failed to load cart",
         );
         setCart(null);
+        setPaymentReady(true);
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkPaymentReadiness = async (restaurantId: string) => {
+    try {
+      setCheckingPayment(true);
+      const response = await api.get<{ restaurantId: string; paymentReady: boolean }>(
+        `/MobileBff/payments/restaurant/${restaurantId}/payment-ready`
+      );
+      setPaymentReady(response.data.paymentReady ?? true);
+    } catch (error: any) {
+      console.error("Error checking payment readiness:", error);
+      // Fail open - allow orders if check fails
+      setPaymentReady(true);
+    } finally {
+      setCheckingPayment(false);
     }
   };
 
@@ -246,6 +274,16 @@ export default function CartScreen() {
         },
       ]);
     } catch (error: any) {
+      // Handle BadRequest (400) - vendor not set up for payments
+      if (error.response?.status === 400 || error.message) {
+        const errorMessage =
+          error.message ||
+          error.response?.data?.error ||
+          error.response?.data?.message ||
+          "This restaurant is not set up to accept payments yet. Please contact the restaurant directly.";
+        Alert.alert("Cannot Place Order", errorMessage, [{ text: "OK" }]);
+        return;
+      }
       if (error.response?.status === 401) {
         Alert.alert(
           "Authentication Required",
@@ -413,6 +451,21 @@ export default function CartScreen() {
           );
         })()}
 
+        {/* Payment readiness banner - show if restaurant cannot accept payments */}
+        {cart.restaurantId && !paymentReady && cart.items.length > 0 && (
+          <View style={styles.paymentWarning}>
+            <Ionicons name="warning" size={24} color="#000" />
+            <View style={styles.paymentWarningContent}>
+              <Text style={styles.paymentWarningTitle}>
+                ⚠️ Cannot Place Order
+              </Text>
+              <Text style={styles.paymentWarningText}>
+                This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {!isAuthenticated && (
           <View style={styles.authWarning}>
             <Ionicons name="alert-circle-outline" size={20} color="#ff9800" />
@@ -464,11 +517,11 @@ export default function CartScreen() {
         <TouchableOpacity
           style={[
             styles.placeOrderButton,
-            (placingOrder || !deliveryAddress.trim() || !isAuthenticated) &&
+            (placingOrder || !deliveryAddress.trim() || !isAuthenticated || !paymentReady) &&
               styles.placeOrderButtonDisabled,
           ]}
           onPress={placeOrder}
-          disabled={placingOrder || !deliveryAddress.trim() || !isAuthenticated}
+          disabled={placingOrder || !deliveryAddress.trim() || !isAuthenticated || !paymentReady}
         >
           {placingOrder ? (
             <ActivityIndicator color="#fff" />
@@ -651,4 +704,28 @@ const styles = StyleSheet.create({
   clearCartText: { color: "#c62828", fontSize: 14, fontWeight: "600" },
 
   pullHint: { marginTop: 8, fontSize: 12, color: "#999" },
+
+  paymentWarning: {
+    backgroundColor: "#ffc107",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  paymentWarningContent: {
+    flex: 1,
+  },
+  paymentWarningTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 4,
+  },
+  paymentWarningText: {
+    fontSize: 14,
+    color: "#000",
+    lineHeight: 20,
+  },
 });

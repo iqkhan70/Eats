@@ -282,6 +282,77 @@ public class MobileBffController : ControllerBase
     {
         try
         {
+            // Check vendor Stripe status BEFORE creating the order
+            // Get restaurantId from cart first
+            Guid restaurantId = default;
+            try
+            {
+                var cartClient = _httpClientFactory.CreateClient("OrderService");
+                var cartRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/order/cart/{request.CartId}");
+                if (Request.Headers.TryGetValue("Authorization", out var cartAuthHeader))
+                    cartRequest.Headers.TryAddWithoutValidation("Authorization", cartAuthHeader.ToString());
+
+                var cartResponse = await cartClient.SendAsync(cartRequest);
+                if (cartResponse.IsSuccessStatusCode)
+                {
+                    var cartContent = await cartResponse.Content.ReadAsStringAsync();
+                    var cartDoc = System.Text.Json.JsonDocument.Parse(cartContent);
+                    var root = cartDoc.RootElement;
+                    var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
+                    if (restEl.ValueKind != System.Text.Json.JsonValueKind.Null && restEl.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                        restaurantId = Guid.Parse(restEl.GetString()!);
+
+                    _logger.LogInformation("PlaceOrder: Cart {CartId} has restaurantId={RestaurantId}", request.CartId, restaurantId);
+                }
+                else
+                {
+                    _logger.LogWarning("PlaceOrder: Could not fetch cart {CartId}, status={Status}", request.CartId, cartResponse.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "PlaceOrder: Could not fetch cart to check vendor Stripe status");
+            }
+
+            // If we have restaurantId, check vendor Stripe status before creating order
+            if (restaurantId != default)
+            {
+                try
+                {
+                    var checkPaymentClient = _httpClientFactory.CreateClient("PaymentService");
+                    var checkRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/payment/restaurant/{restaurantId}/payment-ready");
+                    var checkResponse = await checkPaymentClient.SendAsync(checkRequest);
+
+                    if (checkResponse.IsSuccessStatusCode)
+                    {
+                        var checkContent = await checkResponse.Content.ReadAsStringAsync();
+                        var checkDoc = System.Text.Json.JsonDocument.Parse(checkContent);
+                        var paymentReady = checkDoc.RootElement.TryGetProperty("paymentReady", out var pr) && pr.GetBoolean();
+
+                        _logger.LogInformation("PlaceOrder: Restaurant {RestaurantId} payment ready check: {PaymentReady}", restaurantId, paymentReady);
+
+                        if (!paymentReady)
+                        {
+                            _logger.LogWarning("PlaceOrder: Vendor Stripe not set up for restaurant {RestaurantId}, blocking order creation", restaurantId);
+                            return BadRequest(new { error = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later." });
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("PlaceOrder: Payment readiness check failed for restaurant {RestaurantId}, status={Status}", restaurantId, checkResponse.StatusCode);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "PlaceOrder: Could not validate vendor Stripe status, proceeding with order creation");
+                    // Don't block order creation if validation fails - let it fail later during checkout
+                }
+            }
+            else
+            {
+                _logger.LogWarning("PlaceOrder: restaurantId is default (empty), skipping payment readiness check. CartId={CartId}", request.CartId);
+            }
+
             var orderClient = _httpClientFactory.CreateClient("OrderService");
             var orderRequest = new HttpRequestMessage(HttpMethod.Post, "/api/order/place")
             {
@@ -318,15 +389,19 @@ public class MobileBffController : ControllerBase
 
             var orderDetailContent = await getOrderResponse.Content.ReadAsStringAsync();
             decimal total = 0, serviceFee = 0;
-            Guid restaurantId = default;
+            // Reuse restaurantId from earlier check, or get it from order if not set
             try
             {
                 var orderDoc = System.Text.Json.JsonDocument.Parse(orderDetailContent);
                 var root = orderDoc.RootElement;
                 total = root.TryGetProperty("total", out var t) ? t.GetDecimal() : root.GetProperty("Total").GetDecimal();
                 serviceFee = root.TryGetProperty("serviceFee", out var s) ? s.GetDecimal() : (root.TryGetProperty("ServiceFee", out s) ? s.GetDecimal() : 0);
-                var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
-                restaurantId = Guid.Parse(restEl.GetString()!);
+                if (restaurantId == default)
+                {
+                    var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
+                    if (restEl.ValueKind != System.Text.Json.JsonValueKind.Null && restEl.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                        restaurantId = Guid.Parse(restEl.GetString()!);
+                }
             }
             catch (Exception ex)
             {
@@ -337,10 +412,10 @@ public class MobileBffController : ControllerBase
             var baseUrl = _configuration["AppBaseUrl"] ?? (Request.Scheme + "://" + Request.Host);
             var successUrl = baseUrl.TrimEnd('/') + "/orders?payment=success";
             var cancelUrl = baseUrl.TrimEnd('/') + "/cart?payment=cancelled";
-            var paymentClient = _httpClientFactory.CreateClient("PaymentService");
+            var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
             var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
-            if (Request.Headers.TryGetValue("Authorization", out authHeader))
-                checkoutRequest.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            if (Request.Headers.TryGetValue("Authorization", out var checkoutAuthHeader))
+                checkoutRequest.Headers.TryAddWithoutValidation("Authorization", checkoutAuthHeader.ToString());
             checkoutRequest.Content = JsonContent.Create(new
             {
                 orderId,
@@ -351,7 +426,7 @@ public class MobileBffController : ControllerBase
                 cancelUrl
             });
 
-            var checkoutResponse = await paymentClient.SendAsync(checkoutRequest);
+            var checkoutResponse = await checkoutPaymentClient.SendAsync(checkoutRequest);
             var checkoutContent = await checkoutResponse.Content.ReadAsStringAsync();
             if (checkoutResponse.IsSuccessStatusCode)
             {
@@ -359,8 +434,31 @@ public class MobileBffController : ControllerBase
                 var url = checkoutDoc.RootElement.TryGetProperty("url", out var u) ? u.GetString() : null;
                 return Ok(new { orderId, checkoutUrl = url });
             }
+
+            // Extract user-friendly error message from response
+            string? errorMessage = null;
+            if (checkoutResponse.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                try
+                {
+                    var errorDoc = System.Text.Json.JsonDocument.Parse(checkoutContent);
+                    if (errorDoc.RootElement.TryGetProperty("message", out var msgEl))
+                        errorMessage = msgEl.GetString();
+                    else if (errorDoc.RootElement.TryGetProperty("error", out var errEl))
+                        errorMessage = errEl.GetString();
+                }
+                catch
+                {
+                    // If parsing fails, use the raw content (truncated)
+                    errorMessage = checkoutContent.Length > 200 ? checkoutContent.Substring(0, 200) + "..." : checkoutContent;
+                }
+            }
+
+            // Default user-friendly message if no specific error was extracted
+            errorMessage ??= "This restaurant is not set up to accept payments yet. Your order has been placed, but payment cannot be processed. Please contact the restaurant directly.";
+
             _logger.LogWarning("PlaceOrder: Checkout session failed for order {OrderId}: {Content}", orderId, checkoutContent);
-            return Ok(new { orderId, checkoutUrl = (string?)null, error = checkoutResponse.StatusCode == System.Net.HttpStatusCode.BadRequest ? checkoutContent : "Vendor cannot accept payments yet. Order was placed." });
+            return Ok(new { orderId, checkoutUrl = (string?)null, error = errorMessage });
         }
         catch (Exception ex)
         {
@@ -404,6 +502,24 @@ public class MobileBffController : ControllerBase
         {
             _logger.LogError(ex, "Error creating vendor Stripe connect link");
             return StatusCode(500, new { error = "Failed to create Stripe connect link" });
+        }
+    }
+
+    [HttpGet("payments/restaurant/{restaurantId}/payment-ready")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CheckRestaurantPaymentReady(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            var response = await client.GetAsync($"/api/payment/restaurant/{restaurantId}/payment-ready");
+            var content = await response.Content.ReadAsStringAsync();
+            return new ContentResult { Content = content, ContentType = "application/json", StatusCode = (int)response.StatusCode };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking restaurant payment readiness");
+            return StatusCode(500, new { error = "Failed to check payment readiness" });
         }
     }
 

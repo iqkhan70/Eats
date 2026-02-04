@@ -86,6 +86,22 @@ public class PaymentController : ControllerBase
         }
     }
 
+    [HttpGet("restaurant/{restaurantId}/payment-ready")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CheckRestaurantPaymentReady(Guid restaurantId)
+    {
+        try
+        {
+            var isReady = await _paymentService.IsVendorPaymentReadyAsync(restaurantId);
+            return Ok(new { restaurantId, paymentReady = isReady });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check restaurant payment readiness");
+            return StatusCode(500, new { message = "Failed to check payment readiness" });
+        }
+    }
+
     // ----- Checkout (Stripe Checkout Session: destination charge + app fee + manual capture) -----
     [HttpPost("checkout/session")]
     [Authorize]
