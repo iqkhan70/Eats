@@ -1,13 +1,100 @@
 /* Main layout styles */
 
+/* Cart badge styling - ensure it's not clipped */
+.cart-button-container {
+    position: relative;
+    overflow: visible;
+}
+
+.cart-badge {
+    position: absolute !important;
+    top: -4px !important;
+    right: -4px !important;
+    background-color: #dc3545 !important; /* Bright red color */
+    color: white !important;
+    min-width: 18px !important;
+    height: 18px !important;
+    text-align: center !important;
+    z-index: 1000 !important;
+    padding: 0 5px !important;
+    border-radius: 9px !important;
+    font-size: 0.7rem !important;
+    font-weight: bold !important;
+    line-height: 18px !important;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4) !important;
+    border: 2px solid white !important; /* White border to make it stand out */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Ensure header doesn't clip the badge */
+.rz-header {
+    overflow: visible !important;
+}
+
+.rz-header .rz-stack {
+    overflow: visible !important;
+}
+
+/* Navigation container for horizontal scrolling */
+.nav-container {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.nav-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.nav-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.nav-container::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+}
+
+.desktop-nav {
+    display: flex;
+    flex-wrap: nowrap;
+    min-width: fit-content;
+    padding-right: 1rem;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
+    /* Make navigation horizontally scrollable on mobile */
+    .nav-container {
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        max-width: calc(100vw - 120px); /* Leave space for logo and menu button */
+    }
+    
     .desktop-nav {
-        display: none !important;
+        display: flex !important;
+        flex-wrap: nowrap;
+        min-width: max-content;
+        gap: 0.25rem;
+    }
+    
+    .desktop-nav .rz-button {
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
     }
     
     .mobile-menu-btn {
         display: block !important;
+        flex-shrink: 0;
     }
     
     /* Fix layout on mobile */
@@ -28,7 +115,7 @@
         padding: 0 !important;
     }
     
-    /* Fix header padding */
+    /* Fix header padding and layout */
     .rz-header {
         padding: 0.5rem 0.75rem !important;
     }
@@ -36,6 +123,12 @@
     .rz-header .rz-stack {
         width: 100% !important;
         max-width: 100% !important;
+        gap: 0.5rem !important;
+    }
+    
+    /* Ensure logo doesn't shrink */
+    .rz-header .rz-stack > .rz-stack:first-child {
+        flex-shrink: 0;
     }
 }
 
@@ -44,7 +137,12 @@
         display: none !important;
     }
     
+    .nav-container {
+        max-width: none;
+    }
+    
     .desktop-nav {
         display: flex !important;
+        flex-wrap: wrap;
     }
 }

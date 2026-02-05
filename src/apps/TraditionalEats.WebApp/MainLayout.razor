@@ -9,42 +9,60 @@
 
 <RadzenLayout>
     <RadzenHeader>
-        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Gap="0px" Style="width: 100%; padding: 0.75rem 1rem;">
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+            AlignItems="AlignItems.Center" Gap="0px" Style="width: 100%; padding: 0.75rem 1rem;">
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
                 <RadzenIcon Icon="restaurant_menu" Style="font-size: 24px;" />
                 <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">TraditionalEats</RadzenText>
             </RadzenStack>
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Class="desktop-nav">
-                <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                <div style="position: relative;">
-                    <RadzenButton Text="Cart" Icon="shopping_cart" Click="@(() => NavigationManager.NavigateTo("/cart"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                    @if (cartItemCount > 0)
+            <div class="nav-container">
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center"
+                    Class="desktop-nav">
+                    <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat"
+                        Size="ButtonSize.Small" />
+                    <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))"
+                        Variant="Variant.Flat" Size="ButtonSize.Small" />
+                    <div style="position: relative; overflow: visible;">
+                        <RadzenButton Text="Cart" Icon="shopping_cart"
+                            Click="@(() => NavigationManager.NavigateTo("/cart"))" Variant="Variant.Flat"
+                            Size="ButtonSize.Small" />
+                        @if (cartItemCount > 0)
+                        {
+                            <RadzenBadge Text="@cartItemCount.ToString()" Size="BadgeSize.Small"
+                                Style="position: absolute; top: 2px; right: -10px; background-color: #dc3545; color: white; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 0.7rem; font-weight: bold; line-height: 18px; z-index: 1000; box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center;" />
+                        }
+                    </div>
+                    @if (isAuthenticated)
                     {
-                        <RadzenBadge Text="@cartItemCount.ToString()" Size="BadgeSize.Small" Style="position: absolute; top: -8px; right: -8px; background-color: var(--rz-danger); color: white; min-width: 20px; text-align: center;" />
+                        <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))"
+                            Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        @if (isVendor || isAdmin)
+                        {
+                            <RadzenButton Text="Vendor Dashboard" Click="@(() => NavigationManager.NavigateTo("/vendor"))"
+                                Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        }
+                        @if (isAdmin)
+                        {
+                            <RadzenButton Text="Admin" Click="@(() => NavigationManager.NavigateTo("/admin"))"
+                                Variant="Variant.Flat" Size="ButtonSize.Small"
+                                Style="background-color: #dc3545; color: white;" />
+                        }
+                        <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))"
+                            Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        <RadzenButton Text="Logout" Icon="logout" Click="@HandleLogout" Variant="Variant.Flat"
+                            Size="ButtonSize.Small" />
                     }
-                </div>
-                @if (isAuthenticated)
-                {
-                    <RadzenButton Text="Orders" Click="@(() => NavigationManager.NavigateTo("/orders"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                    @if (isVendor || isAdmin)
+                    else
                     {
-                        <RadzenButton Text="Vendor Dashboard" Click="@(() => NavigationManager.NavigateTo("/vendor"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))"
+                            Variant="Variant.Flat" Size="ButtonSize.Small" />
+                        <RadzenButton Text="Register" Click="@(() => NavigationManager.NavigateTo("/register"))"
+                            Variant="Variant.Outlined" Size="ButtonSize.Small" />
                     }
-                    @if (isAdmin)
-                    {
-                        <RadzenButton Text="Admin" Click="@(() => NavigationManager.NavigateTo("/admin"))" Variant="Variant.Flat" Size="ButtonSize.Small" Style="background-color: #dc3545; color: white;" />
-                    }
-                    <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                    <RadzenButton Text="Logout" Icon="logout" Click="@HandleLogout" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                }
-                else
-                {
-                    <RadzenButton Text="Login" Click="@(() => NavigationManager.NavigateTo("/login"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
-                    <RadzenButton Text="Register" Click="@(() => NavigationManager.NavigateTo("/register"))" Variant="Variant.Outlined" Size="ButtonSize.Small" />
-                }
-            </RadzenStack>
-            <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small" Class="mobile-menu-btn" Style="display: none;" />
+                </RadzenStack>
+            </div>
+            <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small"
+                Class="mobile-menu-btn" Style="display: none;" />
         </RadzenStack>
     </RadzenHeader>
     <RadzenBody>
@@ -65,7 +83,7 @@
 @code {
     [Inject]
     private NavigationManager NavigationManager { get; set; } = default!;
-    
+
     private bool sidebarExpanded = false;
     private bool isAuthenticated = false;
     private bool isAdmin = false;
@@ -76,7 +94,7 @@
     {
         await CheckAuthStatus();
         await LoadCartCount();
-        
+
         // Subscribe to navigation events to refresh cart count
         NavigationManager.LocationChanged += OnLocationChanged;
     }
