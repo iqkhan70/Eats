@@ -105,7 +105,8 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+    <ScrollView style={styles.scrollView}>
       <View style={styles.header}>
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={48} color="#fff" />
@@ -196,11 +197,13 @@ export default function ProfileScreen() {
         </View>
       )}
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  scrollView: { flex: 1 },
 
   header: {
     backgroundColor: '#6200ee',

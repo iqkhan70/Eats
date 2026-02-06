@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,15 +6,14 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { api } from "../../services/api";
+import BottomSearchBar from "../../components/BottomSearchBar";
 
 interface Restaurant {
   restaurantId: string;
@@ -102,6 +101,30 @@ export default function RestaurantsScreen() {
     const t = setTimeout(() => setDebouncedSearch(searchText.trim()), 300);
     return () => clearTimeout(t);
   }, [searchText]);
+
+  // Handle search from BottomSearchBar
+  const handleSearch = useCallback((query: string) => {
+    setSearchText(query);
+    setDebouncedSearch(query.trim());
+  }, []);
+
+  const loadSuggestions = useCallback(async (query: string): Promise<string[]> => {
+    if (!query || query.length < 2) {
+      return [];
+    }
+    try {
+      const response = await api.get<string[]>(
+        "/MobileBff/search-suggestions",
+        {
+          params: { query, maxResults: 10 },
+        },
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error("Error loading suggestions:", error);
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
     loadRestaurants();
@@ -199,7 +222,7 @@ export default function RestaurantsScreen() {
         <Image source={{ uri: item.imageUrl }} style={styles.restaurantImage} />
       ) : (
         <View style={styles.restaurantImagePlaceholder}>
-          <Ionicons name="restaurant" size={40} color="#ccc" />
+          <Ionicons name="restaurant" size={40} color="#6200ee" />
         </View>
       )}
 
@@ -237,35 +260,6 @@ export default function RestaurantsScreen() {
 
   const ListHeader = (
     <View style={styles.searchHeader}>
-      <View style={styles.searchContainer}>
-        <Ionicons
-          name="search"
-          size={18}
-          color="#666"
-          style={styles.searchIcon}
-        />
-        <TextInput
-          value={searchText}
-          onChangeText={setSearchText}
-          placeholder="Search restaurants (name, cuisine, address)…"
-          placeholderTextColor="#999"
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          onSubmitEditing={() => Keyboard.dismiss()} // ✅ keyboard down on submit
-        />
-        {!!searchText && (
-          <TouchableOpacity
-            onPress={() => setSearchText("")}
-            style={styles.clearBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="close-circle" size={18} color="#666" />
-          </TouchableOpacity>
-        )}
-      </View>
-
       {/* ✅ Active filters row with Clear */}
       {hasFilters && (
         <View style={styles.filtersRow}>
@@ -315,31 +309,59 @@ export default function RestaurantsScreen() {
   }
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-      >
-        <FlatList
-          data={filteredRestaurants}
-          renderItem={renderRestaurant}
-          keyExtractor={(item) => item.restaurantId}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={ListHeader}
-          stickyHeaderIndices={[0]}
-          keyboardDismissMode="on-drag" // ✅ drag list -> keyboard down
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <Text style={styles.emptyText}>
-                {debouncedSearch ? "No matches found" : "No restaurants found"}
-              </Text>
-            </View>
-          }
-        />
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      {/* Search Query Indicator - Outside FlatList for better visibility */}
+      {debouncedSearch && debouncedSearch.trim() && (
+        <View style={styles.searchIndicator}>
+          <Text style={styles.searchIndicatorText}>
+            Searching: "{debouncedSearch}"
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setSearchText("");
+              setDebouncedSearch("");
+            }}
+            style={styles.clearSearchIcon}
+          >
+            <Ionicons name="close-circle" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <FlatList
+        data={filteredRestaurants}
+        renderItem={renderRestaurant}
+        keyExtractor={(item) => item.restaurantId}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={ListHeader}
+        stickyHeaderIndices={hasFilters ? [0] : []}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <View style={styles.centerContainer}>
+            <Text style={styles.emptyText}>
+              {debouncedSearch ? "No matches found" : "No restaurants found"}
+            </Text>
+          </View>
+        }
+      />
+      <BottomSearchBar
+        onSearch={handleSearch}
+        onClear={() => {
+          setSearchText("");
+          setDebouncedSearch("");
+        }}
+        placeholder="Search restaurants..."
+        emptyStateTitle="Search restaurants"
+        emptyStateSubtitle="Find restaurants by name, cuisine, or location"
+        loadSuggestions={loadSuggestions}
+        onSuggestionSelect={handleSearch}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
@@ -362,39 +384,28 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e9e9e9",
   },
 
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  searchIcon: {
-    position: "absolute",
-    left: 12,
-    zIndex: 2,
-  },
-
-  searchInput: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingLeft: 36,
-    paddingRight: 36,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    fontSize: 14,
-    color: "#333",
-  },
-
-  clearBtn: {
-    position: "absolute",
-    right: 10,
-  },
-
   resultsText: {
     marginTop: 8,
     fontSize: 12,
     color: "#777",
+  },
+  searchIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#e3f2fd",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  searchIndicatorText: {
+    fontSize: 14,
+    color: "#1976d2",
+    fontWeight: "500",
+  },
+  clearSearchIcon: {
+    padding: 4,
   },
 
   // ✅ Active filters row styles

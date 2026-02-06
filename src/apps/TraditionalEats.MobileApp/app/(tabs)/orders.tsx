@@ -13,11 +13,13 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
+import BottomSearchBar from "../../components/BottomSearchBar";
 
 interface Order {
   orderId: string;
@@ -55,6 +57,7 @@ export default function OrdersScreen() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [filter, setFilter] = useState<OrderFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -225,12 +228,44 @@ export default function OrdersScreen() {
     }
     // 'all' shows everything, no filtering needed
 
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((order) => {
+        // Search by order ID (full ID and first 8 chars)
+        const orderId = (order.orderId || "").toLowerCase();
+        const orderIdShort = order.orderId ? order.orderId.substring(0, 8).toLowerCase() : "";
+        // Search by status
+        const status = (order.status || "").toLowerCase();
+        // Search by delivery address
+        const address = (order.deliveryAddress || "").toLowerCase();
+        // Search by item names
+        const itemNames = (order.items || [])
+          .map((item) => (item.name || "").toLowerCase())
+          .join(" ");
+        
+        // Check if query matches any field
+        // For order ID: check both full ID and first 8 characters
+        const matchesOrderId = 
+          (orderId && orderId.includes(query)) || 
+          (orderIdShort && orderIdShort.includes(query));
+        // For status: exact match or contains
+        const matchesStatus = status === query || (status && status.includes(query));
+        // For address: contains
+        const matchesAddress = address && address.includes(query);
+        // For items: contains
+        const matchesItems = itemNames && itemNames.includes(query);
+        
+        return matchesOrderId || matchesStatus || matchesAddress || matchesItems;
+      });
+    }
+
     // Sort by newest first
     return filtered.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [orders, filter]);
+  }, [orders, filter, searchQuery]);
 
   function getStatusColor(status: string): string {
     switch (status) {
@@ -298,6 +333,21 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Search Query Indicator */}
+      {searchQuery.trim() && (
+        <View style={styles.searchIndicator}>
+          <Text style={styles.searchIndicatorText}>
+            Searching: "{searchQuery}"
+          </Text>
+          <TouchableOpacity
+            onPress={() => setSearchQuery("")}
+            style={styles.clearSearchIcon}
+          >
+            <Ionicons name="close-circle" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
@@ -361,6 +411,7 @@ export default function OrdersScreen() {
         <FlatList
           data={filteredAndSortedOrders}
           keyExtractor={(item) => item.orderId}
+          contentContainerStyle={{ paddingBottom: 100 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
@@ -416,6 +467,66 @@ export default function OrdersScreen() {
           )}
         />
       )}
+      <BottomSearchBar
+        onSearch={(query) => {
+          Keyboard.dismiss();
+          setSearchQuery(query);
+        }}
+        onClear={() => {
+          setSearchQuery("");
+        }}
+        placeholder="Search orders..."
+        emptyStateTitle="Search orders"
+        emptyStateSubtitle="Search by order ID, status, items, or address"
+        loadSuggestions={async (query) => {
+          // Return order IDs, statuses, and item names as suggestions
+          const suggestions: string[] = [];
+          const queryLower = query.toLowerCase();
+
+          // Get unique statuses
+          const statuses = Array.from(new Set(orders.map((o) => o.status)))
+            .filter((s) => s.toLowerCase().includes(queryLower))
+            .slice(0, 3);
+          suggestions.push(...statuses);
+
+          // Get order IDs
+          orders.forEach((order) => {
+            const orderId = order.orderId.substring(0, 8);
+            if (
+              orderId.toLowerCase().includes(queryLower) &&
+              suggestions.length < 10
+            ) {
+              suggestions.push(`Order #${orderId}`);
+            }
+          });
+
+          // Get item names
+          orders.forEach((order) => {
+            order.items.forEach((item) => {
+              if (
+                item.name.toLowerCase().includes(queryLower) &&
+                !suggestions.includes(item.name) &&
+                suggestions.length < 10
+              ) {
+                suggestions.push(item.name);
+              }
+            });
+          });
+
+          return suggestions.slice(0, 10);
+        }}
+        onSuggestionSelect={(suggestion) => {
+          Keyboard.dismiss();
+          // Extract the actual search term from suggestion
+          // Remove "Order #" prefix if present
+          let searchTerm = suggestion;
+          if (suggestion.startsWith("Order #")) {
+            searchTerm = suggestion.replace("Order #", "").trim();
+          }
+          // Set search query immediately - this will trigger filtering
+          setSearchQuery(searchTerm);
+        }}
+      />
     </View>
   );
 }
@@ -440,16 +551,34 @@ const styles = StyleSheet.create({
 
   loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 
-  browseButton: {
+
+  pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
+  searchIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#e3f2fd",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  searchIndicatorText: {
+    fontSize: 14,
+    color: "#1976d2",
+    fontWeight: "500",
+  },
+  clearSearchIcon: {
+    padding: 4,
+  },
+  clearSearchButton: {
     backgroundColor: "#6200ee",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 20,
   },
-  browseButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-
-  pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
+  clearSearchButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 
   orderId: { fontSize: 18, fontWeight: "600", color: "#333" },
 

@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -8,7 +14,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
@@ -18,6 +23,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import axios from "axios";
 import { authService } from "../../services/auth";
 import { api } from "../../services/api";
+import BottomSearchBar from "../../components/BottomSearchBar";
 
 interface Restaurant {
   restaurantId: string;
@@ -215,7 +221,9 @@ export default function VendorOrdersScreen() {
 
   // ✅ SEARCH: tiny debounce
   useEffect(() => {
-    const t = setTimeout(() => setSearchTextDebounced(searchText), 150);
+    const t = setTimeout(() => {
+      setSearchTextDebounced(searchText);
+    }, 150);
     return () => clearTimeout(t);
   }, [searchText]);
 
@@ -417,6 +425,7 @@ export default function VendorOrdersScreen() {
 
     return orders.filter((o) => {
       const orderId = (o.orderId ?? "").toLowerCase();
+      const orderIdShort = o.orderId ? o.orderId.substring(0, 8).toLowerCase() : "";
       const status = (o.status ?? "").toLowerCase();
       const delivery = (o.deliveryAddress ?? "").toLowerCase();
       const notes = (o.specialInstructions ?? "").toLowerCase();
@@ -429,13 +438,21 @@ export default function VendorOrdersScreen() {
         restaurantNameById.get(o.restaurantId) ?? ""
       ).toLowerCase();
 
+      // Check if query matches any field
+      const matchesOrderId = orderId.includes(q) || orderIdShort.includes(q);
+      const matchesStatus = status === q || status.includes(q);
+      const matchesDelivery = delivery.includes(q);
+      const matchesNotes = notes.includes(q);
+      const matchesItems = items.includes(q);
+      const matchesRestaurant = restaurantName.includes(q);
+
       return (
-        orderId.includes(q) ||
-        status.includes(q) ||
-        delivery.includes(q) ||
-        notes.includes(q) ||
-        items.includes(q) ||
-        restaurantName.includes(q)
+        matchesOrderId ||
+        matchesStatus ||
+        matchesDelivery ||
+        matchesNotes ||
+        matchesItems ||
+        matchesRestaurant
       );
     });
   }, [orders, searchTextDebounced, restaurantNameById]);
@@ -498,28 +515,23 @@ export default function VendorOrdersScreen() {
             }
             contentInsetAdjustmentBehavior="automatic"
           >
-            {/* ✅ SEARCH BAR */}
-            <View style={styles.searchContainer}>
-              <TextInput
-                value={searchText}
-                onChangeText={setSearchText}
-                placeholder="Search orders or restaurants..."
-                placeholderTextColor="#888"
-                autoCorrect={false}
-                autoCapitalize="none"
-                style={styles.searchInput}
-                returnKeyType="search"
-              />
-              {!!searchText && (
+            {/* Search Query Indicator */}
+            {searchTextDebounced.trim() && (
+              <View style={styles.searchIndicator}>
+                <Text style={styles.searchIndicatorText}>
+                  Searching: "{searchTextDebounced}"
+                </Text>
                 <TouchableOpacity
-                  onPress={() => setSearchText("")}
-                  style={styles.clearButton}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  onPress={() => {
+                    setSearchText("");
+                    setSearchTextDebounced("");
+                  }}
+                  style={styles.clearSearchIcon}
                 >
-                  <Text style={styles.clearButtonText}>✕</Text>
+                  <Text style={styles.clearSearchIconText}>✕</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+              </View>
+            )}
 
             <View style={styles.filterContainer}>
               <View style={styles.filterHeaderRow}>
@@ -679,6 +691,48 @@ export default function VendorOrdersScreen() {
           </ScrollView>
         </View>
       </TouchableWithoutFeedback>
+      <BottomSearchBar
+        onSearch={(query) => {
+          Keyboard.dismiss();
+          setSearchText(query);
+          setSearchTextDebounced(query);
+        }}
+        onClear={() => {
+          setSearchText("");
+          setSearchTextDebounced("");
+        }}
+        placeholder="Search orders or restaurants..."
+        emptyStateTitle="Search orders"
+        emptyStateSubtitle="Search by order ID, restaurant name, or status"
+        loadSuggestions={async (query) => {
+          // Return restaurant names and order IDs as suggestions
+          const suggestions: string[] = [];
+          restaurants.forEach((r) => {
+            if (r.name.toLowerCase().includes(query.toLowerCase())) {
+              suggestions.push(r.name);
+            }
+          });
+          orders.forEach((o) => {
+            const orderId = o.orderId.substring(0, 8);
+            if (orderId.toLowerCase().includes(query.toLowerCase())) {
+              suggestions.push(`Order #${orderId}`);
+            }
+          });
+          return suggestions.slice(0, 10);
+        }}
+        onSuggestionSelect={(suggestion) => {
+          Keyboard.dismiss();
+          // Extract the actual search term from suggestion
+          // Remove "Order #" prefix if present
+          let searchTerm = suggestion;
+          if (suggestion.startsWith("Order #")) {
+            searchTerm = suggestion.replace("Order #", "").trim();
+          }
+          // Set both searchText and searchTextDebounced immediately for instant filtering
+          setSearchText(searchTerm);
+          setSearchTextDebounced(searchTerm);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -907,5 +961,28 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     marginTop: 32,
+  },
+  searchIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#e3f2fd",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  searchIndicatorText: {
+    fontSize: 14,
+    color: "#1976d2",
+    fontWeight: "500",
+  },
+  clearSearchIcon: {
+    padding: 4,
+  },
+  clearSearchIconText: {
+    fontSize: 18,
+    color: "#666",
+    fontWeight: "bold",
   },
 });
