@@ -30,17 +30,23 @@ public class OrderService : IOrderService
     private readonly IRedisService _redis;
     private readonly IMessagePublisher _messagePublisher;
     private readonly ILogger<OrderService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
     public OrderService(
         OrderDbContext context,
         IRedisService redis,
         IMessagePublisher messagePublisher,
-        ILogger<OrderService> logger)
+        ILogger<OrderService> logger,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration)
     {
         _context = context;
         _redis = redis;
         _messagePublisher = messagePublisher;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
     }
 
     public async Task<Guid> CreateCartAsync(Guid? customerId, Guid? restaurantId = null)
@@ -1279,6 +1285,39 @@ public class OrderService : IOrderService
                 await _context.Orders
                     .Where(o => o.OrderId == orderId)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(o => o.DeliveredAt, DateTime.UtcNow));
+            }
+
+            // When status becomes Completed, capture payment (Stripe) and set PaidAt on success
+            if (newStatus == "Completed" && rowsAffected > 0)
+            {
+                try
+                {
+                    var paymentBaseUrl = _configuration["Services:PaymentService:BaseUrl"] ?? "http://localhost:5004";
+                    var internalApiKey = _configuration["Services:PaymentService:InternalApiKey"];
+                    using var http = _httpClientFactory.CreateClient();
+                    var payload = new { orderId };
+                    var content = new StringContent(
+                        System.Text.Json.JsonSerializer.Serialize(payload),
+                        System.Text.Encoding.UTF8,
+                        "application/json");
+                    var request = new HttpRequestMessage(HttpMethod.Post, $"{paymentBaseUrl.TrimEnd('/')}/api/payment/internal/capture-by-order") { Content = content };
+                    if (!string.IsNullOrEmpty(internalApiKey))
+                        request.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+                    var captureResponse = await http.SendAsync(request);
+                    if (captureResponse.IsSuccessStatusCode)
+                    {
+                        await _context.Orders
+                            .Where(o => o.OrderId == orderId)
+                            .ExecuteUpdateAsync(setters => setters.SetProperty(o => o.PaidAt, DateTime.UtcNow));
+                        _logger.LogInformation("UpdateOrderStatusAsync: Payment captured and PaidAt set for OrderId={OrderId}", orderId);
+                    }
+                    else
+                        _logger.LogWarning("UpdateOrderStatusAsync: Payment capture failed for OrderId={OrderId}, StatusCode={StatusCode}", orderId, captureResponse.StatusCode);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "UpdateOrderStatusAsync: Failed to capture payment for OrderId={OrderId}, continuing", orderId);
+                }
             }
 
             if (rowsAffected == 0)

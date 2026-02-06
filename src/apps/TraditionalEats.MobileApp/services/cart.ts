@@ -133,14 +133,36 @@ class CartService {
     await api.delete(`/MobileBff/cart/${cartId}`);
   }
 
-  async placeOrder(cartId: string, deliveryAddress: string, specialInstructions?: string): Promise<string> {
-    const response = await api.post<{ orderId: string }>('/MobileBff/orders/place', {
-      cartId,
-      deliveryAddress,
-      specialInstructions: specialInstructions || null,
-      idempotencyKey: null,
-    });
-    return response.data.orderId;
+  async placeOrder(
+    cartId: string,
+    deliveryAddress: string,
+    specialInstructions?: string
+  ): Promise<{ orderId: string; checkoutUrl?: string; error?: string }> {
+    try {
+      const response = await api.post<{
+        orderId: string;
+        checkoutUrl?: string;
+        error?: string;
+      }>('/MobileBff/orders/place', {
+        cartId,
+        deliveryAddress,
+        specialInstructions: specialInstructions || null,
+        idempotencyKey: null,
+      });
+      return {
+        orderId: response.data.orderId,
+        checkoutUrl: response.data.checkoutUrl ?? undefined,
+        error: response.data.error ?? undefined,
+      };
+    } catch (error: any) {
+      // Handle BadRequest (400) - vendor not set up for payments
+      if (error.response?.status === 400) {
+        const errorMessage = error.response.data?.error || error.response.data?.message || 
+          'This restaurant is not set up to accept payments yet. Please contact the restaurant directly.';
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
   }
 }
 

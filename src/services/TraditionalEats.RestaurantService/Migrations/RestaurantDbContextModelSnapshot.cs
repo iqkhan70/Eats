@@ -157,6 +157,36 @@ namespace TraditionalEats.RestaurantService.Migrations
                     b.ToTable("RestaurantHours");
                 });
 
+            modelBuilder.Entity("TraditionalEats.RestaurantService.Entities.ZipCodeLookup", b =>
+                {
+                    b.Property<string>("ZipCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("Latitude")
+                        .HasColumnType("DECIMAL(10, 8)");
+
+                    b.Property<decimal>("Longitude")
+                        .HasColumnType("DECIMAL(11, 8)");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(2)
+                        .HasColumnType("varchar(2)");
+
+                    b.HasKey("ZipCode");
+
+                    b.HasIndex("State");
+
+                    b.ToTable("ZipCodeLookup", (string)null);
+                });
+
             modelBuilder.Entity("TraditionalEats.RestaurantService.Entities.DeliveryZone", b =>
                 {
                     b.HasOne("TraditionalEats.RestaurantService.Entities.Restaurant", "Restaurant")

@@ -1,0 +1,29 @@
+# Edge: Blazor WebApp (static) + Nginx. HTTPS at edge, proxy /api to BFFs (internal HTTP).
+# Build from repo root: docker build -f deploy/digitalocean/Dockerfile.edge --build-arg API_BASE_URL=https://yourdomain.com/api/ -t edge .
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+ARG API_BASE_URL
+ENV API_BASE_URL=${API_BASE_URL}
+
+COPY src/apps/TraditionalEats.WebApp/TraditionalEats.WebApp.csproj src/apps/TraditionalEats.WebApp/
+COPY src/apps/TraditionalEats.WebApp/ src/apps/TraditionalEats.WebApp/
+RUN dotnet restore src/apps/TraditionalEats.WebApp/TraditionalEats.WebApp.csproj
+RUN dotnet publish src/apps/TraditionalEats.WebApp/TraditionalEats.WebApp.csproj -c Release -o /app/publish
+
+# Inject API base URL into published config (Blazor loads at runtime)
+RUN if [ -n "$API_BASE_URL" ]; then \
+      for f in /app/publish/wwwroot/appsettings.json /app/publish/appsettings.json; do \
+        if [ -f "$f" ]; then \
+          sed -i "s|http://localhost:5101/api/|$API_BASE_URL|g" "$f" && \
+          sed -i "s|https://localhost:5143/api/|$API_BASE_URL|g" "$f"; \
+        fi; \
+      done; \
+    fi
+
+FROM nginx:alpine AS runtime
+COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
+COPY deploy/digitalocean/nginx/nginx.conf /etc/nginx/nginx.conf
+EXPOSE 80 443
+CMD ["nginx", "-g", "daemon off;"]

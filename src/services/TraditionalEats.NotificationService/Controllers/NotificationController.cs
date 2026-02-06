@@ -70,6 +70,27 @@ public class NotificationController : ControllerBase
         }
     }
 
+    /// <summary>Send a raw email (e.g. password reset). Used by IdentityService. No auth required for internal service-to-service.</summary>
+    [HttpPost("send-email")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    public async Task<IActionResult> SendEmail([FromBody] SendEmailRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.To))
+        {
+            return BadRequest(new { success = false, message = "To (recipient email) is required." });
+        }
+        try
+        {
+            var success = await _notificationService.SendEmailToAddressAsync(request.To, request.Subject ?? "TraditionalEats", request.Body ?? "");
+            return Ok(new { success, message = success ? "Email sent" : "Email not sent (check Email config)." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send email to {To}", request.To);
+            return StatusCode(500, new { success = false, message = "Failed to send email." });
+        }
+    }
+
     [HttpPost("send")]
     [Authorize]
     public async Task<IActionResult> SendNotification([FromBody] SendNotificationDto dto)
@@ -146,3 +167,5 @@ public class NotificationController : ControllerBase
         }
     }
 }
+
+public record SendEmailRequest(string To, string? Subject, string? Body);

@@ -126,4 +126,22 @@ app.MapControllers();
 // SignalR Hub
 app.MapHub<OrderChatHub>("/chatHub");
 
+// Run migrations at startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        logger.LogInformation("Applying database migrations for ChatService...");
+        db.Database.Migrate();
+        logger.LogInformation("ChatService migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to apply ChatService migrations. The service will continue but database may be out of sync.");
+    }
+}
+
 app.Run();

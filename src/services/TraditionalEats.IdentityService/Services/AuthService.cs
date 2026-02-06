@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -22,7 +23,12 @@ public interface IAuthService
     Task<bool> AssignRoleAsync(string email, string role);
     Task<bool> RemoveRoleAsync(string email, string role);
     Task<List<string>> GetUserRolesAsync(string email);
+    Task<ForgotPasswordResult> ForgotPasswordAsync(string email);
+    Task<ResetPasswordResult> ResetPasswordAsync(string email, string token, string newPassword);
 }
+
+public record ForgotPasswordResult(bool Success, string Message);
+public record ResetPasswordResult(bool Success, string Message);
 
 public class AuthService : IAuthService
 {
@@ -33,6 +39,7 @@ public class AuthService : IAuthService
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IPiiEncryptionService _encryption;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public AuthService(
         IdentityDbContext context,
@@ -40,7 +47,8 @@ public class AuthService : IAuthService
         IConfiguration configuration,
         ILogger<AuthService> logger,
         IHttpClientFactory httpClientFactory,
-        IPiiEncryptionService encryption)
+        IPiiEncryptionService encryption,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         _context = context;
         _redis = redis;
@@ -48,6 +56,7 @@ public class AuthService : IAuthService
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _encryption = encryption;
+        _httpContextAccessor = httpContextAccessor;
         _passwordHasher = new PasswordHasher<User>();
     }
 
@@ -336,6 +345,114 @@ public class AuthService : IAuthService
         }
 
         return user.UserRoles.Select(ur => ur.Role.Name).ToList();
+    }
+
+    public async Task<ForgotPasswordResult> ForgotPasswordAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return new ForgotPasswordResult(false, "Email is required.");
+
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.Status == "Active");
+
+        // Always return same message to prevent email enumeration
+        var successMessage = "If an account with that email exists, a password reset link has been sent.";
+
+        if (user == null)
+            return new ForgotPasswordResult(true, successMessage);
+
+        var resetToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+
+        user.PasswordResetToken = resetToken;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+        await _context.SaveChangesAsync();
+
+        // Reset link must point to the WebApp (Blazor), not IdentityService. When BFF calls us,
+        // Request.Host is IdentityService (e.g. localhost:5000), so we use config only; use Origin
+        // only when present (e.g. direct browser call) so we don't use the wrong host.
+        string baseUrl = _configuration["AppSettings:BaseUrl"]
+            ?? _configuration["AppBaseUrl"]
+            ?? Environment.GetEnvironmentVariable("BASE_URL")
+            ?? "https://localhost:5301";
+
+        try
+        {
+            var httpContext = _httpContextAccessor?.HttpContext;
+            if (httpContext?.Request != null)
+            {
+                var origin = httpContext.Request.Headers["Origin"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(origin))
+                    baseUrl = origin;
+            }
+        }
+        catch { /* use config baseUrl */ }
+
+        var resetLink = $"{baseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken)}&email={Uri.EscapeDataString(user.Email)}";
+
+        var subject = "Password Reset Request - TraditionalEats";
+        var body = $@"<html><body>
+<h2>Password Reset Request</h2>
+<p>You requested to reset your password. Click the link below to reset it:</p>
+<p><a href=""{resetLink}"">{resetLink}</a></p>
+<p>This link expires in 1 hour.</p>
+<p>If you did not request this, please ignore this email.</p>
+<p>— TraditionalEats</p>
+</body></html>";
+
+        try
+        {
+            var notificationUrl = _configuration["Services:NotificationService"];
+            if (!string.IsNullOrEmpty(notificationUrl))
+            {
+                var client = _httpClientFactory.CreateClient();
+                client.BaseAddress = new Uri(notificationUrl);
+                var payload = new { to = user.Email, subject, body };
+                var response = await client.PostAsJsonAsync("/api/notification/send-email", payload);
+                var responseBody = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                    _logger.LogWarning("Failed to send password reset email: Status={Status}, Body={Body}", response.StatusCode, responseBody);
+                else
+                    _logger.LogInformation("Password reset email sent to {Email}", user.Email);
+            }
+            else
+                _logger.LogWarning("Services:NotificationService not configured; password reset email not sent. Link: {Link}", resetLink);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not send password reset email; link: {Link}", resetLink);
+        }
+
+        return new ForgotPasswordResult(true, successMessage);
+    }
+
+    public async Task<ResetPasswordResult> ResetPasswordAsync(string email, string token, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(newPassword))
+            return new ResetPasswordResult(false, "Email, token, and new password are required.");
+
+        if (newPassword.Length < 6)
+            return new ResetPasswordResult(false, "Password must be at least 6 characters long.");
+
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail
+                && u.PasswordResetToken == token
+                && u.Status == "Active");
+
+        if (user == null || user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            return new ResetPasswordResult(false, "Invalid or expired reset token. Please request a new password reset.");
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, newPassword);
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Password reset successfully for user {Email}", user.Email);
+        return new ResetPasswordResult(true, "Password has been reset successfully. You can now login with your new password.");
     }
 
     private string GenerateAccessToken(User user)

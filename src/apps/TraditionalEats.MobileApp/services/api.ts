@@ -57,6 +57,9 @@ class ApiClient {
           const isCartGetEndpoint = url.includes('/cart') && method === 'GET';
           const isExpectedEmptyResponse = status === 404 || status === 204;
 
+          // Don't log 404 for geocode-zip (ZIP not in lookup table is expected; app falls back to location search)
+          const isGeocodeZip404 = url.includes('geocode-zip') && status === 404;
+
           // Don't log 401 errors for vendor/admin endpoints if user might not be authenticated
           // These are handled by the UI components with user-friendly messages
           const isAuthEndpoint = url.includes('/vendor/') || url.includes('/admin/');
@@ -64,9 +67,11 @@ class ApiClient {
 
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
-          // 2. 401 errors on vendor/admin endpoints (handled by UI)
+          // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
+          // 3. 401 errors on vendor/admin endpoints (handled by UI)
           const shouldSuppress =
             (isCartGetEndpoint && isExpectedEmptyResponse) ||
+            isGeocodeZip404 ||
             (isAuthEndpoint && isUnauthorized);
 
           if (!shouldSuppress) {

@@ -14,23 +14,43 @@ public interface IMessagePublisher
 
 public class RabbitMqService : IMessagePublisher, IDisposable
 {
-    private readonly IConnection _connection;
-    private readonly IModel _channel;
+    private readonly IConnection? _connection;
+    private readonly IModel? _channel;
     private readonly ILogger<RabbitMqService> _logger;
+    private readonly bool _isConnected;
 
     public RabbitMqService(IConfiguration configuration, ILogger<RabbitMqService> logger)
     {
         _logger = logger;
-        var factory = new ConnectionFactory
+        IConnection? connection = null;
+        IModel? channel = null;
+        
+        try
         {
-            HostName = configuration["RabbitMQ:HostName"] ?? "localhost",
-            Port = int.Parse(configuration["RabbitMQ:Port"] ?? "5672"),
-            UserName = configuration["RabbitMQ:UserName"] ?? "guest",
-            Password = configuration["RabbitMQ:Password"] ?? "guest"
-        };
+            var factory = new ConnectionFactory
+            {
+                HostName = configuration["RabbitMQ:HostName"] ?? "localhost",
+                Port = int.Parse(configuration["RabbitMQ:Port"] ?? "5672"),
+                UserName = configuration["RabbitMQ:UserName"] ?? "guest",
+                Password = configuration["RabbitMQ:Password"] ?? "guest"
+            };
 
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
+            connection = factory.CreateConnection();
+            channel = connection.CreateModel();
+            _isConnected = true;
+            _logger.LogInformation("RabbitMQ connection established to {HostName}:{Port}", factory.HostName, factory.Port);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to connect to RabbitMQ. Message publishing will be disabled. HostName={HostName}, UserName={UserName}", 
+                configuration["RabbitMQ:HostName"] ?? "localhost",
+                configuration["RabbitMQ:UserName"] ?? "guest");
+            _isConnected = false;
+            // Don't throw - allow service to start without RabbitMQ
+        }
+
+        _connection = connection;
+        _channel = channel;
     }
 
     public Task PublishAsync<T>(string exchange, string routingKey, T message, CancellationToken cancellationToken = default)
@@ -64,10 +84,20 @@ public class RabbitMqService : IMessagePublisher, IDisposable
 
     public void Dispose()
     {
-        _channel?.Close();
-        _connection?.Close();
-        _channel?.Dispose();
-        _connection?.Dispose();
+        try
+        {
+            _channel?.Close();
+            _connection?.Close();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error closing RabbitMQ connection");
+        }
+        finally
+        {
+            _channel?.Dispose();
+            _connection?.Dispose();
+        }
     }
 }
 

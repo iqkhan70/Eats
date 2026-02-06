@@ -1,0 +1,366 @@
+name: Deploy TraditionalEats to Staging
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'src/**'
+      - 'deploy/digitalocean/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+env:
+  # Docker / Registry config
+  REGISTRY: registry.digitalocean.com
+  REGISTRY_NAMESPACE: cha-registry
+  IMAGE_REPOSITORY: traditionaleats
+  IMAGE_TAG: staging
+
+  # SSH / server config
+  SSH_USER: root
+  APP_DIR: /opt/traditionaleats
+  ENVIRONMENT: Staging
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------
+      # 1. Checkout code
+      # ------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ------------------------------
+      # 2. Validate branch & load STAGING IP
+      # ------------------------------
+      - name: Validate branch and load STAGING server IP
+        env:
+          STAGING_IP_SECRET: ${{ secrets.STAGING_SERVER_IP }}
+        run: |
+          if [ "${{ github.ref_name }}" != "dev" ]; then
+            echo "❌ ERROR: This workflow should only run on 'dev' branch!"
+            echo "   Current branch: ${{ github.ref_name }}"
+            exit 1
+          fi
+
+          # Try to get IP from file first, then fall back to secret
+          SSH_HOST_STG=""
+          
+          # Debug: List files in deploy/digitalocean directory
+          echo "🔍 Checking for DROPLET_IP_STAGING file..."
+          echo "Current directory: $(pwd)"
+          echo "Files in deploy/digitalocean/:"
+          ls -la deploy/digitalocean/ | grep -i droplet || echo "  (no droplet files found)"
+          
+          if [ -f "deploy/digitalocean/DROPLET_IP_STAGING" ]; then
+            echo "📄 Found DROPLET_IP_STAGING file, reading from it..."
+            SSH_HOST_STG=$(grep -v '^#' deploy/digitalocean/DROPLET_IP_STAGING | grep -v '^$' | head -1 | tr -d '[:space:]')
+          elif [ -n "$STAGING_IP_SECRET" ]; then
+            echo "🔐 DROPLET_IP_STAGING file not found, using STAGING_SERVER_IP secret..."
+            SSH_HOST_STG="$STAGING_IP_SECRET"
+          else
+            echo "❌ ERROR: Staging server IP not found!"
+            echo ""
+            echo "Either:"
+            echo "  1. Commit deploy/digitalocean/DROPLET_IP_STAGING file to git, OR"
+            echo "  2. Set STAGING_SERVER_IP secret in GitHub:"
+            echo "     Settings → Secrets and variables → Actions → New repository secret"
+            echo ""
+            echo "Current working directory: $(pwd)"
+            echo "Checking if deploy/digitalocean exists:"
+            ls -la deploy/ 2>&1 || echo "deploy/ directory not found"
+            exit 1
+          fi
+
+          if [ -z "$SSH_HOST_STG" ]; then
+            echo "❌ ERROR: STAGING IP address is empty!"
+            if [ -f "deploy/digitalocean/DROPLET_IP_STAGING" ]; then
+              echo "File contents:"
+              cat deploy/digitalocean/DROPLET_IP_STAGING
+            fi
+            exit 1
+          fi
+
+          echo "SSH_HOST_STG=$SSH_HOST_STG" >> $GITHUB_ENV
+          echo "✅ STAGING Environment"
+          echo "🌐 Staging Server IP: $SSH_HOST_STG"
+          echo "📦 Branch: ${{ github.ref_name }}"
+
+      # ------------------------------
+      # 3. Set up Docker Buildx
+      # ------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ------------------------------
+      # 4. Login to DigitalOcean Container Registry
+      # ------------------------------
+      - name: Login to DigitalOcean Container Registry
+        env:
+          DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
+        run: |
+          if [ -z "$DOCR_TOKEN" ]; then
+            echo "❌ ERROR: DOCR_TOKEN secret is not configured!"
+            echo ""
+            echo "Create it in GitHub: Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: DOCR_TOKEN"
+            echo "Value: DigitalOcean API token with registry access"
+            exit 1
+          fi
+
+          echo "$DOCR_TOKEN" | docker login $REGISTRY -u doctl --password-stdin
+          echo "✅ Logged into DigitalOcean Container Registry"
+
+      # ------------------------------
+      # 5. Build & push API service images
+      # ------------------------------
+      - name: Build and push API service images
+        run: |
+          REGISTRY_FULL="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          
+          # Define all services with their project paths
+          declare -A SERVICES=(
+            ["identity-service"]="src/services/TraditionalEats.IdentityService/TraditionalEats.IdentityService.csproj:TraditionalEats.IdentityService"
+            ["customer-service"]="src/services/TraditionalEats.CustomerService/TraditionalEats.CustomerService.csproj:TraditionalEats.CustomerService"
+            ["order-service"]="src/services/TraditionalEats.OrderService/TraditionalEats.OrderService.csproj:TraditionalEats.OrderService"
+            ["catalog-service"]="src/services/TraditionalEats.CatalogService/TraditionalEats.CatalogService.csproj:TraditionalEats.CatalogService"
+            ["notification-service"]="src/services/TraditionalEats.NotificationService/TraditionalEats.NotificationService.csproj:TraditionalEats.NotificationService"
+            ["restaurant-service"]="src/services/TraditionalEats.RestaurantService/TraditionalEats.RestaurantService.csproj:TraditionalEats.RestaurantService"
+            ["payment-service"]="src/services/TraditionalEats.PaymentService/TraditionalEats.PaymentService.csproj:TraditionalEats.PaymentService"
+            ["chat-service"]="src/services/TraditionalEats.ChatService/TraditionalEats.ChatService.csproj:TraditionalEats.ChatService"
+            ["ai-service"]="src/services/TraditionalEats.AIService/TraditionalEats.AIService.csproj:TraditionalEats.AIService"
+            ["web-bff"]="src/bff/TraditionalEats.Web.Bff/TraditionalEats.Web.Bff.csproj:TraditionalEats.Web.Bff"
+            ["mobile-bff"]="src/bff/TraditionalEats.Mobile.Bff/TraditionalEats.Mobile.Bff.csproj:TraditionalEats.Mobile.Bff"
+          )
+
+          # Build and push each service
+          # Tag with both versioned tag (for history) and staging tag (for deployment)
+          for SERVICE_NAME in "${!SERVICES[@]}"; do
+            IFS=':' read -r PROJECT_PATH PROJECT_NAME <<< "${SERVICES[$SERVICE_NAME]}"
+            IMAGE_VERSIONED="$REGISTRY_FULL:$SERVICE_NAME-$TAG-$SHORT_SHA"
+            IMAGE_STAGING="$REGISTRY_FULL:$SERVICE_NAME-$TAG"
+            
+            echo "🔨 Building $SERVICE_NAME..."
+            echo "   Project: $PROJECT_PATH"
+            echo "   Versioned tag: $IMAGE_VERSIONED"
+            echo "   Staging tag: $IMAGE_STAGING"
+            
+            docker buildx build \
+              --platform linux/amd64 \
+              --file deploy/digitalocean/Dockerfile.api \
+              --build-arg PROJECT_PATH="$PROJECT_PATH" \
+              --build-arg PROJECT_NAME="$PROJECT_NAME" \
+              --tag "$IMAGE_VERSIONED" \
+              --tag "$IMAGE_STAGING" \
+              --push \
+              .
+            
+            echo "✅ Pushed $SERVICE_NAME: $IMAGE_STAGING (also tagged as $IMAGE_VERSIONED)"
+          done
+
+      # ------------------------------
+      # 6. Build & push Edge image (Blazor WebApp + Nginx)
+      # ------------------------------
+      - name: Build and push Edge image
+        run: |
+          REGISTRY_FULL="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          EDGE_IMAGE_VERSIONED="$REGISTRY_FULL:edge-$TAG-$SHORT_SHA"
+          EDGE_IMAGE_STAGING="$REGISTRY_FULL:edge-$TAG"
+          
+          # Get APP_BASE_URL from secrets.env if available, otherwise use staging default
+          # For staging, we'll use the domain from DROPLET_IP_STAGING or default
+          APP_BASE_URL="${STAGING_BASE_URL:-https://www.caseflowstage.store}"
+          API_BASE_URL="$APP_BASE_URL/api/"
+          
+          echo "🔨 Building edge service..."
+          echo "   Versioned tag: $EDGE_IMAGE_VERSIONED"
+          echo "   Staging tag: $EDGE_IMAGE_STAGING"
+          echo "   API_BASE_URL: $API_BASE_URL"
+          
+          docker buildx build \
+            --platform linux/amd64 \
+            --file deploy/digitalocean/Dockerfile.edge \
+            --build-arg API_BASE_URL="$API_BASE_URL" \
+            --tag "$EDGE_IMAGE_VERSIONED" \
+            --tag "$EDGE_IMAGE_STAGING" \
+            --push \
+            .
+          
+          echo "✅ Pushed edge: $EDGE_IMAGE_STAGING (also tagged as $EDGE_IMAGE_VERSIONED)"
+
+      # ------------------------------
+      # 7. Setup SSH
+      # ------------------------------
+      - name: Validate SSH secret
+        run: |
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ ERROR: SSH_PRIVATE_KEY secret is not configured!"
+            exit 1
+          fi
+          echo "✅ SSH_PRIVATE_KEY secret is configured"
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ env.SSH_HOST_STG }} >> ~/.ssh/known_hosts
+
+      # ------------------------------
+      # 8. Sync deployment files to server
+      # ------------------------------
+      - name: Sync deployment files to server
+        run: |
+          echo "📦 Syncing deployment files to server..."
+          rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='bin' \
+            --exclude='obj' \
+            --exclude='.env' \
+            --exclude='.vs' \
+            --exclude='*.user' \
+            deploy/digitalocean/ \
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST_STG }}:${{ env.APP_DIR }}/deploy/digitalocean/
+
+      # ------------------------------
+      # 9. Update docker-compose.prod.yml with staging image tags
+      # ------------------------------
+      - name: Update docker-compose.prod.yml with staging image tags
+        run: |
+          TAG="${{ env.IMAGE_TAG }}"
+          
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST_STG }} << EOF
+            set -e
+            cd ${{ env.APP_DIR }}
+
+            if [ ! -f deploy/digitalocean/docker-compose.prod.yml ]; then
+              echo "❌ ERROR: docker-compose.prod.yml not found!"
+              exit 1
+            fi
+
+            echo "📝 Updating docker-compose.prod.yml to use staging tags..."
+            
+            # Update image tags to include staging suffix
+            # Only replace if tag doesn't already end with -$TAG (match end of line)
+            sed -i "s|:\\(identity-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(customer-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(order-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(catalog-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(notification-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(restaurant-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(payment-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(chat-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(ai-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(web-bff\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(mobile-bff\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(edge\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            
+            echo "✅ Updated docker-compose.prod.yml with staging tags"
+            echo "Sample image lines:"
+            grep "image:" deploy/digitalocean/docker-compose.prod.yml | head -3
+          EOF
+
+      # ------------------------------
+      # 10. Login to DOCR on server and pull images
+      # ------------------------------
+      - name: Login to DOCR on server and pull images
+        env:
+          DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST_STG }} << EOF
+            set -e
+            cd ${{ env.APP_DIR }}
+
+            echo "🔐 Logging into DigitalOcean Container Registry..."
+            echo "$DOCR_TOKEN" | docker login ${{ env.REGISTRY }} -u doctl --password-stdin
+
+            echo "📥 Pulling images from registry..."
+            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull || {
+              echo "⚠️  docker compose pull failed. This might be expected if .env doesn't exist yet."
+              echo "   The deploy script will handle image pulling on first deployment."
+            }
+          EOF
+
+      # ------------------------------
+      # 11. Restart containers via docker-compose
+      # ------------------------------
+      - name: Restart containers on droplet
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST_STG }} << 'EOF'
+            set -e
+            cd /opt/traditionaleats
+
+            if [ ! -f .env ]; then
+              echo "❌ ERROR: .env file not found!"
+              echo "   Run the deploy script first: ./deploy/digitalocean/deploy.sh staging"
+              exit 1
+            fi
+
+            echo "Using .env:"
+            head -n 20 .env || echo ".env not readable"
+
+            echo "🔄 Recreating containers with new images..."
+            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --remove-orphans
+
+            echo "📊 Current containers:"
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          EOF
+
+      # ------------------------------
+      # 12. Health check
+      # ------------------------------
+      - name: Health check
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 15
+
+          echo "🏥 Checking API health endpoint..."
+          set +e
+          
+          # Try health check on the staging domain if available, otherwise use IP
+          HEALTH_URL="https://${{ env.SSH_HOST_STG }}/api/WebBff/health"
+          curl -k -f "$HEALTH_URL" || {
+            echo "⚠️  Health check failed, but deployment may still be in progress"
+            echo "   Check manually: $HEALTH_URL"
+          }
+          
+          set -e
+
+      # ------------------------------
+      # 13. Summary
+      # ------------------------------
+      - name: Deployment summary
+        run: |
+          REGISTRY_FULL="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          
+          echo "✅ Containerized deployment to ${{ env.ENVIRONMENT }} completed!"
+          echo "🌐 Server: ${{ env.SSH_HOST_STG }}"
+          echo "📦 Branch: ${{ github.ref_name }}"
+          echo "🔨 Commit: ${{ github.sha }}"
+          echo ""
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "🐳 Images pushed (tagged as both staging and versioned):"
+          echo "   - $REGISTRY_FULL:identity-service-$TAG (also: identity-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:customer-service-$TAG (also: customer-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:order-service-$TAG (also: order-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:catalog-service-$TAG (also: catalog-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:notification-service-$TAG (also: notification-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:restaurant-service-$TAG (also: restaurant-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:payment-service-$TAG (also: payment-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:chat-service-$TAG (also: chat-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:ai-service-$TAG (also: ai-service-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:web-bff-$TAG (also: web-bff-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:mobile-bff-$TAG (also: mobile-bff-$TAG-$SHORT_SHA)"
+          echo "   - $REGISTRY_FULL:edge-$TAG (also: edge-$TAG-$SHORT_SHA)"

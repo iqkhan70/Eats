@@ -44,6 +44,8 @@ interface OrderItem {
   totalPrice: number;
 }
 
+type OrderFilter = "all" | "active" | "past";
+
 export default function OrdersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ refresh?: string }>();
@@ -52,6 +54,7 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [filter, setFilter] = useState<OrderFilter>("all");
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -203,13 +206,31 @@ export default function OrdersScreen() {
     }
   }, [loadOrders]);
 
-  // ✅ Newest first
-  const sortedOrders = useMemo(() => {
-    return [...orders].sort(
+  // ✅ Filter and sort orders
+  const filteredAndSortedOrders = useMemo(() => {
+    let filtered = [...orders];
+
+    // Apply filter
+    if (filter === "past") {
+      // Past orders: Delivered, Cancelled, Refunded
+      filtered = filtered.filter((order) =>
+        ["Delivered", "Cancelled", "Refunded"].includes(order.status),
+      );
+    } else if (filter === "active") {
+      // Active orders: everything except past orders
+      filtered = filtered.filter(
+        (order) =>
+          !["Delivered", "Cancelled", "Refunded"].includes(order.status),
+      );
+    }
+    // 'all' shows everything, no filtering needed
+
+    // Sort by newest first
+    return filtered.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [orders]);
+  }, [orders, filter]);
 
   function getStatusColor(status: string): string {
     switch (status) {
@@ -277,7 +298,56 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
-      {sortedOrders.length === 0 ? (
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterTab, filter === "all" && styles.filterTabActive]}
+          onPress={() => setFilter("all")}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === "all" && styles.filterTabTextActive,
+            ]}
+          >
+            All
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filter === "active" && styles.filterTabActive,
+          ]}
+          onPress={() => setFilter("active")}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === "active" && styles.filterTabTextActive,
+            ]}
+          >
+            Active
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filter === "past" && styles.filterTabActive,
+          ]}
+          onPress={() => setFilter("past")}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === "past" && styles.filterTabTextActive,
+            ]}
+          >
+            Past Orders
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {filteredAndSortedOrders.length === 0 ? (
         <FlatList
           data={[]}
           renderItem={null as any}
@@ -289,7 +359,7 @@ export default function OrdersScreen() {
         />
       ) : (
         <FlatList
-          data={sortedOrders}
+          data={filteredAndSortedOrders}
           keyExtractor={(item) => item.orderId}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -418,4 +488,34 @@ const styles = StyleSheet.create({
   orderStatus: { fontSize: 14, color: "#6200ee", fontWeight: "500" },
 
   orderTotal: { fontSize: 18, fontWeight: "bold", color: "#333" },
+
+  filterContainer: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+    gap: 8,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
+  },
+  filterTabActive: {
+    backgroundColor: "#6200ee",
+  },
+  filterTabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#666",
+  },
+  filterTabTextActive: {
+    color: "#fff",
+    fontWeight: "600",
+  },
 });

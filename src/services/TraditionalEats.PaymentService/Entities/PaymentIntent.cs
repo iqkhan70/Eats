@@ -5,6 +5,7 @@ public class PaymentIntent
     public Guid PaymentIntentId { get; set; }
     public Guid OrderId { get; set; }
     public decimal Amount { get; set; }
+    public decimal ServiceFee { get; set; }
     public string Currency { get; set; } = "USD";
     public string Status { get; set; } = "Pending"; // Pending, Authorized, Captured, Failed, Refunded
     public string Provider { get; set; } = "Stripe";

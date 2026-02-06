@@ -172,6 +172,51 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Failed to get user roles" });
         }
     }
+
+    [HttpPost("forgot-password")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Email))
+            return BadRequest(new { success = false, message = "Email is required." });
+
+        try
+        {
+            var result = await _authService.ForgotPasswordAsync(request.Email);
+            return Ok(new { success = result.Success, message = result.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Forgot password failed for {Email}", request.Email);
+            return StatusCode(500, new { success = false, message = "Unable to process password reset. Please try again later." });
+        }
+    }
+
+    [HttpPost("reset-password")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Email) || string.IsNullOrWhiteSpace(request?.Token) || string.IsNullOrWhiteSpace(request?.NewPassword))
+            return BadRequest(new { success = false, message = "Email, token, and new password are required." });
+
+        if (request.NewPassword != request.ConfirmPassword)
+            return BadRequest(new { success = false, message = "New password and confirm password do not match." });
+
+        try
+        {
+            var result = await _authService.ResetPasswordAsync(request.Email, request.Token, request.NewPassword);
+
+            if (!result.Success)
+                return BadRequest(new { success = false, message = result.Message });
+
+            return Ok(new { success = true, message = result.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Reset password failed for {Email}", request.Email);
+            return StatusCode(500, new { success = false, message = "Unable to reset password. Please try again later." });
+        }
+    }
 }
 
 public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
@@ -179,3 +224,5 @@ public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
+public record ForgotPasswordRequest(string Email);
+public record ResetPasswordRequest(string Token, string Email, string NewPassword, string ConfirmPassword);

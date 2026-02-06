@@ -17,6 +17,7 @@ builder.Configuration.AddSharedConfiguration(builder.Environment);
 
 // Add services
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -87,12 +88,33 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created and seeded
+// Apply migrations and seed
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-    db.Database.EnsureCreated();
-    await SeedData.SeedAsync(db);
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
+    {
+        logger.LogInformation("Applying database migrations...");
+        db.Database.Migrate();
+        logger.LogInformation("Migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to apply migrations. The service will continue but database may be out of sync.");
+        // Don't throw - allow service to start even if migrations fail
+        // Admin can manually run migrations if needed
+    }
+    
+    try
+    {
+        await SeedData.SeedAsync(db);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to seed data. Continuing anyway.");
+    }
 }
 
 app.Run();

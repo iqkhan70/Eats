@@ -6,28 +6,44 @@ using TraditionalEats.RestaurantService.Data;
 namespace TraditionalEats.RestaurantService.Services;
 
 /// <summary>
-/// ZIP code lookup service implementation for RestaurantService
-/// This can be extended to use a database table (like Mental Health app) or an external API
+/// ZIP code lookup from database (same approach as mental health app).
+/// No external API cost; data seeded from same source as mental health.
 /// </summary>
 public class ZipCodeLookupService : IZipCodeLookupService
 {
+    private readonly RestaurantDbContext _context;
     private readonly ILogger<ZipCodeLookupService> _logger;
 
-    public ZipCodeLookupService(ILogger<ZipCodeLookupService> logger)
+    public ZipCodeLookupService(RestaurantDbContext context, ILogger<ZipCodeLookupService> logger)
     {
+        _context = context;
         _logger = logger;
     }
 
-    public Task<(decimal Latitude, decimal Longitude)?> GetLatLonFromZipCodeAsync(string zipCode)
+    public async Task<(decimal Latitude, decimal Longitude)?> GetLatLonFromZipCodeAsync(string zipCode)
     {
         if (string.IsNullOrWhiteSpace(zipCode))
-            return Task.FromResult<(decimal Latitude, decimal Longitude)?>(null);
+            return null;
 
-        // TODO: Implement database lookup using ZipCodeLookup table
-        // For now, return null - geocoding will fall back to manual entry
-        // This can be implemented later when we add the ZipCodeLookup table to RestaurantService
-        
-        _logger.LogWarning("ZIP code lookup not yet implemented. ZIP code: {ZipCode}", zipCode);
-        return Task.FromResult<(decimal Latitude, decimal Longitude)?>(null);
+        var zip5 = zipCode.Trim().Length >= 5 ? zipCode.Trim()[..5] : zipCode.Trim();
+        try
+        {
+            var lookup = await _context.ZipCodeLookups
+                .AsNoTracking()
+                .FirstOrDefaultAsync(z => z.ZipCode == zip5);
+
+            if (lookup == null)
+            {
+                _logger.LogDebug("ZIP code {Zip} not found in lookup table", zip5);
+                return null;
+            }
+
+            return (lookup.Latitude, lookup.Longitude);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error looking up ZIP code {Zip}", zip5);
+            return null;
+        }
     }
 }

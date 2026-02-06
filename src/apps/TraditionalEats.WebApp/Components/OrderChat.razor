@@ -1,4 +1,5 @@
 @using Microsoft.Extensions.Configuration
+@using Microsoft.AspNetCore.Components
 @using Radzen
 @using Radzen.Blazor
 @using TraditionalEats.WebApp.Services
@@ -7,6 +8,7 @@
 @inject IConfiguration Configuration
 @inject ILogger<OrderChat> Logger
 @inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
 
 <RadzenCard
     Style="@(FullScreen ? "flex: 1; min-height: 0; display: flex; flex-direction: column; max-height: 100%;" : "max-height: 500px; display: flex; flex-direction: column;")">
@@ -135,8 +137,31 @@
         // Load existing messages
         await LoadMessages();
 
-        // Hub URL from config (default: ChatService on port 5012)
-        var hubUrl = Configuration["ChatHubUrl"] ?? "http://localhost:5012/chatHub";
+        // Hub URL: use configured value, or derive from current origin (production) or default to localhost (dev)
+        var configuredHubUrl = Configuration["ChatHubUrl"];
+        string hubUrl;
+        if (!string.IsNullOrWhiteSpace(configuredHubUrl) && (configuredHubUrl.StartsWith("http://") || configuredHubUrl.StartsWith("https://")))
+        {
+            hubUrl = configuredHubUrl;
+        }
+        else
+        {
+            // Derive from current origin (works in production behind Nginx)
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var isLocalhost = string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase) || baseUri.Host == "127.0.0.1";
+            if (isLocalhost)
+            {
+                // Development: use localhost with ChatService port
+                hubUrl = "http://localhost:5012/chatHub";
+            }
+            else
+            {
+                // Production: use same origin with /chatHub path (Nginx proxies to ChatService)
+                hubUrl = $"{baseUri.Scheme}://{baseUri.Authority}/chatHub";
+            }
+        }
+        
+        Logger.LogInformation("Connecting to chat hub at: {HubUrl}", hubUrl);
         ChatService.MessageReceived += OnMessageReceived;
         ChatService.Error += OnError;
         ChatService.ConnectionStateChanged += OnConnectionStateChanged;

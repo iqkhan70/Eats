@@ -4,8 +4,16 @@
   },
   "Stripe": {
     "SecretKey": "sk_test_YOUR_STRIPE_SECRET_KEY_HERE",
-    "PublishableKey": "pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE"
+    "PublishableKey": "pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE",
+    "WebhookSecret": "whsec_YOUR_WEBHOOK_SECRET_HERE",
+    "ConnectReturnUrl": "https://localhost:7001"
   },
+  "Services": {
+    "RestaurantService": {
+      "BaseUrl": "http://localhost:5007"
+    }
+  },
+  "AppBaseUrl": "https://localhost:7001",
   "Kestrel": {
     "Endpoints": {
       "Http": {

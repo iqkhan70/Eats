@@ -6,10 +6,12 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { api } from "../../services/api";
+import { cartService } from "../../services/cart";
 
 interface Order {
   orderId: string;
@@ -54,6 +56,7 @@ export default function OrderDetailsScreen() {
   const params = useLocalSearchParams<{ orderId: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reordering, setReordering] = useState(false);
 
   useEffect(() => {
     if (params.orderId) {
@@ -124,6 +127,72 @@ export default function OrderDetailsScreen() {
       return JSON.parse(modifiersJson);
     } catch {
       return [];
+    }
+  };
+
+  const isPastOrder = (status: string): boolean => {
+    return ["Delivered", "Cancelled", "Refunded"].includes(status);
+  };
+
+  const handleReorder = async () => {
+    if (!order) return;
+
+    try {
+      setReordering(true);
+
+      // Get or create cart for this restaurant
+      let cartId: string;
+      try {
+        const existingCart = await cartService.getCart();
+        if (existingCart && existingCart.restaurantId === order.restaurantId) {
+          // Use existing cart if it's for the same restaurant
+          cartId = existingCart.cartId;
+        } else {
+          // Create new cart for this restaurant
+          cartId = await cartService.createCart(order.restaurantId);
+        }
+      } catch (error: any) {
+        // If no cart exists, create one
+        cartId = await cartService.createCart(order.restaurantId);
+      }
+
+      // Add all items from the order to the cart
+      for (const item of order.items) {
+        await cartService.addItemToCart(
+          cartId,
+          item.menuItemId,
+          item.name,
+          item.unitPrice,
+          item.quantity,
+        );
+      }
+
+      Alert.alert(
+        "Items Added to Cart",
+        "All items from this order have been added to your cart.",
+        [
+          {
+            text: "View Cart",
+            onPress: () => router.push("/(tabs)/cart"),
+            style: "default",
+          },
+          {
+            text: "OK",
+            style: "cancel",
+          },
+        ],
+      );
+    } catch (error: any) {
+      console.error("Error reordering:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.error ||
+          error.message ||
+          "Failed to add items to cart. Please try again.",
+        [{ text: "OK" }],
+      );
+    } finally {
+      setReordering(false);
     }
   };
 
@@ -681,5 +750,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#6200ee",
+  },
+  reorderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#6200ee",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  reorderButtonDisabled: {
+    opacity: 0.6,
+  },
+  reorderButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

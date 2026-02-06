@@ -8,34 +8,35 @@
 
 <PageTitle>TraditionalEats - Traditional Food Delivery</PageTitle>
 
-<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;"
+    Class="page-container">
     <RadzenText TextStyle="TextStyle.H1">Welcome to TraditionalEats</RadzenText>
     <RadzenText TextStyle="TextStyle.Body1">
         Discover authentic traditional food from local restaurants, delivered to your door.
     </RadzenText>
-    
+
     <RadzenCard Style="margin-top: 1rem;">
         <RadzenStack Gap="1rem">
             <RadzenText TextStyle="TextStyle.H3">Find Restaurants Near You</RadzenText>
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.End" Class="search-container" Style="position: relative;">
-                <RadzenFormField Text="Enter your location" class="w-100" Style="flex: 1; position: relative;">
-                    <RadzenTextBox @ref="searchTextBox" 
-                                   @bind-value="@searchLocation" 
-                                   Placeholder="Enter your address or location"
-                                   @oninput="@HandleInput"
-                                   @onkeypress="@HandleKeyPress"
-                                   Style="width: 100%;" />
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.End"
+                Class="search-container" Style="position: relative;">
+                <RadzenFormField Text="Address or ZIP code" class="w-100" Style="flex: 1; position: relative;">
+                    <RadzenTextBox @ref="searchTextBox" @bind-value="@searchLocation"
+                        Placeholder="Enter address or ZIP code" @oninput="@HandleInput" @onkeypress="@HandleKeyPress"
+                        Style="width: 100%;" />
                     @if (showSuggestions && suggestions.Any())
                     {
-                        <div class="suggestions-dropdown" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div class="suggestions-dropdown"
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                             @foreach (var suggestion in suggestions)
                             {
-                                <div class="suggestion-item" 
-                                     style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; @(hoveredSuggestion == suggestion ? "background-color: #f5f5f5;" : "")" 
-                                     @onclick="@(() => SelectSuggestion(suggestion))"
-                                     @onmouseover="@(() => hoveredSuggestion = suggestion)"
-                                     @onmouseout="@(() => hoveredSuggestion = null)">
-                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                <div class="suggestion-item"
+                                    style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; @(hoveredSuggestion == suggestion ? "background-color: #f5f5f5;" : "")"
+                                    @onclick="@(() => SelectSuggestion(suggestion))"
+                                    @onmouseover="@(() => hoveredSuggestion = suggestion)"
+                                    @onmouseout="@(() => hoveredSuggestion = null)">
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem"
+                                        AlignItems="AlignItems.Center">
                                         <RadzenIcon Icon="location_on" Style="font-size: 16px; color: #666;" />
                                         <RadzenText TextStyle="TextStyle.Body2">@suggestion</RadzenText>
                                     </RadzenStack>
@@ -46,13 +47,19 @@
                 </RadzenFormField>
                 <RadzenButton Text="Search" Icon="search" Click="@SearchRestaurants" Variant="Variant.Flat" />
             </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenText TextStyle="TextStyle.Body2">Within @((int)distanceMiles) miles</RadzenText>
+                <RadzenSlider @bind-Value="@distanceMiles" Min="1" Max="100" Step="1"
+                    Style="width: 100%; max-width: 320px;" />
+            </RadzenStack>
         </RadzenStack>
     </RadzenCard>
 
     <RadzenCard Style="margin-top: 1rem; width: 100%; max-width: 100%;" Class="categories-container">
         <RadzenStack Gap="1rem">
             <RadzenText TextStyle="TextStyle.H3">Popular Categories</RadzenText>
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="flex-wrap: wrap; width: 100%;" Class="categories-stack">
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Style="flex-wrap: wrap; width: 100%;"
+                Class="categories-stack">
                 @foreach (var category in displayedCategories)
                 {
                     <RadzenCard Style="cursor: pointer;" Class="category-card">
@@ -67,13 +74,11 @@
             </RadzenStack>
             @if (categories.Count > initialCategoryCount)
             {
-                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Style="margin-top: 0.5rem;">
-                    <RadzenButton 
-                        Text="@(showAllCategories ? "Show Less" : $"Show All ({categories.Count})")" 
-                        Icon="@(showAllCategories ? "expand_less" : "expand_more")"
-                        Click="@ToggleCategories" 
-                        Variant="Variant.Flat" 
-                        Size="ButtonSize.Small" />
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center"
+                    Style="margin-top: 0.5rem;">
+                    <RadzenButton Text="@(showAllCategories ? "Show Less" : $"Show All ({categories.Count})")"
+                        Icon="@(showAllCategories ? "expand_less" : "expand_more")" Click="@ToggleCategories"
+                        Variant="Variant.Flat" Size="ButtonSize.Small" />
                 </RadzenStack>
             }
         </RadzenStack>
@@ -89,6 +94,7 @@
     private bool showAllCategories = false;
     private const int initialCategoryCount = 6;
     private System.Threading.CancellationTokenSource? _debounceCts;
+    private double distanceMiles = 25;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -118,15 +124,15 @@
         // Debounce the API call
         _debounceCts?.Cancel();
         _debounceCts = new System.Threading.CancellationTokenSource();
-        
+
         try
         {
             await Task.Delay(300, _debounceCts.Token); // Wait 300ms after user stops typing
-            
+
             var response = await Http.GetFromJsonAsync<List<string>>(
-                $"WebBff/search-suggestions?query={Uri.EscapeDataString(query)}&maxResults=10",
-                _debounceCts.Token);
-            
+            $"WebBff/search-suggestions?query={Uri.EscapeDataString(query)}&maxResults=10",
+            _debounceCts.Token);
+
             suggestions = response ?? new List<string>();
             showSuggestions = suggestions.Any();
             StateHasChanged();
@@ -152,42 +158,60 @@
     }
 
     private List<CategoryItem> categories = new()
+{
+new CategoryItem { Name = "Traditional", Icon = "restaurant" },
+new CategoryItem { Name = "Fast Food", Icon = "fastfood" },
+new CategoryItem { Name = "Desserts", Icon = "cake" },
+new CategoryItem { Name = "Beverages", Icon = "local_drink" },
+new CategoryItem { Name = "Vegetarian", Icon = "eco" },
+new CategoryItem { Name = "Vegan", Icon = "spa" },
+new CategoryItem { Name = "Seafood", Icon = "set_meal" },
+new CategoryItem { Name = "BBQ", Icon = "outdoor_grill" },
+new CategoryItem { Name = "Italian", Icon = "dinner_dining" },
+new CategoryItem { Name = "Asian", Icon = "ramen_dining" }
+};
+
+    private List<CategoryItem> displayedCategories => showAllCategories
+    ? categories
+    : categories.Take(initialCategoryCount).ToList();
+
+    private async Task SearchRestaurants()
     {
-        new CategoryItem { Name = "Traditional", Icon = "restaurant" },
-        new CategoryItem { Name = "Fast Food", Icon = "fastfood" },
-        new CategoryItem { Name = "Desserts", Icon = "cake" },
-        new CategoryItem { Name = "Beverages", Icon = "local_drink" },
-        new CategoryItem { Name = "Vegetarian", Icon = "eco" },
-        new CategoryItem { Name = "Vegan", Icon = "spa" },
-        new CategoryItem { Name = "Seafood", Icon = "set_meal" },
-        new CategoryItem { Name = "BBQ", Icon = "outdoor_grill" },
-        new CategoryItem { Name = "Italian", Icon = "dinner_dining" },
-        new CategoryItem { Name = "Asian", Icon = "ramen_dining" }
-    };
-
-    private List<CategoryItem> displayedCategories => showAllCategories 
-        ? categories 
-        : categories.Take(initialCategoryCount).ToList();
-
-        private void SearchRestaurants()
+        var location = (searchLocation ?? "").Trim();
+        if (string.IsNullOrEmpty(location))
         {
-            if (!string.IsNullOrEmpty(searchLocation))
-            {
-                NavigationManager.NavigateTo($"/restaurants?location={Uri.EscapeDataString(searchLocation)}");
-            }
-            else
-            {
-                NavigationManager.NavigateTo("/restaurants");
-            }
+            NavigationManager.NavigateTo("/restaurants");
+            return;
         }
-
-        private void HandleKeyPress(KeyboardEventArgs e)
+        var zipMatch = System.Text.RegularExpressions.Regex.Match(location, @"^\s*(\d{5})(?:-\d{4})?\s*$");
+        if (zipMatch.Success)
         {
-            if (e.Key == "Enter")
+            var zip = zipMatch.Groups[1].Value;
+            try
             {
-                SearchRestaurants();
+                var geo = await Http.GetFromJsonAsync<GeocodeZipResponse>($"WebBff/geocode-zip?zip={Uri.EscapeDataString(zip)}");
+                if (geo != null)
+                {
+                    var miles = (int)Math.Clamp(distanceMiles, 1, 100);
+                    NavigationManager.NavigateTo($"/restaurants?latitude={geo.Latitude}&longitude={geo.Longitude}&distanceMiles={miles}&zip={Uri.EscapeDataString(zip)}");
+                    return;
+                }
             }
+            catch { /* fallback to location text */ }
         }
+        var milesParam = (int)Math.Clamp(distanceMiles, 1, 100);
+        NavigationManager.NavigateTo($"/restaurants?location={Uri.EscapeDataString(location)}&distanceMiles={milesParam}");
+    }
+
+    private class GeocodeZipResponse { public double Latitude { get; set; } public double Longitude { get; set; } }
+
+    private void HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            SearchRestaurants();
+        }
+    }
 
     private void NavigateToCategory(CategoryItem category)
     {

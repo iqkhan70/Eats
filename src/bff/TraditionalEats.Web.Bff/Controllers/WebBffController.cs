@@ -15,16 +15,19 @@ public class WebBffController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WebBffController> _logger;
     private readonly ICartSessionService _cartSessionService;
+    private readonly IConfiguration _configuration;
     private const string SESSION_COOKIE_NAME = "cart_session";
 
     public WebBffController(
         IHttpClientFactory httpClientFactory,
         ILogger<WebBffController> logger,
-        ICartSessionService cartSessionService)
+        ICartSessionService cartSessionService,
+        IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _cartSessionService = cartSessionService;
+        _configuration = configuration;
     }
 
     // ----------------------------
@@ -85,7 +88,25 @@ public class WebBffController : ControllerBase
             existingSessionId = cookieSessionId;
         }
 
-        var sessionId = await _cartSessionService.GetOrCreateSessionIdAsync(existingSessionId);
+        string sessionId;
+        try
+        {
+            sessionId = await _cartSessionService.GetOrCreateSessionIdAsync(existingSessionId);
+        }
+        catch (Exception ex)
+        {
+            // Redis unavailable - generate a fallback session ID
+            _logger.LogWarning(ex, "Redis unavailable when getting session ID, generating fallback");
+            if (!string.IsNullOrEmpty(existingSessionId))
+            {
+                sessionId = existingSessionId;
+            }
+            else
+            {
+                // Generate a new session ID (GUID)
+                sessionId = Guid.NewGuid().ToString();
+            }
+        }
 
         // If new, set cookie (server-side)
         if (existingSessionId != sessionId && string.IsNullOrEmpty(existingSessionId))
@@ -106,12 +127,50 @@ public class WebBffController : ControllerBase
     // Restaurants
     // ----------------------------
 
+    [HttpGet("geocode-zip")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GeocodeZip([FromQuery] string zip)
+    {
+        if (string.IsNullOrWhiteSpace(zip))
+            return BadRequest(new { message = "zip is required" });
+        var zipClean = zip.Trim();
+        if (zipClean.Length < 5)
+            return BadRequest(new { message = "zip must be at least 5 digits" });
+        var zip5 = zipClean.Length >= 5 ? zipClean[..5] : zipClean;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            var response = await client.GetAsync($"/api/ZipCode/{Uri.EscapeDataString(zip5)}");
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    return NotFound(new { message = "ZIP code not found. Add it to the ZipCodeLookup table (same as mental health app)." });
+                return StatusCode((int)response.StatusCode, new { message = "ZIP lookup failed" });
+            }
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("latitude", out var latProp) && root.TryGetProperty("longitude", out var lonProp)
+                && latProp.TryGetDouble(out var latitude) && lonProp.TryGetDouble(out var longitude))
+                return Ok(new { latitude, longitude });
+            return NotFound(new { message = "ZIP code not found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Geocode zip failed for {Zip}", zip5);
+            return StatusCode(500, new { message = "ZIP lookup failed" });
+        }
+    }
+
     [HttpGet("restaurants")]
     public async Task<IActionResult> GetRestaurants(
         [FromQuery] string? location,
         [FromQuery] string? cuisineType,
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
+        [FromQuery] double? radiusMiles,
+        [FromQuery] string? zip,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20)
     {
@@ -124,6 +183,8 @@ public class WebBffController : ControllerBase
             if (!string.IsNullOrEmpty(cuisineType)) queryParams.Add($"cuisineType={Uri.EscapeDataString(cuisineType)}");
             if (latitude.HasValue) queryParams.Add($"latitude={latitude.Value}");
             if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");
+            if (radiusMiles.HasValue) queryParams.Add($"radiusMiles={radiusMiles.Value}");
+            if (!string.IsNullOrEmpty(zip)) queryParams.Add($"zip={Uri.EscapeDataString(zip)}");
             queryParams.Add($"skip={skip}");
             queryParams.Add($"take={take}");
 
@@ -131,12 +192,14 @@ public class WebBffController : ControllerBase
             var response = await client.GetAsync($"/api/restaurant{queryString}");
             var content = await response.Content.ReadAsStringAsync();
 
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("RestaurantService returned {StatusCode}: {Content}", response.StatusCode, content);
             return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurants");
-            return StatusCode(500, new { error = "Failed to fetch restaurants" });
+            _logger.LogError(ex, "Error fetching restaurants. Ensure RestaurantService is running (e.g. port 5007).");
+            return StatusCode(500, new { error = "Failed to fetch restaurants", detail = ex.Message });
         }
     }
 
@@ -215,8 +278,12 @@ public class WebBffController : ControllerBase
             // Which restaurants can this user access?
             var allowedRestaurantIds = await GetAllowedRestaurantIdsAsync(isAdmin);
 
+            _logger.LogInformation("GetVendorOrders: User isAdmin={IsAdmin}, AllowedRestaurantIds={RestaurantIds}",
+                isAdmin, string.Join(", ", allowedRestaurantIds));
+
             if (allowedRestaurantIds.Count == 0)
             {
+                _logger.LogWarning("GetVendorOrders: No allowed restaurants found for user. User may not have any restaurants assigned.");
                 var empty = new PagedResult<OrderDto>(Array.Empty<OrderDto>(), 0);
                 return JsonContent(JsonSerializer.Serialize(empty, JsonOptions), 200);
             }
@@ -531,6 +598,9 @@ public class WebBffController : ControllerBase
 
         try
         {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            _logger.LogInformation("GetAllowedRestaurantIdsAsync: isAdmin={IsAdmin}, UserId={UserId}", isAdmin, userIdClaim);
+
             var client = _httpClientFactory.CreateClient("RestaurantService");
             ForwardBearerToken(client);
 
@@ -538,9 +608,15 @@ public class WebBffController : ControllerBase
             {
                 var resp = await client.GetAsync("/api/restaurant/admin/all?skip=0&take=5000");
                 var json = await resp.Content.ReadAsStringAsync();
-                if (!resp.IsSuccessStatusCode) return ids;
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GetAllowedRestaurantIdsAsync: Failed to fetch admin restaurants. Status={Status}, Response={Response}",
+                        resp.StatusCode, json);
+                    return ids;
+                }
 
                 var restaurants = JsonSerializer.Deserialize<List<RestaurantLight>>(json, JsonOptions) ?? new();
+                _logger.LogInformation("GetAllowedRestaurantIdsAsync: Admin - found {Count} restaurants", restaurants.Count);
                 foreach (var r in restaurants)
                 {
                     if (r.RestaurantId != Guid.Empty) ids.Add(r.RestaurantId);
@@ -551,9 +627,16 @@ public class WebBffController : ControllerBase
             {
                 var resp = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
                 var json = await resp.Content.ReadAsStringAsync();
-                if (!resp.IsSuccessStatusCode) return ids;
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GetAllowedRestaurantIdsAsync: Failed to fetch vendor restaurants. Status={Status}, Response={Response}",
+                        resp.StatusCode, json);
+                    return ids;
+                }
 
                 var restaurants = JsonSerializer.Deserialize<List<RestaurantLight>>(json, JsonOptions) ?? new();
+                _logger.LogInformation("GetAllowedRestaurantIdsAsync: Vendor UserId={UserId} - found {Count} restaurants: {RestaurantIds}",
+                    userIdClaim, restaurants.Count, string.Join(", ", restaurants.Select(r => r.RestaurantId)));
                 foreach (var r in restaurants)
                 {
                     if (r.RestaurantId != Guid.Empty) ids.Add(r.RestaurantId);
@@ -676,12 +759,27 @@ public class WebBffController : ControllerBase
             var queryString = categoryId.HasValue ? $"?categoryId={categoryId.Value}" : "";
             var response = await client.GetAsync($"/api/catalog/restaurants/{restaurantId}/menu-items{queryString}");
             var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonContent(content, 200);
+            }
+
+            // For errors (including 500), return empty list instead of forwarding error
+            // This allows the frontend to display "No menu items" instead of an error
+            _logger.LogWarning("CatalogService returned error for restaurant menu: Status={StatusCode}, RestaurantId={RestaurantId}, Content={Content}",
+                response.StatusCode, restaurantId, content);
+            return JsonContent("[]", 200); // Return empty array
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "CatalogService unavailable when fetching restaurant menu, returning empty list");
+            return JsonContent("[]", 200); // Return empty array
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurant menu");
-            return StatusCode(500, new { error = "Failed to fetch restaurant menu" });
+            _logger.LogError(ex, "Unexpected error fetching restaurant menu");
+            return JsonContent("[]", 200); // Return empty array instead of 500
         }
     }
 
@@ -693,12 +791,26 @@ public class WebBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("CatalogService");
             var response = await client.GetAsync("/api/catalog/categories");
             var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonContent(content, 200);
+            }
+
+            // For errors, return empty list instead of forwarding error
+            _logger.LogWarning("CatalogService returned error for categories: Status={StatusCode}, Content={Content}",
+                response.StatusCode, content);
+            return JsonContent("[]", 200); // Return empty array
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "CatalogService unavailable when fetching categories, returning empty list");
+            return JsonContent("[]", 200); // Return empty array
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching categories");
-            return StatusCode(500, new { error = "Failed to fetch categories" });
+            _logger.LogError(ex, "Unexpected error fetching categories");
+            return JsonContent("[]", 200); // Return empty array instead of 500
         }
     }
 
@@ -755,27 +867,51 @@ public class WebBffController : ControllerBase
                     {
                         if (Guid.TryParse(cartIdElement.GetString(), out var cartId))
                         {
-                            var sessionId = await GetOrCreateSessionIdAsync();
-                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                            try
+                            {
+                                var sessionId = await GetOrCreateSessionIdAsync();
+                                await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                            }
+                            catch (Exception redisEx)
+                            {
+                                _logger.LogWarning(redisEx, "Redis unavailable when storing cart session, continuing");
+                            }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to parse cartId from response");
+                    _logger.LogWarning(ex, "Failed to parse cartId from response, but cart was created");
                 }
+
+                return JsonContent(content, 200);
             }
             else
             {
                 _logger.LogWarning("OrderService returned error: {StatusCode}, {Content}", response.StatusCode, content);
+                // Return error response from OrderService, but ensure it's valid JSON
+                try
+                {
+                    // Try to parse as JSON to ensure it's valid
+                    JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+                    return JsonContent(content, (int)response.StatusCode);
+                }
+                catch
+                {
+                    // If not valid JSON, return a proper error object
+                    return StatusCode((int)response.StatusCode, new { error = "Failed to create cart", message = content });
+                }
             }
-
-            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "OrderService unavailable when creating cart");
+            return StatusCode(503, new { error = "Cart service unavailable", message = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating cart: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to create cart: {ex.Message}", details = ex.ToString() });
+            return StatusCode(500, new { error = "Failed to create cart", message = ex.Message });
         }
     }
 
@@ -787,44 +923,86 @@ public class WebBffController : ControllerBase
         {
             if (User.Identity?.IsAuthenticated == true)
             {
-                var client = _httpClientFactory.CreateClient("OrderService");
-
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
-                if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-                {
-                    httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-                }
-
-                var response = await client.SendAsync(httpRequestMessage);
-                var content = await response.Content.ReadAsStringAsync();
-
-                if (response.IsSuccessStatusCode)
-                    return JsonContent(content, 200);
-
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    return Ok((object?)null);
-
-                return JsonContent(content, (int)response.StatusCode);
-            }
-
-            // guest user
-            try
-            {
-                var sessionId = await GetOrCreateSessionIdAsync();
-                var cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-
-                if (cartId.HasValue)
+                try
                 {
                     var client = _httpClientFactory.CreateClient("OrderService");
-                    var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
+
+                    var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, "/api/order/cart");
+                    if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                    {
+                        httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+                    }
+
+                    var response = await client.SendAsync(httpRequestMessage);
                     var content = await response.Content.ReadAsStringAsync();
 
                     if (response.IsSuccessStatusCode)
                         return JsonContent(content, 200);
 
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        return Ok((object?)null);
+
+                    _logger.LogWarning("OrderService returned error for authenticated cart: Status={StatusCode}, Content={Content}",
+                        response.StatusCode, content);
+                    return JsonContent(content, (int)response.StatusCode);
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(ex, "OrderService unavailable when getting authenticated cart");
+                    return Ok((object?)null);
+                }
+            }
+
+            // guest user
+            try
+            {
+                string sessionId;
+                try
+                {
+                    sessionId = await GetOrCreateSessionIdAsync();
+                }
+                catch (Exception sessionEx)
+                {
+                    _logger.LogWarning(sessionEx, "Failed to get or create session ID, returning empty cart");
+                    return Ok((object?)null);
+                }
+
+                Guid? cartId;
+                try
+                {
+                    cartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+                }
+                catch (Exception redisEx)
+                {
+                    _logger.LogWarning(redisEx, "Redis unavailable when getting cart ID, returning empty cart");
+                    return Ok((object?)null);
+                }
+
+                if (cartId.HasValue)
+                {
+                    try
                     {
-                        try { await _cartSessionService.ClearSessionCartAsync(sessionId); } catch { }
+                        var client = _httpClientFactory.CreateClient("OrderService");
+                        var response = await client.GetAsync($"/api/order/cart/{cartId.Value}");
+                        var content = await response.Content.ReadAsStringAsync();
+
+                        if (response.IsSuccessStatusCode)
+                            return JsonContent(content, 200);
+
+                        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        {
+                            try { await _cartSessionService.ClearSessionCartAsync(sessionId); } catch { }
+                            return Ok((object?)null);
+                        }
+
+                        // For any other error (including 500), log and return empty cart instead of forwarding error
+                        _logger.LogWarning("OrderService returned error for guest cart: Status={StatusCode}, Content={Content}",
+                            response.StatusCode, content);
+                        return Ok((object?)null);
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        _logger.LogError(ex, "OrderService unavailable when getting guest cart");
                         return Ok((object?)null);
                     }
                 }
@@ -839,7 +1017,8 @@ public class WebBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error getting cart, returning empty cart: {Message}", ex.Message);
+            _logger.LogError(ex, "Unexpected error getting cart: {Message}", ex.Message);
+            // Return empty cart instead of 500 to prevent frontend errors
             return Ok((object?)null);
         }
     }
@@ -906,23 +1085,48 @@ public class WebBffController : ControllerBase
             {
                 if (User.Identity?.IsAuthenticated != true)
                 {
-                    var sessionId = await GetOrCreateSessionIdAsync();
-                    var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
-                    if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                    try
                     {
-                        await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                        var sessionId = await GetOrCreateSessionIdAsync();
+                        var existingCartId = await _cartSessionService.GetCartIdForSessionAsync(sessionId);
+                        if (!existingCartId.HasValue || existingCartId.Value != cartId)
+                        {
+                            await _cartSessionService.StoreCartIdForSessionAsync(sessionId, cartId);
+                        }
+                    }
+                    catch (Exception redisEx)
+                    {
+                        _logger.LogWarning(redisEx, "Redis unavailable when storing cart session, continuing");
                     }
                 }
 
                 return Ok(new { success = true, cartId });
             }
 
-            return JsonContent(content, (int)response.StatusCode);
+            // For errors, ensure we return valid JSON
+            _logger.LogWarning("OrderService returned error when adding item to cart: Status={StatusCode}, Content={Content}",
+                response.StatusCode, content);
+            try
+            {
+                // Try to parse as JSON to ensure it's valid
+                JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
+                return JsonContent(content, (int)response.StatusCode);
+            }
+            catch
+            {
+                // If not valid JSON, return a proper error object
+                return StatusCode((int)response.StatusCode, new { error = "Failed to add item to cart", message = content });
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "OrderService unavailable when adding item to cart");
+            return StatusCode(503, new { error = "Cart service unavailable", message = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "AddItemToCart error: {Message}", ex.Message);
-            return StatusCode(500, new { error = $"Failed to add item to cart: {ex.Message}" });
+            return StatusCode(500, new { error = "Failed to add item to cart", message = ex.Message });
         }
     }
 
@@ -971,23 +1175,243 @@ public class WebBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("OrderService");
-
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
-            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+            // Check vendor Stripe status BEFORE creating the order
+            // Get restaurantId from cart first
+            Guid restaurantId = default;
+            try
             {
-                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
-            }
-            httpRequestMessage.Content = System.Net.Http.Json.JsonContent.Create(request);
+                var cartClient = _httpClientFactory.CreateClient("OrderService");
+                var cartRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/order/cart/{request.CartId}");
+                if (Request.Headers.TryGetValue("Authorization", out var cartAuthHeader))
+                    cartRequest.Headers.TryAddWithoutValidation("Authorization", cartAuthHeader.ToString());
 
-            var response = await client.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+                var cartResponse = await cartClient.SendAsync(cartRequest);
+                if (cartResponse.IsSuccessStatusCode)
+                {
+                    var cartContent = await cartResponse.Content.ReadAsStringAsync();
+                    var cartDoc = System.Text.Json.JsonDocument.Parse(cartContent);
+                    var root = cartDoc.RootElement;
+                    var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
+                    if (restEl.ValueKind != System.Text.Json.JsonValueKind.Null && restEl.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                        restaurantId = Guid.Parse(restEl.GetString()!);
+
+                    _logger.LogInformation("PlaceOrder: Cart {CartId} has restaurantId={RestaurantId}", request.CartId, restaurantId);
+                }
+                else
+                {
+                    _logger.LogWarning("PlaceOrder: Could not fetch cart {CartId}, status={Status}", request.CartId, cartResponse.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "PlaceOrder: Could not fetch cart to check vendor Stripe status");
+            }
+
+            // If we have restaurantId, check vendor Stripe status before creating order
+            if (restaurantId != default)
+            {
+                try
+                {
+                    var checkPaymentClient = _httpClientFactory.CreateClient("PaymentService");
+                    var checkRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/payment/restaurant/{restaurantId}/payment-ready");
+                    var checkResponse = await checkPaymentClient.SendAsync(checkRequest);
+
+                    if (checkResponse.IsSuccessStatusCode)
+                    {
+                        var checkContent = await checkResponse.Content.ReadAsStringAsync();
+                        var checkDoc = System.Text.Json.JsonDocument.Parse(checkContent);
+                        var paymentReady = checkDoc.RootElement.TryGetProperty("paymentReady", out var pr) && pr.GetBoolean();
+
+                        _logger.LogInformation("PlaceOrder: Restaurant {RestaurantId} payment ready check: {PaymentReady}", restaurantId, paymentReady);
+
+                        if (!paymentReady)
+                        {
+                            _logger.LogWarning("PlaceOrder: Vendor Stripe not set up for restaurant {RestaurantId}, blocking order creation", restaurantId);
+                            return BadRequest(new { error = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later." });
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("PlaceOrder: Payment readiness check failed for restaurant {RestaurantId}, status={Status}", restaurantId, checkResponse.StatusCode);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "PlaceOrder: Could not validate vendor Stripe status, proceeding with order creation");
+                    // Don't block order creation if validation fails - let it fail later during checkout
+                }
+            }
+            else
+            {
+                _logger.LogWarning("PlaceOrder: restaurantId is default (empty), skipping payment readiness check. CartId={CartId}", request.CartId);
+            }
+
+            var orderClient = _httpClientFactory.CreateClient("OrderService");
+            var orderRequest = new HttpRequestMessage(HttpMethod.Post, "/api/order/place");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                orderRequest.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            orderRequest.Content = System.Net.Http.Json.JsonContent.Create(request);
+
+            var orderResponse = await orderClient.SendAsync(orderRequest);
+            var orderContent = await orderResponse.Content.ReadAsStringAsync();
+            if (!orderResponse.IsSuccessStatusCode)
+                return JsonContent(orderContent, (int)orderResponse.StatusCode);
+
+            // Parse orderId from { "orderId": "..." }
+            Guid orderId;
+            try
+            {
+                var orderJson = System.Text.Json.JsonDocument.Parse(orderContent);
+                var orderIdEl = orderJson.RootElement.TryGetProperty("orderId", out var o) ? o : orderJson.RootElement.GetProperty("OrderId");
+                orderId = Guid.Parse(orderIdEl.GetString()!);
+            }
+            catch
+            {
+                return JsonContent(orderContent, (int)orderResponse.StatusCode);
+            }
+
+            // Get order details (total, serviceFee, restaurantId) for checkout session
+            var getOrderRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
+            if (Request.Headers.TryGetValue("Authorization", out var getOrderAuthHeader))
+                getOrderRequest.Headers.TryAddWithoutValidation("Authorization", getOrderAuthHeader.ToString());
+            var getOrderResponse = await orderClient.SendAsync(getOrderRequest);
+            if (!getOrderResponse.IsSuccessStatusCode)
+                return Ok(new { orderId, checkoutUrl = (string?)null, error = "Order placed but could not load details for payment" });
+
+            var orderDetailContent = await getOrderResponse.Content.ReadAsStringAsync();
+            decimal total = 0, serviceFee = 0;
+            // Reuse restaurantId from earlier check, or get it from order if not set
+            try
+            {
+                var orderDoc = System.Text.Json.JsonDocument.Parse(orderDetailContent);
+                var root = orderDoc.RootElement;
+                total = root.TryGetProperty("total", out var t) ? t.GetDecimal() : root.GetProperty("Total").GetDecimal();
+                serviceFee = root.TryGetProperty("serviceFee", out var s) ? s.GetDecimal() : (root.TryGetProperty("ServiceFee", out s) ? s.GetDecimal() : 0);
+                if (restaurantId == default)
+                {
+                    var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
+                    if (restEl.ValueKind != System.Text.Json.JsonValueKind.Null && restEl.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                        restaurantId = Guid.Parse(restEl.GetString()!);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "PlaceOrder: Could not parse order details for checkout");
+                return Ok(new { orderId, checkoutUrl = (string?)null, error = "Order placed but could not initiate payment" });
+            }
+
+            // Create Stripe Checkout session (destination charge + app fee + manual capture)
+            var baseUrl = _configuration["AppBaseUrl"] ?? Request.Scheme + "://" + Request.Host;
+            var successUrl = baseUrl.TrimEnd('/') + "/orders?payment=success";
+            var cancelUrl = baseUrl.TrimEnd('/') + "/cart?payment=cancelled";
+            var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
+            var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
+            if (Request.Headers.TryGetValue("Authorization", out var checkoutAuthHeader))
+                checkoutRequest.Headers.TryAddWithoutValidation("Authorization", checkoutAuthHeader.ToString());
+            checkoutRequest.Content = System.Net.Http.Json.JsonContent.Create(new
+            {
+                orderId,
+                amount = total,
+                serviceFee,
+                restaurantId,
+                successUrl,
+                cancelUrl
+            });
+
+            var checkoutResponse = await checkoutPaymentClient.SendAsync(checkoutRequest);
+            var checkoutContent = await checkoutResponse.Content.ReadAsStringAsync();
+            if (checkoutResponse.IsSuccessStatusCode)
+            {
+                var checkoutDoc = System.Text.Json.JsonDocument.Parse(checkoutContent);
+                var url = checkoutDoc.RootElement.TryGetProperty("url", out var u) ? u.GetString() : null;
+                return Ok(new { orderId, checkoutUrl = url });
+            }
+
+            // Extract user-friendly error message from response
+            string? errorMessage = null;
+            if (checkoutResponse.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                try
+                {
+                    var errorDoc = System.Text.Json.JsonDocument.Parse(checkoutContent);
+                    if (errorDoc.RootElement.TryGetProperty("message", out var msgEl))
+                        errorMessage = msgEl.GetString();
+                    else if (errorDoc.RootElement.TryGetProperty("error", out var errEl))
+                        errorMessage = errEl.GetString();
+                }
+                catch
+                {
+                    // If parsing fails, use the raw content (truncated)
+                    errorMessage = checkoutContent.Length > 200 ? checkoutContent.Substring(0, 200) + "..." : checkoutContent;
+                }
+            }
+
+            // Default user-friendly message if no specific error was extracted
+            errorMessage ??= "This restaurant is not set up to accept payments yet. Your order has been placed, but payment cannot be processed. Please contact the restaurant directly.";
+
+            _logger.LogWarning("PlaceOrder: Checkout session failed for order {OrderId}: {Content}", orderId, checkoutContent);
+            return Ok(new { orderId, checkoutUrl = (string?)null, error = errorMessage });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error placing order");
             return StatusCode(500, new { error = "Failed to place order" });
+        }
+    }
+
+    [HttpGet("payments/vendor/onboarding-status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorStripeOnboardingStatus()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/payment/vendor/onboarding-status");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor Stripe onboarding status");
+            return StatusCode(500, new { error = "Failed to fetch onboarding status" });
+        }
+    }
+
+    [HttpGet("payments/restaurant/{restaurantId}/payment-ready")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CheckRestaurantPaymentReady(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            var response = await client.GetAsync($"/api/payment/restaurant/{restaurantId}/payment-ready");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking restaurant payment readiness");
+            return StatusCode(500, new { error = "Failed to check payment readiness" });
+        }
+    }
+
+    [HttpPost("payments/vendor/connect-link")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CreateVendorStripeConnectLink()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync("/api/payment/vendor/connect-link", null);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating vendor Stripe connect link");
+            return StatusCode(500, new { error = "Failed to create Stripe connect link" });
         }
     }
 
@@ -1047,8 +1471,12 @@ public class WebBffController : ControllerBase
 
     [HttpPost("vendor/restaurants")]
     [Authorize(Roles = "Vendor,Admin")]
-    public async Task<IActionResult> CreateRestaurant([FromBody] object request)
+    public async Task<IActionResult> CreateRestaurant([FromBody] object? request)
     {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request body is required" });
+        }
         try
         {
             var client = _httpClientFactory.CreateClient("RestaurantService");
@@ -1132,6 +1560,33 @@ public class WebBffController : ControllerBase
         {
             _logger.LogError(ex, "Error fetching all restaurants");
             return StatusCode(500, new { error = "Failed to fetch all restaurants" });
+        }
+    }
+
+    [HttpPost("admin/restaurants")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminCreateRestaurant([FromBody] object? request)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request body is required" });
+        }
+        try
+        {
+            var client = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/restaurant", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating restaurant (admin)");
+            return StatusCode(500, new { error = "Failed to create restaurant" });
         }
     }
 
@@ -1452,12 +1907,25 @@ public class WebBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("IdentityService");
             var response = await client.PostAsJsonAsync("/api/auth/register", request);
             var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("IdentityService registration failed: Status={StatusCode}, Content={Content}",
+                    response.StatusCode, content);
+            }
+
             return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error during registration - IdentityService may be unreachable. URL: {Url}",
+                _configuration["Services:IdentityService"] ?? "http://identity-service:5000");
+            return StatusCode(500, new { error = "Registration service unavailable", message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during registration");
-            return StatusCode(500, new { error = "Failed to register" });
+            _logger.LogError(ex, "Error during registration: {Message}", ex.Message);
+            return StatusCode(500, new { error = "Failed to register", message = ex.Message });
         }
     }
 
@@ -1578,6 +2046,56 @@ public class WebBffController : ControllerBase
             return StatusCode(500, new { error = "Failed to logout" });
         }
     }
+
+    [HttpPost("auth/forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { success = false, message = "Email is required." });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/forgot-password", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Forgot password: IdentityService unreachable. Ensure it is running (e.g. port 5000).");
+            return StatusCode(503, new { success = false, message = "Authentication service is temporarily unavailable. Please try again later." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during forgot password");
+            return StatusCode(500, new { success = false, message = "Failed to process request. Please try again later." });
+        }
+    }
+
+    [HttpPost("auth/reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(new { success = false, message = "Email, token, and new password are required." });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/reset-password", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Reset password: IdentityService unreachable. Ensure it is running (e.g. port 5000).");
+            return StatusCode(503, new { success = false, message = "Authentication service is temporarily unavailable. Please try again later." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during reset password");
+            return StatusCode(500, new { success = false, message = "Failed to process request. Please try again later." });
+        }
+    }
 }
 
 // ----------------------------
@@ -1608,6 +2126,8 @@ public record PlaceOrderRequest(
 public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
 public record RefreshTokenRequest(string RefreshToken);
+public record ForgotPasswordRequest(string Email);
+public record ResetPasswordRequest(string Token, string Email, string NewPassword, string ConfirmPassword);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
 public record UpdateOrderStatusRequest(string Status, string? Notes);

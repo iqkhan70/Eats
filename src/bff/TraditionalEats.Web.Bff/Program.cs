@@ -2,6 +2,7 @@ using TraditionalEats.BuildingBlocks.Configuration;
 using TraditionalEats.BuildingBlocks.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Logging;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,7 +21,7 @@ builder.Services.AddRedis(builder.Configuration);
 builder.Services.AddScoped<TraditionalEats.BuildingBlocks.Redis.ICartSessionService, TraditionalEats.BuildingBlocks.Redis.CartSessionService>();
 
 // JWT Authentication (optional - allows extracting customerId from token)
-var jwtSecret = builder.Configuration["Jwt:Secret"] 
+var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
 
@@ -29,7 +30,7 @@ var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
 
 // Log JWT configuration for debugging
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger<Program>();
-logger.LogInformation("BFF JWT Configuration - Issuer: {Issuer}, Audience: {Audience}, Secret Length: {SecretLength}", 
+logger.LogInformation("BFF JWT Configuration - Issuer: {Issuer}, Audience: {Audience}, Secret Length: {SecretLength}",
     jwtIssuer, jwtAudience, jwtSecret?.Length ?? 0);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -72,28 +73,111 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Add CORS for Blazor WebAssembly
-// Allow connections from localhost and any IP address (for mobile browser access)
+// Allow connections from localhost (HTTP and HTTPS), configured domains, and any IP address (for mobile browser access)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5300", 
-                "http://localhost:5301", 
-                "http://127.0.0.1:5300", 
-                "http://127.0.0.1:5301")
+        // Get allowed domains from configuration (comma-separated)
+        var allowedDomains = builder.Configuration["Cors:AllowedOrigins"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+        var appBaseUrl = builder.Configuration["AppSettings:BaseUrl"] ?? builder.Configuration["AppBaseUrl"];
+        
+        // Build origins list: localhost + configured domains
+        var origins = new List<string>
+        {
+            "http://localhost:5300",
+            "http://localhost:5301",
+            "https://localhost:5300",
+            "https://localhost:5301",
+            "http://127.0.0.1:5300",
+            "http://127.0.0.1:5301",
+            "https://127.0.0.1:5300",
+            "https://127.0.0.1:5301"
+        };
+        
+        // Add configured domains (with and without www, http and https)
+        foreach (var domain in allowedDomains)
+        {
+            if (!string.IsNullOrWhiteSpace(domain))
+            {
+                var cleanDomain = domain.Trim().TrimEnd('/');
+                // Remove protocol if present
+                cleanDomain = cleanDomain.Replace("https://", "").Replace("http://", "");
+                origins.Add($"https://{cleanDomain}");
+                origins.Add($"http://{cleanDomain}");
+                // Also add www variant if not present
+                if (!cleanDomain.StartsWith("www."))
+                {
+                    origins.Add($"https://www.{cleanDomain}");
+                    origins.Add($"http://www.{cleanDomain}");
+                }
+            }
+        }
+        
+        // Add domain from APP_BASE_URL if set
+        if (!string.IsNullOrWhiteSpace(appBaseUrl))
+        {
+            try
+            {
+                var baseUri = new Uri(appBaseUrl);
+                var host = baseUri.Host;
+                origins.Add($"{baseUri.Scheme}://{host}");
+                if (!host.StartsWith("www."))
+                {
+                    origins.Add($"{baseUri.Scheme}://www.{host}");
+                }
+            }
+            catch { /* Invalid URL, skip */ }
+        }
+        
+        policy.WithOrigins(origins.Distinct().ToArray())
               .SetIsOriginAllowed(origin =>
               {
                   // Allow any origin that matches the pattern (for IP access from mobile)
-                  // This allows http://192.168.x.x:5300, http://10.x.x.x:5300, etc.
+                  // This allows http(s)://localhost:5300|5301 and http://192.168.x.x:5300, etc.
                   var uri = new Uri(origin);
-                  return uri.Scheme == "http" && 
-                         (uri.Host == "localhost" || 
-                          uri.Host == "127.0.0.1" || 
-                          uri.Host.StartsWith("192.168.") ||
-                          uri.Host.StartsWith("10.") ||
-                          uri.Host.StartsWith("172.")) &&
-                         (uri.Port == 5300 || uri.Port == 5301);
+
+                  // Allow configured domains (check both with and without www)
+                  var host = uri.Host;
+                  var hostWithoutWww = host.StartsWith("www.") ? host.Substring(4) : host;
+                  foreach (var allowedDomain in allowedDomains)
+                  {
+                      if (string.IsNullOrWhiteSpace(allowedDomain)) continue;
+                      var cleanDomain = allowedDomain.Trim().Replace("https://", "").Replace("http://", "").TrimEnd('/');
+                      var cleanDomainWithoutWww = cleanDomain.StartsWith("www.") ? cleanDomain.Substring(4) : cleanDomain;
+                      if (host == cleanDomain || host == $"www.{cleanDomain}" || 
+                          hostWithoutWww == cleanDomain || hostWithoutWww == cleanDomainWithoutWww)
+                      {
+                          return true;
+                      }
+                  }
+                  
+                  // Also check APP_BASE_URL domain
+                  if (!string.IsNullOrWhiteSpace(appBaseUrl))
+                  {
+                      try
+                      {
+                          var baseUri = new Uri(appBaseUrl);
+                          var baseHost = baseUri.Host;
+                          var baseHostWithoutWww = baseHost.StartsWith("www.") ? baseHost.Substring(4) : baseHost;
+                          if (host == baseHost || host == $"www.{baseHost}" || 
+                              hostWithoutWww == baseHost || hostWithoutWww == baseHostWithoutWww)
+                          {
+                              return true;
+                          }
+                      }
+                      catch { /* Invalid URL, skip */ }
+                  }
+
+                  // Allow localhost and private IPs on dev ports
+                  var validHost = uri.Host == "localhost" ||
+                                 uri.Host == "127.0.0.1" ||
+                                 uri.Host.StartsWith("192.168.") ||
+                                 uri.Host.StartsWith("10.") ||
+                                 uri.Host.StartsWith("172.");
+                  var validPort = uri.Port == 5300 || uri.Port == 5301;
+                  var validScheme = uri.Scheme == "http" || uri.Scheme == "https";
+                  return validScheme && validHost && validPort;
               })
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -154,17 +238,45 @@ builder.Services.AddHttpClient("PromotionService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:PromotionService"] ?? "http://localhost:5008");
 });
 
-    builder.Services.AddHttpClient("ReviewService", client =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
-    });
+builder.Services.AddHttpClient("ReviewService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
+});
 
-    builder.Services.AddHttpClient("OrderService", client =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");
-    });
+builder.Services.AddHttpClient("OrderService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");
+});
 
 var app = builder.Build();
+
+// Global exception handler for API endpoints - always return JSON
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Unhandled exception in BFF");
+
+        // Only return JSON for API endpoints
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            // Don't modify response if it has already started
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = 500;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new { error = "An internal server error occurred", message = ex.Message });
+            }
+            return;
+        }
+        throw; // Re-throw for non-API endpoints
+    }
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -182,8 +294,9 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Root endpoint for testing
-app.MapGet("/", () => new { 
-    service = "TraditionalEats.Web.Bff", 
+app.MapGet("/", () => new
+{
+    service = "TraditionalEats.Web.Bff",
     status = "running",
     endpoints = new[] {
         "/api/WebBff/health",

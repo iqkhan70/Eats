@@ -35,7 +35,17 @@
     else if (orders.Any())
     {
         <RadzenStack Gap="1rem">
-            @foreach (var order in orders)
+            <!-- Filter Tabs -->
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                <RadzenButton Text="All" Variant="@(filter == "all" ? Variant.Filled : Variant.Flat)"
+                    Size="ButtonSize.Small" Click="@(() => filter = "all")" />
+                <RadzenButton Text="Active" Variant="@(filter == "active" ? Variant.Filled : Variant.Flat)"
+                    Size="ButtonSize.Small" Click="@(() => filter = "active")" />
+                <RadzenButton Text="Past Orders" Variant="@(filter == "past" ? Variant.Filled : Variant.Flat)"
+                    Size="ButtonSize.Small" Click="@(() => filter = "past")" />
+            </RadzenStack>
+
+            @foreach (var order in GetFilteredOrders())
             {
                 <RadzenCard>
                     <RadzenStack Gap="1rem">
@@ -131,6 +141,7 @@
     private bool loading = true;
     private bool isAuthenticated = false;
     private List<OrderDto> orders = new();
+    private string filter = "all"; // "all", "active", "past"
 
     protected override async Task OnInitializedAsync()
     {
@@ -203,6 +214,16 @@
     private void ViewOrderDetails(Guid orderId)
     {
         NavigationManager.NavigateTo($"/orders/{orderId}");
+    }
+
+    private IEnumerable<OrderDto> GetFilteredOrders()
+    {
+        return filter switch
+        {
+            "past" => orders.Where(o => new[] { "Delivered", "Cancelled", "Refunded" }.Contains(o.Status)),
+            "active" => orders.Where(o => !new[] { "Delivered", "Cancelled", "Refunded" }.Contains(o.Status)),
+            _ => orders
+        };
     }
 
     private string GetStatusStyle(string status)

@@ -15,6 +15,7 @@ public class Order
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? EstimatedDeliveryAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
+    public DateTime? PaidAt { get; set; }
     public string? DeliveryAddress { get; set; }
     public string? SpecialInstructions { get; set; }
     public string? IdempotencyKey { get; set; }

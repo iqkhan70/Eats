@@ -1,0 +1,373 @@
+# TraditionalEats – DigitalOcean App Platform spec
+# HTTPS at the edge (App Platform ingress); services use HTTP internally.
+# Before using: run ./deploy.sh build to push images to DOCR, then set REGISTRY below.
+# Replace YOUR_REGISTRY (e.g. registry.digitalocean.com/your-registry-name) and repo/branch.
+
+name: traditionaleats
+region: nyc
+
+# Optional: managed databases (create in DO control panel and set cluster_name, or use env vars for external DB)
+# databases:
+#   - name: db
+#     engine: MYSQL
+#     version: "8"
+#     production: false
+#   - name: cache
+#     engine: REDIS
+#     version: "7"
+#     production: false
+
+# Ingress: route / to edge (WebApp), /api/WebBff to web-bff, /api/MobileBff to mobile-bff
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api/WebBff
+      component:
+        name: web-bff
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /api/MobileBff
+      component:
+        name: mobile-bff
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: edge
+
+# Edge: Nginx + Blazor WebApp static (only public-facing UI)
+services:
+  - name: edge
+    image:
+      registry_type: DOCR
+      registry: ""  # e.g. registry.digitalocean.com/your-registry
+      repository: edge
+      tag: latest
+    http_port: 80
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: APP_BASE_URL
+        value: ""  # Set in DO dashboard or here, e.g. https://traditionaleats-xxx.ondigitalocean.app
+        type: GENERAL
+        scope: RUN_AND_BUILD_TIME
+
+  # Web BFF (public via ingress /api/WebBff)
+  - name: web-bff
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: web-bff
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__IdentityService
+        value: ""  # Set to identity-service URL in DO (bindable or same app URL base)
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__CustomerService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__OrderService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__CatalogService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__NotificationService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__RestaurantService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__PaymentService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__ChatService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Jwt__Secret
+        value: ""  # Set as SECRET in DO dashboard
+        type: SECRET
+        scope: RUN_TIME
+      - key: Jwt__Issuer
+        value: TraditionalEats
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Jwt__Audience
+        value: TraditionalEats
+        type: GENERAL
+        scope: RUN_TIME
+
+  # Mobile BFF (public via ingress /api/MobileBff)
+  - name: mobile-bff
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: mobile-bff
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__IdentityService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__CustomerService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__OrderService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__RestaurantService
+        value: ""
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Jwt__Secret
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+      - key: Jwt__Issuer
+        value: TraditionalEats
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Jwt__Audience
+        value: TraditionalEats
+        type: GENERAL
+        scope: RUN_TIME
+
+  # Microservices (no ingress rules – reachable only by BFFs via their default URLs)
+  - name: identity-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: identity-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__IdentityDb
+        value: ""  # From DO database or external MySQL
+        type: SECRET
+        scope: RUN_TIME
+      - key: Jwt__Secret
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+      - key: AppSettings__BaseUrl
+        value: ""  # Public app URL for reset-password links
+        type: GENERAL
+        scope: RUN_TIME
+      - key: Services__NotificationService
+        value: ""  # notification-service URL
+        type: GENERAL
+        scope: RUN_TIME
+
+  - name: customer-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: customer-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__CustomerDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+
+  - name: order-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: order-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__OrderDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+
+  - name: restaurant-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: restaurant-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__RestaurantDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+
+  - name: catalog-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: catalog-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__CatalogDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+
+  - name: notification-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: notification-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__NotificationDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+      - key: Email__Enabled
+        value: "true"
+        type: GENERAL
+        scope: RUN_TIME
+
+  - name: payment-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: payment-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__PaymentDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+
+  - name: chat-service
+    image:
+      registry_type: DOCR
+      registry: ""
+      repository: chat-service
+      tag: latest
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: ASPNETCORE_URLS
+        value: "http://+:8080"
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+        type: GENERAL
+        scope: RUN_TIME
+      - key: ConnectionStrings__ChatDb
+        value: ""
+        type: SECRET
+        scope: RUN_TIME
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+    disabled: false

@@ -10,7 +10,7 @@ public interface IGeocodingService
     /// <param name="address">Full address string (e.g., "123 Main St, New York, NY 10001")</param>
     /// <returns>Tuple of (Latitude, Longitude) or null if geocoding fails</returns>
     Task<(double Latitude, double Longitude)?> GeocodeAddressAsync(string address);
-    
+
     /// <summary>
     /// Geocode using ZIP code (fallback method)
     /// </summary>
@@ -96,16 +96,18 @@ public class GeocodingService : IGeocodingService
         if (string.IsNullOrWhiteSpace(address))
             return null;
 
-        // Try to extract 5-digit ZIP code (US format)
-        // Pattern: 5 digits, optionally followed by - and 4 more digits
+        // US ZIP is almost always at the END of the address (e.g. "...Overland Park KS, 66221").
+        // Avoid taking a street number (e.g. "15120 Perry Street...") by using the LAST match.
+        // 1) Standard US format: word boundary, 5 digits, optional -4 digits; take last match
         var zipPattern = @"\b\d{5}(?:-\d{4})?\b";
-        var match = System.Text.RegularExpressions.Regex.Match(address, zipPattern);
-        
-        if (match.Success)
-        {
-            // Return just the 5-digit ZIP code
-            return match.Value.Substring(0, 5);
-        }
+        var matches = System.Text.RegularExpressions.Regex.Matches(address, zipPattern);
+        if (matches.Count > 0)
+            return matches[matches.Count - 1].Value.Substring(0, 5);
+
+        // 2) Fallback: any standalone 5-digit number (not part of 6+ digits); take last occurrence
+        var standaloneFive = System.Text.RegularExpressions.Regex.Matches(address, @"\d{5}(?!\d)");
+        if (standaloneFive.Count > 0)
+            return standaloneFive[standaloneFive.Count - 1].Value;
 
         return null;
     }

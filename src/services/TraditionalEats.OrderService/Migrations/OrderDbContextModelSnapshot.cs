@@ -118,6 +118,9 @@ namespace TraditionalEats.OrderService.Migrations
                     b.Property<string>("IdempotencyKey")
                         .HasColumnType("varchar(255)");
 
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<Guid>("RestaurantId")
                         .HasColumnType("char(36)");
 

@@ -58,6 +58,9 @@ namespace TraditionalEats.PaymentService.Migrations
                     b.Property<string>("ProviderTransactionId")
                         .HasColumnType("longtext");
 
+                    b.Property<decimal>("ServiceFee")
+                        .HasColumnType("decimal(65,30)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -112,6 +115,40 @@ namespace TraditionalEats.PaymentService.Migrations
                     b.HasIndex("PaymentIntentId");
 
                     b.ToTable("Refunds");
+                });
+
+            modelBuilder.Entity("TraditionalEats.PaymentService.Entities.Vendor", b =>
+                {
+                    b.Property<Guid>("VendorId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("StripeAccountId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("StripeOnboardingStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("VendorId");
+
+                    b.HasIndex("StripeAccountId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("Vendors");
                 });
 #pragma warning restore 612, 618
         }

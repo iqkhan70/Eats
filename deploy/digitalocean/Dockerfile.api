@@ -1,0 +1,27 @@
+# Generic Dockerfile for .NET API (services, BFFs)
+# Build: docker build -f deploy/digitalocean/Dockerfile.api --build-arg PROJECT_PATH=src/services/TraditionalEats.IdentityService/TraditionalEats.IdentityService.csproj --build-arg PROJECT_NAME=TraditionalEats.IdentityService -t identity-service .
+# PROJECT_PATH = path to .csproj relative to repo root
+# PROJECT_NAME = assembly name (e.g. TraditionalEats.IdentityService) – set in compose per service
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+ARG PROJECT_PATH
+ARG PROJECT_NAME
+RUN if [ -z "$PROJECT_PATH" ]; then echo "PROJECT_PATH build arg required"; exit 1; fi
+
+# Copy full source first so restore and publish see the same tree (COPY after restore was overwriting obj/ and breaking --no-restore)
+COPY . .
+
+RUN dotnet restore "${PROJECT_PATH}"
+RUN dotnet publish "${PROJECT_PATH}" -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
+
+ARG PROJECT_NAME
+ENV PROJECT_NAME=${PROJECT_NAME}
+RUN echo '#!/bin/sh\nexec dotnet "${PROJECT_NAME}.dll"' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
+EXPOSE 80

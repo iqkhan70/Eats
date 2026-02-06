@@ -11,6 +11,10 @@ public class User
     public DateTime? LastLoginAt { get; set; }
     public int FailedLoginAttempts { get; set; }
     public DateTime? LockedUntil { get; set; }
+    /// <summary>Token for password reset (forgot password flow).</summary>
+    public string? PasswordResetToken { get; set; }
+    /// <summary>Expiry of password reset token (typically 1 hour).</summary>
+    public DateTime? PasswordResetTokenExpiry { get; set; }
 
     public List<UserRole> UserRoles { get; set; } = new();
     public List<RefreshToken> RefreshTokens { get; set; } = new();
