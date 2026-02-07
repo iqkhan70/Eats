@@ -11,7 +11,9 @@ import {
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
 
@@ -19,6 +21,7 @@ const ZIP_REGEX = /^\s*(\d{5})(?:-\d{4})?\s*$/;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [distanceMiles, setDistanceMiles] = useState(25);
@@ -123,7 +126,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
           <Text style={styles.title}>Welcome to TraditionalEats</Text>
           <Text style={styles.subtitle}>
             Discover authentic traditional food
@@ -131,7 +134,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Distance slider: 0–100 miles */}
-        <View style={styles.distanceRow}>
+        <BlurView intensity={80} tint="light" style={styles.distanceRow}>
           <Text style={styles.distanceLabel}>
             Within {Math.round(distanceMiles)} miles
           </Text>
@@ -146,7 +149,7 @@ export default function HomeScreen() {
             maximumTrackTintColor="#e0e0e0"
             thumbTintColor="#6200ee"
           />
-        </View>
+        </BlurView>
 
         {/* Content */}
         <View style={styles.section}>
@@ -156,16 +159,18 @@ export default function HomeScreen() {
             {displayedCategories.map((category) => (
               <TouchableOpacity
                 key={category.id}
-                style={styles.categoryCard}
+                style={styles.categoryCardWrapper}
                 onPress={() => navigateToRestaurants(undefined, category.name)}
                 activeOpacity={0.85}
               >
-                <Ionicons
-                  name={category.icon as any}
-                  size={40}
-                  color="#6200ee"
-                />
-                <Text style={styles.categoryName}>{category.name}</Text>
+                <BlurView intensity={80} tint="light" style={styles.categoryCard}>
+                  <Ionicons
+                    name={category.icon as any}
+                    size={36}
+                    color="#6200ee"
+                  />
+                  <Text style={styles.categoryName}>{category.name}</Text>
+                </BlurView>
               </TouchableOpacity>
             ))}
           </View>
@@ -228,15 +233,13 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  container: { flex: 1, backgroundColor: "transparent" },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 100 },
 
   header: {
     padding: 20,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    backgroundColor: "transparent",
   },
   title: { fontSize: 24, fontWeight: "bold", color: "#333", marginBottom: 4 },
   subtitle: { fontSize: 14, color: "#666" },
@@ -246,9 +249,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
     marginHorizontal: 16,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    overflow: "hidden",
   },
   distanceLabel: { fontSize: 14, color: "#555", marginBottom: 4 },
   slider: { width: "100%", height: 32 },
@@ -265,34 +271,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
+    gap: 12,
+  },
+  categoryCardWrapper: {
+    width: "31%",
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: "hidden",
   },
   categoryCard: {
-    width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 16,
+    padding: 16,
     alignItems: "center",
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    justifyContent: "center",
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   categoryName: {
     marginTop: 8,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     color: "#333",
+    textAlign: "center",
   },
 
   restaurantCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
     marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },

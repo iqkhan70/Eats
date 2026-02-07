@@ -11,7 +11,9 @@ import {
   Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
 
@@ -62,6 +64,7 @@ function getDisplayDistance(
 
 export default function RestaurantsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
 
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -108,23 +111,26 @@ export default function RestaurantsScreen() {
     setDebouncedSearch(query.trim());
   }, []);
 
-  const loadSuggestions = useCallback(async (query: string): Promise<string[]> => {
-    if (!query || query.length < 2) {
-      return [];
-    }
-    try {
-      const response = await api.get<string[]>(
-        "/MobileBff/search-suggestions",
-        {
-          params: { query, maxResults: 10 },
-        },
-      );
-      return response.data;
-    } catch (error: any) {
-      console.error("Error loading suggestions:", error);
-      return [];
-    }
-  }, []);
+  const loadSuggestions = useCallback(
+    async (query: string): Promise<string[]> => {
+      if (!query || query.length < 2) {
+        return [];
+      }
+      try {
+        const response = await api.get<string[]>(
+          "/MobileBff/search-suggestions",
+          {
+            params: { query, maxResults: 10 },
+          },
+        );
+        return response.data;
+      } catch (error: any) {
+        console.error("Error loading suggestions:", error);
+        return [];
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     loadRestaurants();
@@ -316,7 +322,7 @@ export default function RestaurantsScreen() {
     >
       {/* Search Query Indicator - Outside FlatList for better visibility */}
       {debouncedSearch && debouncedSearch.trim() && (
-        <View style={styles.searchIndicator}>
+        <View style={[styles.searchIndicator, { marginTop: insets.top + 10, paddingTop: 12 }]}>
           <Text style={styles.searchIndicatorText}>
             Searching: "{debouncedSearch}"
           </Text>
@@ -393,11 +399,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#e3f2fd",
+    backgroundColor: "rgba(227, 242, 253, 0.8)",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "rgba(25, 118, 210, 0.2)",
   },
   searchIndicatorText: {
     fontSize: 14,

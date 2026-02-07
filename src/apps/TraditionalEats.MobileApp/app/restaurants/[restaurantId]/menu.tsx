@@ -126,6 +126,16 @@ console.log("FIRST ITEM", response.data?.[0]);
     setSelectedCategoryId(categoryId);
   };
 
+  const handleBackPress = useCallback(() => {
+    try {
+      router.back();
+    } catch (error) {
+      console.error('Error navigating back:', error);
+      // Fallback: try to go back using replace if back fails
+      router.replace('/(tabs)/restaurants');
+    }
+  }, [router]);
+
   const addToCart = async (item: MenuItem) => {
     if (!item.isAvailable) return;
 
@@ -156,10 +166,16 @@ console.log("FIRST ITEM", response.data?.[0]);
       await cartService.addItemToCart(cartIdToUse, item.menuItemId, item.name, item.price, 1);
 
       setCurrentCartId(cartIdToUse);
-      Alert.alert('Success', `${item.name} added to cart`);
+      // Use setTimeout to ensure Alert doesn't block navigation
+      setTimeout(() => {
+        Alert.alert('Success', `${item.name} added to cart`);
+      }, 100);
     } catch (error: any) {
       console.error('Error adding to cart:', error);
-      Alert.alert('Error', error.message || 'Failed to add item to cart');
+      // Use setTimeout to ensure Alert doesn't block navigation
+      setTimeout(() => {
+        Alert.alert('Error', error.message || 'Failed to add item to cart');
+      }, 100);
     } finally {
       await new Promise(resolve => setTimeout(resolve, 500));
       isAddingToCartRef.current = false;
@@ -178,8 +194,13 @@ console.log("FIRST ITEM", response.data?.[0]);
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#333" />
+          <TouchableOpacity 
+            onPress={handleBackPress} 
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            disabled={false}
+          >
+            <Ionicons name="chevron-back" size={28} color="#333" />
           </TouchableOpacity>
           <Text style={styles.title}>Menu</Text>
         </View>
@@ -193,8 +214,13 @@ console.log("FIRST ITEM", response.data?.[0]);
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
+        <TouchableOpacity 
+          onPress={handleBackPress} 
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          disabled={false}
+        >
+          <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Menu</Text>
       </View>

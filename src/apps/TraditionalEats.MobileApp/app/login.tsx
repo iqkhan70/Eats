@@ -9,12 +9,15 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authService, LoginCredentials } from "../services/auth";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -37,12 +40,12 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}>
         <TouchableOpacity
           onPress={() => router.push("/(tabs)/profile")}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={24} color="#333" />
+          <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Sign In</Text>
       </View>
@@ -78,10 +81,21 @@ export default function LoginScreen() {
             placeholder="Password"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={!showPassword}
             autoCapitalize="none"
             autoComplete="password"
           />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={styles.eyeIcon}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={showPassword ? "eye-outline" : "eye-off-outline"}
+              size={20}
+              color="#666"
+            />
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -155,6 +169,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 4,
+    marginLeft: 8,
   },
   forgotLink: {
     alignSelf: "flex-end",

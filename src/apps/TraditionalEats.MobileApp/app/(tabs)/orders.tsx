@@ -16,7 +16,9 @@ import {
   Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import BottomSearchBar from "../../components/BottomSearchBar";
@@ -50,6 +52,7 @@ type OrderFilter = "all" | "active" | "past";
 
 export default function OrdersScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ refresh?: string }>();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -234,7 +237,9 @@ export default function OrdersScreen() {
       filtered = filtered.filter((order) => {
         // Search by order ID (full ID and first 8 chars)
         const orderId = (order.orderId || "").toLowerCase();
-        const orderIdShort = order.orderId ? order.orderId.substring(0, 8).toLowerCase() : "";
+        const orderIdShort = order.orderId
+          ? order.orderId.substring(0, 8).toLowerCase()
+          : "";
         // Search by status
         const status = (order.status || "").toLowerCase();
         // Search by delivery address
@@ -243,20 +248,23 @@ export default function OrdersScreen() {
         const itemNames = (order.items || [])
           .map((item) => (item.name || "").toLowerCase())
           .join(" ");
-        
+
         // Check if query matches any field
         // For order ID: check both full ID and first 8 characters
-        const matchesOrderId = 
-          (orderId && orderId.includes(query)) || 
+        const matchesOrderId =
+          (orderId && orderId.includes(query)) ||
           (orderIdShort && orderIdShort.includes(query));
         // For status: exact match or contains
-        const matchesStatus = status === query || (status && status.includes(query));
+        const matchesStatus =
+          status === query || (status && status.includes(query));
         // For address: contains
         const matchesAddress = address && address.includes(query);
         // For items: contains
         const matchesItems = itemNames && itemNames.includes(query);
-        
-        return matchesOrderId || matchesStatus || matchesAddress || matchesItems;
+
+        return (
+          matchesOrderId || matchesStatus || matchesAddress || matchesItems
+        );
       });
     }
 
@@ -331,11 +339,16 @@ export default function OrdersScreen() {
     </View>
   );
 
+  // Tab bar height is typically ~49px + safe area bottom
+  // BottomSearchBar is positioned at insets.bottom + 70, so we need extra padding
+  const tabBarHeight = 49 + insets.bottom;
+  const bottomPadding = tabBarHeight + 80; // Extra space for search bar above tab bar
+  
   return (
     <View style={styles.container}>
       {/* Search Query Indicator */}
       {searchQuery.trim() && (
-        <View style={styles.searchIndicator}>
+        <View style={[styles.searchIndicator, { marginTop: insets.top + 10, paddingTop: 12 }]}>
           <Text style={styles.searchIndicatorText}>
             Searching: "{searchQuery}"
           </Text>
@@ -349,7 +362,7 @@ export default function OrdersScreen() {
       )}
 
       {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
+      <BlurView intensity={80} tint="light" style={[styles.filterContainer, { marginTop: searchQuery.trim() ? 0 : insets.top }]}>
         <TouchableOpacity
           style={[styles.filterTab, filter === "all" && styles.filterTabActive]}
           onPress={() => setFilter("all")}
@@ -395,7 +408,7 @@ export default function OrdersScreen() {
             Past Orders
           </Text>
         </TouchableOpacity>
-      </View>
+      </BlurView>
 
       {filteredAndSortedOrders.length === 0 ? (
         <FlatList
@@ -405,64 +418,70 @@ export default function OrdersScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: bottomPadding }}
+          contentInsetAdjustmentBehavior="automatic"
         />
       ) : (
         <FlatList
           data={filteredAndSortedOrders}
           keyExtractor={(item) => item.orderId}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: bottomPadding }}
+          contentInsetAdjustmentBehavior="automatic"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.orderCard}
+              style={styles.orderCardWrapper}
               onPress={() => router.push(`/orders/${item.orderId}`)}
               activeOpacity={0.85}
             >
-              <View style={styles.orderHeader}>
-                <Text style={styles.orderId}>
-                  Order #{item.orderId.substring(0, 8)}
-                </Text>
-                <Text style={styles.orderDate}>
-                  {new Date(item.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-              </View>
-
-              <View style={styles.orderItems}>
-                {item.items.slice(0, 2).map((orderItem) => (
-                  <Text
-                    key={orderItem.orderItemId}
-                    style={styles.orderItemText}
-                  >
-                    {orderItem.name} x {orderItem.quantity}
+              <BlurView intensity={80} tint="light" style={styles.orderCard}>
+                <View style={styles.orderHeader}>
+                  <Text style={styles.orderId}>
+                    Order #{item.orderId.substring(0, 8)}
                   </Text>
-                ))}
-                {item.items.length > 2 && (
-                  <Text style={styles.orderItemText}>
-                    +{item.items.length - 2} more items
+                  <Text style={styles.orderDate}>
+                    {new Date(item.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </Text>
-                )}
-              </View>
-
-              <View style={styles.orderFooter}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(item.status) },
-                  ]}
-                >
-                  <Text style={styles.orderStatus}>{item.status}</Text>
                 </View>
-                <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
-              </View>
+
+                <View style={styles.orderItems}>
+                  {item.items.slice(0, 2).map((orderItem) => (
+                    <Text
+                      key={orderItem.orderItemId}
+                      style={styles.orderItemText}
+                    >
+                      {orderItem.name} x {orderItem.quantity}
+                    </Text>
+                  ))}
+                  {item.items.length > 2 && (
+                    <Text style={styles.orderItemText}>
+                      +{item.items.length - 2} more items
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.orderFooter}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: getStatusColor(item.status) },
+                    ]}
+                  >
+                    <Text style={styles.orderStatus}>{item.status}</Text>
+                  </View>
+                  <Text style={styles.orderTotal}>
+                    ${item.total.toFixed(2)}
+                  </Text>
+                </View>
+              </BlurView>
             </TouchableOpacity>
           )}
         />
@@ -551,17 +570,16 @@ const styles = StyleSheet.create({
 
   loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 
-
   pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
   searchIndicator: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#e3f2fd",
+    backgroundColor: "rgba(227, 242, 253, 0.8)",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "rgba(25, 118, 210, 0.2)",
   },
   searchIndicatorText: {
     fontSize: 14,
@@ -620,23 +638,29 @@ const styles = StyleSheet.create({
 
   filterContainer: {
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "rgba(255, 255, 255, 0.3)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.3)",
     gap: 8,
+    overflow: "hidden",
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "rgba(245, 245, 245, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   filterTabActive: {
     backgroundColor: "#6200ee",
+    borderColor: "#6200ee",
   },
   filterTabText: {
     fontSize: 14,

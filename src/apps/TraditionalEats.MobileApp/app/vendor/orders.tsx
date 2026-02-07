@@ -19,6 +19,8 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import axios from "axios";
 import { authService } from "../../services/auth";
@@ -425,7 +427,9 @@ export default function VendorOrdersScreen() {
 
     return orders.filter((o) => {
       const orderId = (o.orderId ?? "").toLowerCase();
-      const orderIdShort = o.orderId ? o.orderId.substring(0, 8).toLowerCase() : "";
+      const orderIdShort = o.orderId
+        ? o.orderId.substring(0, 8).toLowerCase()
+        : "";
       const status = (o.status ?? "").toLowerCase();
       const delivery = (o.deliveryAddress ?? "").toLowerCase();
       const notes = (o.specialInstructions ?? "").toLowerCase();
@@ -494,15 +498,16 @@ export default function VendorOrdersScreen() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.container}>
-          <View style={styles.header}>
+          <BlurView intensity={80} tint="light" style={styles.header}>
             <TouchableOpacity
               onPress={() => router.back()}
               style={styles.backButton}
             >
-              <Text style={styles.backButtonText}>← Back</Text>
+              <Ionicons name="chevron-back" size={28} color="#007AFF" />
+              <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
             <Text style={styles.title}>Vendor Orders</Text>
-          </View>
+          </BlurView>
 
           <ScrollView
             style={styles.scrollView}
@@ -610,81 +615,87 @@ export default function VendorOrdersScreen() {
               filteredOrders.map((order) => (
                 <TouchableOpacity
                   key={order.orderId}
-                  style={styles.orderCard}
+                  style={styles.orderCardWrapper}
                   onPress={() => router.push(`/orders/${order.orderId}`)}
                   activeOpacity={0.85}
                 >
-                  <View style={styles.orderHeader}>
-                    <View>
-                      <Text style={styles.orderId}>
-                        Order #{order.orderId.substring(0, 8)}
-                      </Text>
-                      <Text style={styles.orderDate}>
-                        {new Date(order.createdAt).toLocaleString()}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: getStatusColor(order.status) },
-                      ]}
-                    >
-                      <Text style={styles.statusText}>{order.status}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.orderItems}>
-                    {order.items.map((item) => (
-                      <Text key={item.orderItemId} style={styles.orderItem}>
-                        {item.quantity}x {item.name} - $
-                        {item.totalPrice.toFixed(2)}
-                      </Text>
-                    ))}
-                  </View>
-
-                  {order.specialInstructions && (
-                    <View style={styles.specialInstructionsContainer}>
-                      <Text style={styles.specialInstructionsLabel}>
-                        Special Instructions:
-                      </Text>
-                      <Text style={styles.specialInstructionsText}>
-                        {order.specialInstructions}
-                      </Text>
-                    </View>
-                  )}
-
-                  {order.deliveryAddress && (
-                    <Text style={styles.deliveryAddress}>
-                      📍 {order.deliveryAddress}
-                    </Text>
-                  )}
-
-                  <View style={styles.orderFooter}>
-                    <Text style={styles.orderTotal}>
-                      Total: ${order.total.toFixed(2)}
-                    </Text>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.statusButton,
-                        { backgroundColor: getStatusColor(order.status) },
-                        updatingStatus === order.orderId &&
-                          styles.statusButtonDisabled,
-                      ]}
-                      onPress={() => showStatusPicker(order)}
-                      disabled={updatingStatus === order.orderId}
-                      activeOpacity={0.8}
-                    >
-                      {updatingStatus === order.orderId ? (
-                        <ActivityIndicator size="small" color="white" />
-                      ) : (
-                        <Text style={styles.statusButtonText}>
-                          Update Status
+                  <BlurView
+                    intensity={80}
+                    tint="light"
+                    style={styles.orderCard}
+                  >
+                    <View style={styles.orderHeader}>
+                      <View>
+                        <Text style={styles.orderId}>
+                          Order #{order.orderId.substring(0, 8)}
                         </Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
+                        <Text style={styles.orderDate}>
+                          {new Date(order.createdAt).toLocaleString()}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          { backgroundColor: getStatusColor(order.status) },
+                        ]}
+                      >
+                        <Text style={styles.statusText}>{order.status}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.orderItems}>
+                      {order.items.map((item) => (
+                        <Text key={item.orderItemId} style={styles.orderItem}>
+                          {item.quantity}x {item.name} - $
+                          {item.totalPrice.toFixed(2)}
+                        </Text>
+                      ))}
+                    </View>
+
+                    {order.specialInstructions && (
+                      <View style={styles.specialInstructionsContainer}>
+                        <Text style={styles.specialInstructionsLabel}>
+                          Special Instructions:
+                        </Text>
+                        <Text style={styles.specialInstructionsText}>
+                          {order.specialInstructions}
+                        </Text>
+                      </View>
+                    )}
+
+                    {order.deliveryAddress && (
+                      <Text style={styles.deliveryAddress}>
+                        📍 {order.deliveryAddress}
+                      </Text>
+                    )}
+
+                    <View style={styles.orderFooter}>
+                      <Text style={styles.orderTotal}>
+                        Total: ${order.total.toFixed(2)}
+                      </Text>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.statusButton,
+                          { backgroundColor: getStatusColor(order.status) },
+                          updatingStatus === order.orderId &&
+                            styles.statusButtonDisabled,
+                        ]}
+                        onPress={() => showStatusPicker(order)}
+                        disabled={updatingStatus === order.orderId}
+                        activeOpacity={0.8}
+                      >
+                        {updatingStatus === order.orderId ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.statusButtonText}>
+                            Update Status
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </BlurView>
                 </TouchableOpacity>
               ))
             )}
@@ -755,7 +766,10 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E0E0E0",
   },
   backButton: {
+    flexDirection: "row",
+    alignItems: "center",
     marginRight: 16,
+    gap: 4,
   },
   backButtonText: {
     fontSize: 16,
@@ -966,11 +980,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#e3f2fd",
+    backgroundColor: "rgba(227, 242, 253, 0.8)",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "rgba(25, 118, 210, 0.2)",
   },
   searchIndicatorText: {
     fontSize: 14,

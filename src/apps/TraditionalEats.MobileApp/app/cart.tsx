@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { cartService, Cart, CartItem } from "../services/cart";
 import { authService } from "../services/auth";
 import { api } from "../services/api";
@@ -101,9 +102,10 @@ export default function CartScreen() {
   const checkPaymentReadiness = async (restaurantId: string) => {
     try {
       setCheckingPayment(true);
-      const response = await api.get<{ restaurantId: string; paymentReady: boolean }>(
-        `/MobileBff/payments/restaurant/${restaurantId}/payment-ready`
-      );
+      const response = await api.get<{
+        restaurantId: string;
+        paymentReady: boolean;
+      }>(`/MobileBff/payments/restaurant/${restaurantId}/payment-ready`);
       setPaymentReady(response.data.paymentReady ?? true);
     } catch (error: any) {
       console.error("Error checking payment readiness:", error);
@@ -321,15 +323,15 @@ export default function CartScreen() {
   if (!cart || !cart.items || cart.items.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <BlurView intensity={80} tint="light" style={styles.header}>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
           >
-            <Ionicons name="arrow-back" size={24} color="#333" />
+            <Ionicons name="chevron-back" size={28} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Cart</Text>
-        </View>
+        </BlurView>
 
         <ScrollView
           contentContainerStyle={styles.centerContainer}
@@ -375,40 +377,44 @@ export default function CartScreen() {
         }
       >
         {cart.items.map((item) => (
-          <View key={item.cartItemId} style={styles.cartItem}>
-            <View style={styles.itemInfo}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemPrice}>
-                ${item.unitPrice.toFixed(2)} each
+          <View key={item.cartItemId} style={styles.cartItemWrapper}>
+            <BlurView intensity={80} tint="light" style={styles.cartItem}>
+              <View style={styles.itemInfo}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemPrice}>
+                  ${item.unitPrice.toFixed(2)} each
+                </Text>
+              </View>
+
+              <View style={styles.quantityControls}>
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => decreaseQuantity(item)}
+                >
+                  <Ionicons name="remove" size={20} color="#6200ee" />
+                </TouchableOpacity>
+
+                <Text style={styles.quantityText}>{item.quantity}</Text>
+
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={() => increaseQuantity(item)}
+                >
+                  <Ionicons name="add" size={20} color="#6200ee" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.itemTotal}>
+                ${item.totalPrice.toFixed(2)}
               </Text>
-            </View>
-
-            <View style={styles.quantityControls}>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => decreaseQuantity(item)}
-              >
-                <Ionicons name="remove" size={20} color="#6200ee" />
-              </TouchableOpacity>
-
-              <Text style={styles.quantityText}>{item.quantity}</Text>
 
               <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => increaseQuantity(item)}
+                style={styles.removeButton}
+                onPress={() => removeItem(item)}
               >
-                <Ionicons name="add" size={20} color="#6200ee" />
+                <Ionicons name="trash-outline" size={20} color="#c62828" />
               </TouchableOpacity>
-            </View>
-
-            <Text style={styles.itemTotal}>${item.totalPrice.toFixed(2)}</Text>
-
-            <TouchableOpacity
-              style={styles.removeButton}
-              onPress={() => removeItem(item)}
-            >
-              <Ionicons name="trash-outline" size={20} color="#c62828" />
-            </TouchableOpacity>
+            </BlurView>
           </View>
         ))}
 
@@ -461,7 +467,8 @@ export default function CartScreen() {
                 ⚠️ Cannot Place Order
               </Text>
               <Text style={styles.paymentWarningText}>
-                This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.
+                This restaurant is not set up to accept payments yet. Please
+                contact the restaurant directly or try again later.
               </Text>
             </View>
           </View>
@@ -518,11 +525,19 @@ export default function CartScreen() {
         <TouchableOpacity
           style={[
             styles.placeOrderButton,
-            (placingOrder || !deliveryAddress.trim() || !isAuthenticated || !paymentReady) &&
+            (placingOrder ||
+              !deliveryAddress.trim() ||
+              !isAuthenticated ||
+              !paymentReady) &&
               styles.placeOrderButtonDisabled,
           ]}
           onPress={placeOrder}
-          disabled={placingOrder || !deliveryAddress.trim() || !isAuthenticated || !paymentReady}
+          disabled={
+            placingOrder ||
+            !deliveryAddress.trim() ||
+            !isAuthenticated ||
+            !paymentReady
+          }
         >
           {placingOrder ? (
             <ActivityIndicator color="#fff" />
@@ -538,7 +553,7 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  container: { flex: 1, backgroundColor: "transparent" },
 
   centerContainer: {
     flexGrow: 1,
@@ -563,18 +578,19 @@ const styles = StyleSheet.create({
 
   content: { flex: 1, padding: 16 },
 
+  cartItemWrapper: {
+    marginBottom: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
   cartItem: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 16,
     padding: 12,
-    marginBottom: 10,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
 
   itemInfo: { flex: 1, marginRight: 12 },
@@ -624,10 +640,13 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 18, fontWeight: "bold", color: "#6200ee" },
 
   deliverySection: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    overflow: "hidden",
   },
   deliveryLabel: {
     fontSize: 14,

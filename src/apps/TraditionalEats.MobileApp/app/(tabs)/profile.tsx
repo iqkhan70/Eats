@@ -1,11 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authService } from '../../services/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -107,7 +110,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
     <ScrollView style={styles.scrollView}>
-      <View style={styles.header}>
+      <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}>
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={48} color="#fff" />
         </View>
@@ -124,7 +127,7 @@ export default function ProfileScreen() {
             <Text style={styles.userEmail}>Sign in to access your account</Text>
           </>
         )}
-      </View>
+      </BlurView>
 
       {isAuthenticated ? (
         <>
@@ -183,18 +186,20 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </>
       ) : (
-        <View style={styles.menuSection}>
+        <BlurView intensity={80} tint="light" style={styles.menuSection}>
           {/* ✅ Optional: make the whole menu list still visible but guarded.
               For now, just show sign in/up actions. */}
-          <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/login')}>
-            <Ionicons name="log-in-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.loginButtonText}>Sign In</Text>
+          <TouchableOpacity style={styles.loginButtonWrapper} onPress={() => router.push('/login')}>
+            <BlurView intensity={80} tint="dark" style={styles.loginButton}>
+              <Ionicons name="log-in-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.loginButtonText}>Sign In</Text>
+            </BlurView>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.registerButton} onPress={() => router.push('/register')}>
             <Text style={styles.registerButtonText}>Don't have an account? Sign Up</Text>
           </TouchableOpacity>
-        </View>
+        </BlurView>
       )}
     </ScrollView>
     </View>
@@ -223,7 +228,16 @@ const styles = StyleSheet.create({
   userName: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
   userEmail: { fontSize: 14, color: 'rgba(255, 255, 255, 0.85)' },
 
-  menuSection: { backgroundColor: '#fff', marginTop: 16, paddingVertical: 8 },
+  menuSection: { 
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', 
+    marginTop: 16, 
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
 
   menuItem: {
     flexDirection: 'row',
@@ -257,11 +271,15 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: { fontSize: 16, fontWeight: '600', color: '#d32f2f' },
 
-  loginButton: {
+  loginButtonWrapper: {
     margin: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  loginButton: {
     padding: 16,
-    backgroundColor: '#6200ee',
-    borderRadius: 8,
+    backgroundColor: 'rgba(98, 0, 238, 0.8)',
+    borderRadius: 12,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',

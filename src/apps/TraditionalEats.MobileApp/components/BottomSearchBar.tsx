@@ -207,14 +207,18 @@ export default function BottomSearchBar({
         style={[
           styles.pillContainer,
           {
-            bottom: insets.bottom + 20, // Lower position, closer to tab bar
+            bottom: insets.bottom + 70, // Position above tab bar (tab bar is ~49px + padding)
             opacity: pillOpacity,
             height: pillHeight,
           },
         ]}
-        pointerEvents={isExpanded ? "none" : "auto"}
+        pointerEvents={isExpanded ? "none" : "box-none"}
       >
-        <Pressable onPress={handleExpand} style={styles.pill}>
+        <Pressable 
+          onPress={handleExpand} 
+          style={styles.pill}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Ionicons name="search" size={20} color="#666" />
           <Text style={styles.pillText}>{placeholder}</Text>
         </Pressable>
@@ -373,8 +377,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    zIndex: 1000,
-    overflow: "hidden",
+    zIndex: 999, // Lower than modal but high enough to be above content
+    overflow: "visible", // Allow touches to pass through empty areas
   },
   pill: {
     flexDirection: "row",

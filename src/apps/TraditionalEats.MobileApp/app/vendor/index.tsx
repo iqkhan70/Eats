@@ -213,7 +213,7 @@ export default function VendorDashboardScreen() {
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Restaurants</Text>
         <View style={styles.headerButtons}>
