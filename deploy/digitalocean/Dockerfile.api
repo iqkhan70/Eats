@@ -3,7 +3,7 @@
 # PROJECT_PATH = path to .csproj relative to repo root
 # PROJECT_NAME = assembly name (e.g. TraditionalEats.IdentityService) – set in compose per service
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 ARG PROJECT_PATH
@@ -16,7 +16,7 @@ COPY . .
 RUN dotnet restore "${PROJECT_PATH}"
 RUN dotnet publish "${PROJECT_PATH}" -c Release -o /app/publish --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 

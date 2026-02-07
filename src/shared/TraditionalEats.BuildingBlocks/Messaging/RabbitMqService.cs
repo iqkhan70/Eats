@@ -17,7 +17,6 @@ public class RabbitMqService : IMessagePublisher, IDisposable
     private readonly IConnection? _connection;
     private readonly IModel? _channel;
     private readonly ILogger<RabbitMqService> _logger;
-    private readonly bool _isConnected;
 
     public RabbitMqService(IConfiguration configuration, ILogger<RabbitMqService> logger)
     {
@@ -37,7 +36,6 @@ public class RabbitMqService : IMessagePublisher, IDisposable
 
             connection = factory.CreateConnection();
             channel = connection.CreateModel();
-            _isConnected = true;
             _logger.LogInformation("RabbitMQ connection established to {HostName}:{Port}", factory.HostName, factory.Port);
         }
         catch (Exception ex)
@@ -45,7 +43,6 @@ public class RabbitMqService : IMessagePublisher, IDisposable
             _logger.LogWarning(ex, "Failed to connect to RabbitMQ. Message publishing will be disabled. HostName={HostName}, UserName={UserName}", 
                 configuration["RabbitMQ:HostName"] ?? "localhost",
                 configuration["RabbitMQ:UserName"] ?? "guest");
-            _isConnected = false;
             // Don't throw - allow service to start without RabbitMQ
         }
 
@@ -55,6 +52,12 @@ public class RabbitMqService : IMessagePublisher, IDisposable
 
     public Task PublishAsync<T>(string exchange, string routingKey, T message, CancellationToken cancellationToken = default)
     {
+        if (_channel == null)
+        {
+            _logger.LogWarning("RabbitMQ channel is not available. Message to {Exchange} with routing key {RoutingKey} will not be published.", exchange, routingKey);
+            return Task.CompletedTask;
+        }
+
         try
         {
             _channel.ExchangeDeclare(exchange, ExchangeType.Topic, durable: true);

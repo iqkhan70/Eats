@@ -1,7 +1,7 @@
 # Edge: Blazor WebApp (static) + Nginx. HTTPS at edge, proxy /api to BFFs (internal HTTP).
 # Build from repo root: docker build -f deploy/digitalocean/Dockerfile.edge --build-arg API_BASE_URL=https://yourdomain.com/api/ -t edge .
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 ARG API_BASE_URL

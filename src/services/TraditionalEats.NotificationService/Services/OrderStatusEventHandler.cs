@@ -12,11 +12,12 @@ namespace TraditionalEats.NotificationService.Services;
 
 public class OrderStatusEventHandler : BackgroundService
 {
-    private readonly IConnection _connection;
-    private readonly IModel _channel;
+    private IConnection? _connection;
+    private IModel? _channel;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<OrderStatusEventHandler> _logger;
     private readonly IConfiguration _configuration;
+    private readonly ConnectionFactory _factory;
 
     public OrderStatusEventHandler(
         IConfiguration configuration,
@@ -27,7 +28,7 @@ public class OrderStatusEventHandler : BackgroundService
         _serviceProvider = serviceProvider;
         _logger = logger;
 
-        var factory = new ConnectionFactory
+        _factory = new ConnectionFactory
         {
             HostName = configuration["RabbitMQ:HostName"] ?? "localhost",
             Port = int.Parse(configuration["RabbitMQ:Port"] ?? "5672"),
@@ -35,54 +36,105 @@ public class OrderStatusEventHandler : BackgroundService
             Password = configuration["RabbitMQ:Password"] ?? "guest"
         };
 
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
+        // Try to connect, but don't fail if RabbitMQ is unavailable
+        TryConnect();
+    }
 
-        // Declare exchange and queue
-        _channel.ExchangeDeclare("tradition-eats", ExchangeType.Topic, durable: true);
-        var queueName = _channel.QueueDeclare("notification-service-order-status", durable: true, exclusive: false, autoDelete: false).QueueName;
-        _channel.QueueBind(queueName, "tradition-eats", "order.status.changed", null);
-        _channel.BasicQos(0, 1, false);
+    private void TryConnect()
+    {
+        try
+        {
+            _connection = _factory.CreateConnection();
+            _channel = _connection.CreateModel();
+
+            // Declare exchange and queue
+            _channel.ExchangeDeclare("tradition-eats", ExchangeType.Topic, durable: true);
+            var queueName = _channel.QueueDeclare("notification-service-order-status", durable: true, exclusive: false, autoDelete: false).QueueName;
+            _channel.QueueBind(queueName, "tradition-eats", "order.status.changed", null);
+            _channel.BasicQos(0, 1, false);
+
+            _logger.LogInformation("RabbitMQ connection established for OrderStatusEventHandler");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to connect to RabbitMQ. Order status event handling will be disabled. HostName={HostName}, Port={Port}", 
+                _factory.HostName, _factory.Port);
+            // Don't throw - allow service to start without RabbitMQ
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var consumer = new EventingBasicConsumer(_channel);
-        consumer.Received += async (model, ea) =>
+        // If RabbitMQ is not available, wait and retry periodically
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var body = ea.Body.ToArray();
-            var message = Encoding.UTF8.GetString(body);
-            var routingKey = ea.RoutingKey;
+            if (_channel == null || _connection == null || !_connection.IsOpen)
+            {
+                _logger.LogInformation("RabbitMQ not available. Retrying connection in 30 seconds...");
+                await Task.Delay(30000, stoppingToken);
+                TryConnect();
+                continue;
+            }
 
             try
             {
-                _logger.LogInformation("Received message: {RoutingKey}, {Message}", routingKey, message);
-
-                if (routingKey == "order.status.changed")
+                var consumer = new EventingBasicConsumer(_channel);
+                consumer.Received += async (model, ea) =>
                 {
-                    var statusChangedEvent = JsonSerializer.Deserialize<OrderStatusChangedEvent>(message);
-                    if (statusChangedEvent != null)
+                    if (_channel == null) return;
+
+                    var body = ea.Body.ToArray();
+                    var message = Encoding.UTF8.GetString(body);
+                    var routingKey = ea.RoutingKey;
+
+                    try
                     {
-                        await HandleOrderStatusChangedAsync(statusChangedEvent);
+                        _logger.LogInformation("Received message: {RoutingKey}, {Message}", routingKey, message);
+
+                        if (routingKey == "order.status.changed")
+                        {
+                            var statusChangedEvent = JsonSerializer.Deserialize<OrderStatusChangedEvent>(message);
+                            if (statusChangedEvent != null)
+                            {
+                                await HandleOrderStatusChangedAsync(statusChangedEvent);
+                            }
+                        }
+
+                        _channel.BasicAck(ea.DeliveryTag, false);
                     }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error processing message: {Message}", message);
+                        if (_channel != null && _channel.IsOpen)
+                        {
+                            _channel.BasicNack(ea.DeliveryTag, false, true); // Requeue on error
+                        }
+                    }
+                };
+
+                _channel.BasicConsume("notification-service-order-status", false, consumer);
+                _logger.LogInformation("OrderStatusEventHandler started, waiting for messages...");
+
+                // Keep running until cancellation or connection lost
+                while (!stoppingToken.IsCancellationRequested && _connection != null && _connection.IsOpen && _channel != null && _channel.IsOpen)
+                {
+                    await Task.Delay(1000, stoppingToken);
                 }
 
-                _channel.BasicAck(ea.DeliveryTag, false);
+                if (_connection == null || !_connection.IsOpen)
+                {
+                    _logger.LogWarning("RabbitMQ connection lost. Will retry...");
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing message: {Message}", message);
-                _channel.BasicNack(ea.DeliveryTag, false, true); // Requeue on error
+                _logger.LogError(ex, "Error in OrderStatusEventHandler. Will retry...");
+                _connection?.Dispose();
+                _channel?.Dispose();
+                _connection = null;
+                _channel = null;
+                await Task.Delay(30000, stoppingToken);
             }
-        };
-
-        _channel.BasicConsume("notification-service-order-status", false, consumer);
-
-        _logger.LogInformation("OrderStatusEventHandler started, waiting for messages...");
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            await Task.Delay(1000, stoppingToken);
         }
     }
 
@@ -173,11 +225,27 @@ public class OrderStatusEventHandler : BackgroundService
 
     public override void Dispose()
     {
-        _channel?.Close();
-        _connection?.Close();
-        _channel?.Dispose();
-        _connection?.Dispose();
-        base.Dispose();
+        try
+        {
+            if (_channel != null && _channel.IsOpen)
+            {
+                _channel.Close();
+            }
+            if (_connection != null && _connection.IsOpen)
+            {
+                _connection.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error closing RabbitMQ connection");
+        }
+        finally
+        {
+            _channel?.Dispose();
+            _connection?.Dispose();
+            base.Dispose();
+        }
     }
 }
 
