@@ -219,7 +219,7 @@ export default function BottomSearchBar({
           style={styles.pill}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="search" size={20} color="#666" />
+          <Ionicons name="search" size={22} color="#667eea" />
           <Text style={styles.pillText}>{placeholder}</Text>
         </Pressable>
       </Animated.View>
@@ -270,7 +270,7 @@ export default function BottomSearchBar({
                 <Ionicons
                   name="search"
                   size={22}
-                  color="#666"
+                  color="#667eea"
                   style={styles.searchIcon}
                 />
                 <TextInput
@@ -386,20 +386,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 28,
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    paddingVertical: 16,
+    shadowColor: "#667eea",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: "#667eea",
   },
   pillText: {
     marginLeft: 12,
     fontSize: 16,
-    color: "#666",
+    color: "#333",
     flex: 1,
+    fontWeight: "500",
   },
   modalContainer: {
     flex: 1,
@@ -423,10 +424,17 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#fff",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    borderWidth: 2,
+    borderColor: "#667eea",
+    shadowColor: "#667eea",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   searchIcon: {
     marginRight: 12,
