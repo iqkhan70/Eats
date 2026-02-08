@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,16 +8,32 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  ActivityIndicator,
+  Alert,
+  Image,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Location from "expo-location";
 import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
 
 const ZIP_REGEX = /^\s*(\d{5})(?:-\d{4})?\s*$/;
+
+interface Restaurant {
+  restaurantId: string;
+  name: string;
+  cuisineType?: string;
+  address: string;
+  rating?: number;
+  reviewCount?: number;
+  imageUrl?: string;
+  latitude?: number;
+  longitude?: number;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -25,6 +41,10 @@ export default function HomeScreen() {
 
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [distanceMiles, setDistanceMiles] = useState(25);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [nearbyRestaurants, setNearbyRestaurants] = useState<Restaurant[]>([]);
+  const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
 
   const initialCategoryCount = 6;
 
@@ -95,6 +115,81 @@ export default function HomeScreen() {
 
   const handleSuggestionSelect = (suggestion: string) => {
     handleSearch(suggestion);
+  };
+
+  // Get user's current location
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLocationPermissionDenied(true);
+          console.log("Location permission denied");
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+      } catch (error) {
+        console.error("Error getting location:", error);
+        setLocationPermissionDenied(true);
+      }
+    })();
+  }, []);
+
+  // Fetch nearby restaurants when location or distance changes
+  useEffect(() => {
+    if (!userLocation) return;
+
+    const fetchNearbyRestaurants = async () => {
+      try {
+        setLoadingRestaurants(true);
+        const response = await api.get<Restaurant[]>("/MobileBff/restaurants", {
+          params: {
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            radiusMiles: Math.round(distanceMiles),
+            take: 10, // Limit to 10 for home page
+          },
+        });
+
+        const data = response.data;
+        const list = Array.isArray(data) ? data : [];
+        const mappedRestaurants = list.map((r: any) => ({
+          restaurantId: r.restaurantId || r.id,
+          name: r.name,
+          cuisineType: r.cuisineType,
+          address: r.address,
+          rating: r.rating,
+          reviewCount: r.reviewCount,
+          imageUrl: r.imageUrl,
+          latitude: r.latitude,
+          longitude: r.longitude,
+        }));
+
+        setNearbyRestaurants(mappedRestaurants);
+      } catch (error: any) {
+        console.error("Error loading nearby restaurants:", error);
+        setNearbyRestaurants([]);
+      } finally {
+        setLoadingRestaurants(false);
+      }
+    };
+
+    fetchNearbyRestaurants();
+  }, [userLocation, distanceMiles]);
+
+  const navigateToRestaurantDetails = (restaurant?: Restaurant) => {
+    if (userLocation) {
+      router.push(`/(tabs)/restaurants?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radiusMiles=${Math.round(distanceMiles)}`);
+    } else {
+      navigateToRestaurants();
+    }
   };
 
   const categories = [
@@ -195,27 +290,105 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nearby Restaurants</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Nearby Restaurants</Text>
+            {userLocation && nearbyRestaurants.length > 0 && (
+              <TouchableOpacity
+                onPress={() => navigateToRestaurantDetails()}
+                style={styles.viewAllButton}
+              >
+                <Text style={styles.viewAllText}>View All</Text>
+                <Ionicons name="chevron-forward" size={16} color="#6200ee" />
+              </TouchableOpacity>
+            )}
+          </View>
 
-          <TouchableOpacity
-            style={styles.restaurantCard}
-            onPress={() => navigateToRestaurants()}
-            activeOpacity={0.85}
-          >
-            <View style={styles.restaurantInfo}>
-              <Ionicons name="restaurant" size={24} color="#6200ee" />
-              <View style={styles.restaurantDetails}>
-                <Text style={styles.restaurantName}>Traditional Kitchen</Text>
-                <Text style={styles.restaurantAddress}>123 Main St</Text>
-                <View style={styles.ratingContainer}>
-                  <Ionicons name="star" size={16} color="#FFD700" />
-                  <Text style={styles.rating}>4.5</Text>
-                  <Text style={styles.reviewCount}>(120 reviews)</Text>
-                </View>
-              </View>
+          {locationPermissionDenied && (
+            <View style={styles.locationPrompt}>
+              <Ionicons name="location-outline" size={24} color="#666" />
+              <Text style={styles.locationPromptText}>
+                Enable location to see nearby restaurants
+              </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
+          )}
+
+          {!locationPermissionDenied && !userLocation && (
+            <View style={styles.locationPrompt}>
+              <ActivityIndicator size="small" color="#6200ee" />
+              <Text style={styles.locationPromptText}>
+                Getting your location...
+              </Text>
+            </View>
+          )}
+
+          {loadingRestaurants && userLocation && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#6200ee" />
+              <Text style={styles.loadingText}>Loading restaurants...</Text>
+            </View>
+          )}
+
+          {!loadingRestaurants && userLocation && nearbyRestaurants.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="restaurant-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyText}>No restaurants found</Text>
+              <Text style={styles.emptySubtext}>
+                Try increasing the distance range
+              </Text>
+            </View>
+          )}
+
+          {!loadingRestaurants &&
+            userLocation &&
+            nearbyRestaurants.length > 0 &&
+            nearbyRestaurants.map((restaurant) => (
+              <TouchableOpacity
+                key={restaurant.restaurantId}
+                style={styles.restaurantCard}
+                onPress={() => navigateToRestaurantDetails(restaurant)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.restaurantInfo}>
+                  {restaurant.imageUrl ? (
+                    <Image
+                      source={{ uri: restaurant.imageUrl }}
+                      style={styles.restaurantImage}
+                    />
+                  ) : (
+                    <View style={styles.restaurantImagePlaceholder}>
+                      <Ionicons name="restaurant" size={24} color="#6200ee" />
+                    </View>
+                  )}
+                  <View style={styles.restaurantDetails}>
+                    <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                    <Text style={styles.restaurantAddress}>
+                      {restaurant.address}
+                    </Text>
+                    {restaurant.cuisineType && (
+                      <Text style={styles.cuisineType}>
+                        {restaurant.cuisineType}
+                      </Text>
+                    )}
+                    <View style={styles.ratingContainer}>
+                      {restaurant.rating && (
+                        <>
+                          <Ionicons name="star" size={16} color="#FFD700" />
+                          <Text style={styles.rating}>
+                            {restaurant.rating.toFixed(1)}
+                          </Text>
+                          {restaurant.reviewCount && (
+                            <Text style={styles.reviewCount}>
+                              ({restaurant.reviewCount} reviews)
+                            </Text>
+                          )}
+                        </>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </TouchableOpacity>
+            ))}
         </View>
       </ScrollView>
 
@@ -260,11 +433,28 @@ const styles = StyleSheet.create({
   slider: { width: "100%", height: 32 },
 
   section: { marginTop: 20, paddingHorizontal: 16 },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 12,
+  },
+  viewAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6200ee",
+    marginRight: 4,
   },
 
   categoryGrid: {
@@ -315,6 +505,20 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   restaurantInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
+  restaurantImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+  },
+  restaurantImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   restaurantDetails: { marginLeft: 12, flex: 1 },
   restaurantName: {
     fontSize: 16,
@@ -323,10 +527,63 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   restaurantAddress: { fontSize: 14, color: "#666", marginBottom: 4 },
-
+  cuisineType: {
+    fontSize: 12,
+    color: "#6200ee",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
   ratingContainer: { flexDirection: "row", alignItems: "center" },
   rating: { fontSize: 14, fontWeight: "600", color: "#333", marginLeft: 4 },
   reviewCount: { fontSize: 12, color: "#666", marginLeft: 4 },
+  locationPrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    marginBottom: 12,
+  },
+  locationPromptText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: "#666",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  loadingText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: "#666",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 4,
+    textAlign: "center",
+  },
 
   showMoreButton: {
     flexDirection: "row",
