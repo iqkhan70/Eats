@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { api } from '../../../services/api';
 import { cartService } from '../../../services/cart';
+import ReviewDisplay, { Review } from '../../../components/ReviewDisplay';
+import ReviewRating from '../../../components/ReviewRating';
+import { authService } from '../../../services/auth';
 
 interface MenuItem {
   menuItemId: string;
@@ -41,6 +44,14 @@ export default function MenuScreen() {
   const [loading, setLoading] = useState(true);
   const [currentCartId, setCurrentCartId] = useState<string | null>(null);
   const [addingItemId, setAddingItemId] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [restaurantRating, setRestaurantRating] = useState<{
+    averageRating: number;
+    totalReviews: number;
+  } | null>(null);
+  const [activeTab, setActiveTab] = useState<'menu' | 'reviews'>('menu');
+  const [userCanReview, setUserCanReview] = useState(false);
 
   const isAddingToCartRef = useRef(false);
 
@@ -106,13 +117,59 @@ console.log("FIRST ITEM", response.data?.[0]);
     }
   }, []);
 
+  const loadReviews = useCallback(async () => {
+    try {
+      setLoadingReviews(true);
+      const response = await api.get<Review[]>(
+        `/MobileBff/reviews/restaurant/${restaurantId}?skip=0&take=10`
+      );
+      setReviews(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading reviews:', error);
+      setReviews([]);
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [restaurantId]);
+
+  const loadRestaurantRating = useCallback(async () => {
+    try {
+      const response = await api.get<{
+        restaurantId: string;
+        averageRating: number;
+        totalReviews: number;
+      }>(`/MobileBff/reviews/restaurant/${restaurantId}/rating`);
+      setRestaurantRating({
+        averageRating: response.data.averageRating,
+        totalReviews: response.data.totalReviews,
+      });
+    } catch (error: any) {
+      console.error('Error loading restaurant rating:', error);
+    }
+  }, [restaurantId]);
+
+  // Check if user is logged in and can review
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await authService.getAccessToken();
+        setUserCanReview(!!token);
+      } catch {
+        setUserCanReview(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
   // Initial load + restaurant change
   useEffect(() => {
     if (!restaurantId) return;
     loadMenu();
     loadCategories();
+    loadReviews();
+    loadRestaurantRating();
     setCurrentCartId(null);
-  }, [restaurantId, loadMenu, loadCategories]);
+  }, [restaurantId, loadMenu, loadCategories, loadReviews, loadRestaurantRating]);
 
   // ✅ Force reload when we come back from edit (token changes)
   useEffect(() => {
@@ -225,7 +282,42 @@ console.log("FIRST ITEM", response.data?.[0]);
         <Text style={styles.title}>Menu</Text>
       </View>
 
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'menu' && styles.tabActive]}
+          onPress={() => setActiveTab('menu')}
+        >
+          <Ionicons 
+            name="restaurant" 
+            size={20} 
+            color={activeTab === 'menu' ? '#6200ee' : '#666'} 
+          />
+          <Text style={[styles.tabText, activeTab === 'menu' && styles.tabTextActive]}>
+            Menu
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'reviews' && styles.tabActive]}
+          onPress={() => setActiveTab('reviews')}
+        >
+          <Ionicons 
+            name="star" 
+            size={20} 
+            color={activeTab === 'reviews' ? '#6200ee' : '#666'} 
+          />
+          <Text style={[styles.tabText, activeTab === 'reviews' && styles.tabTextActive]}>
+            Reviews
+            {restaurantRating && restaurantRating.totalReviews > 0 && (
+              <Text style={styles.tabBadge}> ({restaurantRating.totalReviews})</Text>
+            )}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView style={styles.scrollView}>
+        {activeTab === 'menu' ? (
+          <>
         {categories.length > 0 && (
           <ScrollView
             horizontal
@@ -304,6 +396,50 @@ console.log("FIRST ITEM", response.data?.[0]);
             <Text style={styles.emptyText}>No menu items found</Text>
           </View>
         )}
+          </>
+        ) : (
+          <>
+            {/* Reviews Tab Content */}
+            <View style={styles.reviewsSection}>
+              <View style={styles.reviewsHeader}>
+                <View style={styles.reviewsHeaderLeft}>
+                  <Text style={styles.reviewsTitle}>Reviews</Text>
+                  {restaurantRating && restaurantRating.totalReviews > 0 && (
+                    <View style={styles.ratingContainer}>
+                      <ReviewRating
+                        value={Math.round(restaurantRating.averageRating)}
+                        editable={false}
+                        showValue={true}
+                        size={24}
+                      />
+                      <Text style={styles.ratingText}>
+                        {restaurantRating.averageRating.toFixed(1)} ({restaurantRating.totalReviews} reviews)
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                {userCanReview && (
+                  <View style={styles.reviewInfo}>
+                    <Ionicons name="information-circle-outline" size={16} color="#666" />
+                    <Text style={styles.reviewInfoText}>
+                      Write reviews from your order history
+                    </Text>
+                  </View>
+                )}
+              </View>
+              
+
+              {loadingReviews ? (
+                <View style={styles.reviewsLoadingContainer}>
+                  <ActivityIndicator size="large" color="#6200ee" />
+                  <Text style={styles.loadingText}>Loading reviews...</Text>
+                </View>
+              ) : (
+                <ReviewDisplay reviews={reviews} />
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -322,6 +458,40 @@ const styles = StyleSheet.create({
   backButton: { marginRight: 12 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#333' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingHorizontal: 16,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    gap: 6,
+  },
+  tabActive: {
+    borderBottomColor: '#6200ee',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  tabTextActive: {
+    color: '#6200ee',
+    fontWeight: '600',
+  },
+  tabBadge: {
+    fontSize: 14,
+    color: '#6200ee',
+    fontWeight: '600',
+  },
   scrollView: { flex: 1 },
   categoryFilter: { maxHeight: 50, marginVertical: 12 },
   categoryFilterContent: { paddingHorizontal: 16, gap: 8 },
@@ -368,4 +538,43 @@ const styles = StyleSheet.create({
   unavailableText: { fontSize: 12, color: '#c62828', fontWeight: '500' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
   emptyText: { fontSize: 16, color: '#999', marginTop: 16 },
+  reviewsSection: { marginTop: 24, paddingHorizontal: 16, paddingBottom: 24 },
+  reviewsHeader: {
+    marginBottom: 20,
+  },
+  reviewsHeaderLeft: {
+    gap: 12,
+  },
+  reviewsTitle: { fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingText: { fontSize: 16, fontWeight: '500', color: '#333' },
+  reviewsLoadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  reviewInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  reviewInfoText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
 });

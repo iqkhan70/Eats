@@ -3,10 +3,12 @@
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
 @using TraditionalEats.WebApp.Services
+@using TraditionalEats.WebApp.Components
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 @inject CartService CartService
 @inject NotificationService NotificationService
+@inject AuthService AuthService
 @inject ILogger<Menu> _logger
 
 <PageTitle>Menu - TraditionalEats</PageTitle>
@@ -86,6 +88,33 @@
                 </RadzenStack>
             </RadzenCard>
         }
+        
+        <!-- Reviews Section -->
+        <RadzenCard>
+            <RadzenStack Gap="1.5rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3" Style="font-weight: bold;">Reviews</RadzenText>
+                    @if (restaurantRating != null)
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                            <ReviewRating Value="@((int)Math.Round(restaurantRating.AverageRating))" IsEditable="false" ShowValue="true" Size="24" />
+                            <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: 500;">
+                                @restaurantRating.AverageRating.ToString("F1") (@restaurantRating.TotalReviews reviews)
+                            </RadzenText>
+                        </RadzenStack>
+                    }
+                </RadzenStack>
+                
+                @if (loadingReviews)
+                {
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                }
+                else
+                {
+                    <ReviewDisplay Reviews="@reviews" />
+                }
+            </RadzenStack>
+        </RadzenCard>
     }
     else
     {
@@ -102,6 +131,9 @@
     private List<MenuItemDto> menuItems = new();
     private List<CategoryDto> categories = new();
     private Guid? selectedCategoryId = null;
+    private List<ReviewDto> reviews = new();
+    private bool loadingReviews = false;
+    private RestaurantRatingDto? restaurantRating;
 
     protected override async Task OnInitializedAsync()
     {
@@ -109,6 +141,8 @@
         currentCartId = null;
         await LoadMenu();
         await LoadCategories();
+        await LoadReviews();
+        await LoadRestaurantRating();
     }
     
     protected override async Task OnParametersSetAsync()
@@ -280,4 +314,61 @@
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
     }
+
+    private async Task LoadReviews()
+    {
+        try
+        {
+            loadingReviews = true;
+            var response = await Http.GetFromJsonAsync<List<ReviewDto>>($"WebBff/reviews/restaurant/{RestaurantId}?skip=0&take=10");
+            reviews = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading reviews");
+            reviews = new();
+        }
+        finally
+        {
+            loadingReviews = false;
+        }
+    }
+
+    private async Task LoadRestaurantRating()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<RestaurantRatingDto>($"WebBff/reviews/restaurant/{RestaurantId}/rating");
+            restaurantRating = response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading restaurant rating");
+        }
+    }
+}
+
+public class ReviewDto
+{
+    public Guid ReviewId { get; set; }
+    public Guid OrderId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid RestaurantId { get; set; }
+    public int Rating { get; set; }
+    public string? Comment { get; set; }
+    public List<string> Tags { get; set; } = new();
+    public string? Response { get; set; }
+    public DateTime? ResponseAt { get; set; }
+    public bool IsVerified { get; set; }
+    public bool IsVisible { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class RestaurantRatingDto
+{
+    public Guid RestaurantId { get; set; }
+    public decimal AverageRating { get; set; }
+    public int TotalReviews { get; set; }
+    public Dictionary<int, int> RatingDistribution { get; set; } = new();
 }

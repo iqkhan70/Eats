@@ -185,10 +185,16 @@ export default function HomeScreen() {
   }, [userLocation, distanceMiles]);
 
   const navigateToRestaurantDetails = (restaurant?: Restaurant) => {
-    if (userLocation) {
-      router.push(`/(tabs)/restaurants?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radiusMiles=${Math.round(distanceMiles)}`);
+    if (restaurant) {
+      // Navigate to the specific restaurant's menu page
+      router.push(`/restaurants/${restaurant.restaurantId}/menu`);
     } else {
-      navigateToRestaurants();
+      // "View All" button - navigate to restaurants list with filters
+      if (userLocation) {
+        router.push(`/(tabs)/restaurants?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radiusMiles=${Math.round(distanceMiles)}`);
+      } else {
+        navigateToRestaurants();
+      }
     }
   };
 

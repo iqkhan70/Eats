@@ -8,6 +8,7 @@
 @inject NavigationManager NavigationManager
 @inject CartService CartService
 @inject NotificationService NotificationService
+@inject AuthService AuthService
 
 <PageTitle>Order Details - TraditionalEats</PageTitle>
 
@@ -187,6 +188,36 @@
                 </RadzenStack>
             </RadzenCard>
 
+            <!-- Review Section - Only show for completed/delivered orders -->
+            @if ((order.Status == "Delivered" || order.Status == "Completed") && !hasReview)
+            {
+                <RadzenCard>
+                    <RadzenStack Gap="1rem">
+                        <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Review Your Order</RadzenText>
+                        <ReviewForm OrderId="@order.OrderId" RestaurantId="@order.RestaurantId" 
+                                   OnReviewSubmitted="@HandleReviewSubmitted" />
+                    </RadzenStack>
+                </RadzenCard>
+            }
+            else if (hasReview && existingReview != null)
+            {
+                <RadzenCard>
+                    <RadzenStack Gap="1rem">
+                        <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Your Review</RadzenText>
+                        <ReviewDisplay Reviews="@(new List<ReviewDto> { existingReview })" />
+                        <RadzenButton Text="Edit Review" Icon="edit" Variant="Variant.Flat" 
+                                     Click="@(() => showEditForm = true)" />
+                        @if (showEditForm)
+                        {
+                            <ReviewForm OrderId="@order.OrderId" RestaurantId="@order.RestaurantId" 
+                                       ExistingReviewId="@existingReview.ReviewId"
+                                       OnReviewSubmitted="@HandleReviewSubmitted"
+                                       OnCancel="@(() => showEditForm = false)" />
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+            }
+
             <!-- Reorder Button - Only show for past orders -->
             @if (IsPastOrder(order.Status))
             {
@@ -238,10 +269,17 @@
 
     private bool loading = true;
     private OrderDetailsDto? order;
+    private bool hasReview = false;
+    private ReviewDto? existingReview;
+    private bool showEditForm = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadOrder();
+        if (order != null && (order.Status == "Delivered" || order.Status == "Completed"))
+        {
+            await CheckForExistingReview();
+        }
     }
 
     private async Task LoadOrder()
@@ -274,7 +312,7 @@
 
     private bool IsPastOrder(string status)
     {
-        return new[] { "Delivered", "Cancelled", "Refunded" }.Contains(status);
+        return new[] { "Delivered", "Completed", "Cancelled", "Refunded" }.Contains(status);
     }
 
     private async Task HandleReorder()
@@ -395,4 +433,59 @@
         public string? Notes { get; set; }
         public DateTime ChangedAt { get; set; }
     }
+
+    private async Task CheckForExistingReview()
+    {
+        try
+        {
+            var token = await AuthService.GetTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                return;
+            }
+
+            Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var response = await Http.GetFromJsonAsync<List<ReviewDto>>("WebBff/reviews/me?skip=0&take=100");
+            
+            if (response != null && order != null)
+            {
+                existingReview = response.FirstOrDefault(r => r.OrderId == order.OrderId);
+                hasReview = existingReview != null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking for existing review: {ex.Message}");
+        }
+    }
+
+    private async Task HandleReviewSubmitted()
+    {
+        showEditForm = false;
+        await CheckForExistingReview();
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Success,
+            Summary = "Review Submitted",
+            Detail = "Thank you for your review!",
+            Duration = 3000
+        });
+    }
+}
+
+public class ReviewDto
+{
+    public Guid ReviewId { get; set; }
+    public Guid OrderId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid RestaurantId { get; set; }
+    public int Rating { get; set; }
+    public string? Comment { get; set; }
+    public List<string> Tags { get; set; } = new();
+    public string? Response { get; set; }
+    public DateTime? ResponseAt { get; set; }
+    public bool IsVerified { get; set; }
+    public bool IsVisible { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }

@@ -1,0 +1,51 @@
+@using Radzen
+@using Radzen.Blazor
+
+<div class="review-rating">
+    @if (IsEditable)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center">
+            @for (int i = 1; i <= 5; i++)
+            {
+                <RadzenIcon Icon="@(i <= Value ? "star" : "star_border")" 
+                           Style="font-size: @(Size)px; color: @(i <= Value ? "#FFD700" : "#ccc"); cursor: pointer;"
+                           Click="@(() => OnRatingChanged(i))" />
+            }
+            @if (ShowValue)
+            {
+                <RadzenText Style="margin-left: 0.5rem; font-weight: 500;">@Value / 5</RadzenText>
+            }
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center">
+            @for (int i = 1; i <= 5; i++)
+            {
+                <RadzenIcon Icon="@(i <= Value ? "star" : "star_border")" 
+                           Style="font-size: @(Size)px; color: @(i <= Value ? "#FFD700" : "#ccc");" />
+            }
+            @if (ShowValue)
+            {
+                <RadzenText Style="margin-left: 0.5rem; font-weight: 500;">@Value.ToString("F1")</RadzenText>
+            }
+        </RadzenStack>
+    }
+</div>
+
+@code {
+    [Parameter] public int Value { get; set; }
+    [Parameter] public bool IsEditable { get; set; } = false;
+    [Parameter] public bool ShowValue { get; set; } = true;
+    [Parameter] public int Size { get; set; } = 20;
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+
+    private async Task OnRatingChanged(int newValue)
+    {
+        if (IsEditable)
+        {
+            Value = newValue;
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+}

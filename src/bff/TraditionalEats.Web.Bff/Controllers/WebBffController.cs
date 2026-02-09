@@ -2096,6 +2096,143 @@ public class WebBffController : ControllerBase
             return StatusCode(500, new { success = false, message = "Failed to process request. Please try again later." });
         }
     }
+
+    // ----------------------------
+    // Reviews
+    // ----------------------------
+
+    [HttpPost("reviews")]
+    [Authorize]
+    public async Task<IActionResult> CreateReview([FromBody] CreateReviewRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsJsonAsync("/api/review", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating review");
+            return StatusCode(500, new { message = "Failed to create review" });
+        }
+    }
+
+    [HttpGet("reviews/{reviewId}")]
+    public async Task<IActionResult> GetReview(Guid reviewId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            var response = await client.GetAsync($"/api/review/{reviewId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting review");
+            return StatusCode(500, new { message = "Failed to get review" });
+        }
+    }
+
+    [HttpGet("reviews/restaurant/{restaurantId}")]
+    public async Task<IActionResult> GetReviewsByRestaurant(
+        Guid restaurantId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            var response = await client.GetAsync($"/api/review/restaurant/{restaurantId}?skip={skip}&take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting restaurant reviews");
+            return StatusCode(500, new { message = "Failed to get reviews" });
+        }
+    }
+
+    [HttpGet("reviews/restaurant/{restaurantId}/rating")]
+    public async Task<IActionResult> GetRestaurantRating(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            var response = await client.GetAsync($"/api/review/restaurant/{restaurantId}/rating");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting restaurant rating");
+            return StatusCode(500, new { message = "Failed to get rating" });
+        }
+    }
+
+    [HttpGet("reviews/me")]
+    [Authorize]
+    public async Task<IActionResult> GetMyReviews(
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync($"/api/review/me?skip={skip}&take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user reviews");
+            return StatusCode(500, new { message = "Failed to get reviews" });
+        }
+    }
+
+    [HttpPut("reviews/{reviewId}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateReview(Guid reviewId, [FromBody] UpdateReviewDto dto)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+            var response = await client.PutAsJsonAsync($"/api/review/{reviewId}", dto);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating review");
+            return StatusCode(500, new { message = "Failed to update review" });
+        }
+    }
+
+    [HttpPost("reviews/{reviewId}/response")]
+    [Authorize(Roles = "RestaurantOwner")]
+    public async Task<IActionResult> AddRestaurantResponse(Guid reviewId, [FromBody] AddResponseRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsJsonAsync($"/api/review/{reviewId}/response", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding restaurant response");
+            return StatusCode(500, new { message = "Failed to add response" });
+        }
+    }
 }
 
 // ----------------------------
@@ -2131,6 +2268,10 @@ public record ResetPasswordRequest(string Token, string Email, string NewPasswor
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
 public record UpdateOrderStatusRequest(string Status, string? Notes);
+public record CreateReviewRequest(Guid OrderId, Guid RestaurantId, CreateReviewDto Review);
+public record CreateReviewDto(int Rating, string? Comment, List<string>? Tags);
+public record UpdateReviewDto(int? Rating, string? Comment, List<string>? Tags);
+public record AddResponseRequest(string Response);
 
 // Keep this in BFF so it can page/filter/sort vendor orders
 public class OrderDto

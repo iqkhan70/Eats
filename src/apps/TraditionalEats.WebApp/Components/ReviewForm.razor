@@ -1,0 +1,217 @@
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+@inject HttpClient Http
+@inject AuthService AuthService
+
+<RadzenCard>
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">Write a Review</RadzenText>
+        
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+        }
+        
+        @if (isSubmitting)
+        {
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        }
+        else
+        {
+            <RadzenStack Gap="1rem">
+                <RadzenStack Gap="0.5rem">
+                    <RadzenText TextStyle="TextStyle.Body2">Rating</RadzenText>
+                    <ReviewRating Value="@rating" IsEditable="true" ShowValue="true" Size="28" 
+                                 ValueChanged="@((int value) => rating = value)" />
+                </RadzenStack>
+                
+                <RadzenFormField Text="Comment (optional)">
+                    <RadzenTextArea @bind-Value="@comment" Placeholder="Share your experience..." 
+                                   Rows="4" Style="width: 100%;" />
+                </RadzenFormField>
+                
+                <RadzenStack Gap="0.5rem">
+                    <RadzenText TextStyle="TextStyle.Body2">Tags (optional)</RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
+                        @foreach (var tag in availableTags)
+                        {
+                            <RadzenCheckBox Name="@tag" @bind-Value="@GetTagValue(tag)" />
+                            <RadzenText TextStyle="TextStyle.Body2">@tag</RadzenText>
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+                
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" JustifyContent="JustifyContent.End">
+                    @if (existingReviewId.HasValue)
+                    {
+                        <RadzenButton Text="Cancel" Variant="Variant.Flat" Click="@OnCancel" />
+                        <RadzenButton Text="Update Review" Icon="edit" Click="@SubmitReview" 
+                                     Variant="Variant.Filled" Disabled="@(rating < 1 || rating > 5)" />
+                    }
+                    else
+                    {
+                        <RadzenButton Text="Submit Review" Icon="send" Click="@SubmitReview" 
+                                     Variant="Variant.Filled" Disabled="@(rating < 1 || rating > 5)" />
+                    }
+                </RadzenStack>
+            </RadzenStack>
+        }
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    [Parameter] public Guid OrderId { get; set; }
+    [Parameter] public Guid RestaurantId { get; set; }
+    [Parameter] public Guid? ExistingReviewId { get; set; }
+    [Parameter] public EventCallback OnReviewSubmitted { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private int rating = 5;
+    private string comment = string.Empty;
+    private bool isSubmitting = false;
+    private string? errorMessage;
+    private Dictionary<string, bool> selectedTags = new();
+    
+    private readonly List<string> availableTags = new()
+    {
+        "Fast Delivery",
+        "Great Food",
+        "Good Value",
+        "Friendly Service",
+        "Clean Restaurant",
+        "Accurate Order"
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (ExistingReviewId.HasValue)
+        {
+            LoadExistingReview();
+        }
+    }
+
+    private async Task LoadExistingReview()
+    {
+        try
+        {
+            var token = await AuthService.GetTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Please log in to view your review";
+                return;
+            }
+
+            Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var response = await Http.GetAsync($"/api/WebBff/reviews/{ExistingReviewId.Value}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var review = await response.Content.ReadFromJsonAsync<ReviewDto>();
+                if (review != null)
+                {
+                    rating = review.Rating;
+                    comment = review.Comment ?? string.Empty;
+                    foreach (var tag in review.Tags)
+                    {
+                        selectedTags[tag] = true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load review: " + ex.Message;
+        }
+    }
+
+    private bool GetTagValue(string tag)
+    {
+        return selectedTags.GetValueOrDefault(tag, false);
+    }
+
+    private async Task SubmitReview()
+    {
+        if (rating < 1 || rating > 5)
+        {
+            errorMessage = "Please select a rating";
+            return;
+        }
+
+        try
+        {
+            isSubmitting = true;
+            errorMessage = null;
+
+            var token = await AuthService.GetTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Please log in to submit a review";
+                return;
+            }
+
+            Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var selectedTagList = selectedTags.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+            
+            if (ExistingReviewId.HasValue)
+            {
+                // Update existing review
+                var updateDto = new
+                {
+                    rating = (int?)rating,
+                    comment = comment,
+                    tags = selectedTagList
+                };
+                
+                var response = await Http.PutAsJsonAsync($"/api/WebBff/reviews/{ExistingReviewId.Value}", updateDto);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    errorMessage = "Failed to update review";
+                    return;
+                }
+            }
+            else
+            {
+                // Create new review
+                var createRequest = new
+                {
+                    orderId = OrderId,
+                    restaurantId = RestaurantId,
+                    review = new
+                    {
+                        rating = rating,
+                        comment = comment,
+                        tags = selectedTagList
+                    }
+                };
+
+                var response = await Http.PostAsJsonAsync("/api/WebBff/reviews", createRequest);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    errorMessage = "Failed to submit review";
+                    return;
+                }
+            }
+
+            // Reset form
+            rating = 5;
+            comment = string.Empty;
+            selectedTags.Clear();
+            
+            await OnReviewSubmitted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An error occurred: " + ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+}

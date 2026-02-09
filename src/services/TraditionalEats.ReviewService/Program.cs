@@ -73,11 +73,41 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created
-using (var scope = app.Services.CreateScope())
+// Ensure database is created and migrated
+try
 {
-    var db = scope.ServiceProvider.GetRequiredService<ReviewDbContext>();
-    db.Database.EnsureCreated();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<ReviewDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        // Try to ensure database exists
+        try
+        {
+            var canConnect = db.Database.CanConnect();
+            if (!canConnect)
+            {
+                logger.LogWarning("Cannot connect to ReviewDb database. Please check connection string.");
+            }
+            else
+            {
+                // Always use Migrate to ensure schema matches migrations
+                db.Database.Migrate();
+                logger.LogInformation("ReviewDb database migrated");
+            }
+        }
+        catch (Exception dbEx)
+        {
+            logger.LogError(dbEx, "Database connection error: {Message}", dbEx.Message);
+            // Don't fail startup - let it try to connect on first request
+        }
+    }
+}
+catch (Exception ex)
+{
+    // Fallback if scope creation fails
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "Failed to initialize ReviewDb database. Error: {Message}", ex.Message);
 }
 
 app.Run();

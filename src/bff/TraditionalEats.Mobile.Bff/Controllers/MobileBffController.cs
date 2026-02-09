@@ -1448,6 +1448,212 @@ public class MobileBffController : ControllerBase
             return StatusCode(500, new { error = "Failed to delete restaurant" });
         }
     }
+
+    // ----------------------------
+    // Reviews
+    // ----------------------------
+
+    [HttpPost("reviews")]
+    [Authorize]
+    public async Task<IActionResult> CreateReview([FromBody] CreateReviewRequest request)
+    {
+        try
+        {
+            if (request == null)
+            {
+                return BadRequest(new { message = "Request body is required" });
+            }
+
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsJsonAsync("/api/review", request);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("ReviewService returned {StatusCode} when creating review: {Content}", 
+                    response.StatusCode, content);
+            }
+            
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "ReviewService unreachable when creating review. Ensure ReviewService is running (port 5009).");
+            return StatusCode(503, new { message = "Review service is temporarily unavailable. Please try again later." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating review. Error: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Failed to create review. Please try again later." });
+        }
+    }
+
+    [HttpGet("reviews/{reviewId}")]
+    public async Task<IActionResult> GetReview(Guid reviewId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            var response = await client.GetAsync($"/api/review/{reviewId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting review");
+            return StatusCode(500, new { message = "Failed to get review" });
+        }
+    }
+
+    [HttpGet("reviews/restaurant/{restaurantId}")]
+    public async Task<IActionResult> GetReviewsByRestaurant(
+        Guid restaurantId,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            var response = await client.GetAsync($"/api/review/restaurant/{restaurantId}?skip={skip}&take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("ReviewService returned {StatusCode} for restaurant {RestaurantId}: {Content}", 
+                    response.StatusCode, restaurantId, content);
+            }
+            
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "ReviewService unreachable when getting reviews for restaurant {RestaurantId}. Ensure ReviewService is running (port 5009).", restaurantId);
+            return StatusCode(503, new { message = "Review service is temporarily unavailable. Please try again later." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting restaurant reviews for {RestaurantId}", restaurantId);
+            return StatusCode(500, new { message = "Failed to get reviews" });
+        }
+    }
+
+    [HttpGet("reviews/restaurant/{restaurantId}/rating")]
+    public async Task<IActionResult> GetRestaurantRating(Guid restaurantId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            var response = await client.GetAsync($"/api/review/restaurant/{restaurantId}/rating");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("ReviewService returned {StatusCode} for rating of restaurant {RestaurantId}: {Content}", 
+                    response.StatusCode, restaurantId, content);
+            }
+            
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "ReviewService unreachable when getting rating for restaurant {RestaurantId}. Ensure ReviewService is running (port 5009).", restaurantId);
+            // Return default rating instead of error
+            return JsonString(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                restaurantId = restaurantId,
+                averageRating = 0m,
+                totalReviews = 0,
+                ratingDistribution = new Dictionary<int, int>()
+            }), 200);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting restaurant rating for {RestaurantId}", restaurantId);
+            // Return default rating instead of error
+            return JsonString(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                restaurantId = restaurantId,
+                averageRating = 0m,
+                totalReviews = 0,
+                ratingDistribution = new Dictionary<int, int>()
+            }), 200);
+        }
+    }
+
+    [HttpGet("reviews/me")]
+    [Authorize]
+    public async Task<IActionResult> GetMyReviews(
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 20)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync($"/api/review/me?skip={skip}&take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("ReviewService returned {StatusCode} for user reviews: {Content}", 
+                    response.StatusCode, content);
+            }
+            
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "ReviewService unreachable when getting user reviews. Ensure ReviewService is running (port 5009).");
+            // Return empty list instead of error to prevent UI crashes
+            return JsonString("[]", 200);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user reviews");
+            // Return empty list instead of error to prevent UI crashes
+            return JsonString("[]", 200);
+        }
+    }
+
+    [HttpPut("reviews/{reviewId}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateReview(Guid reviewId, [FromBody] UpdateReviewDto dto)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+            var response = await client.PutAsJsonAsync($"/api/review/{reviewId}", dto);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating review");
+            return StatusCode(500, new { message = "Failed to update review" });
+        }
+    }
+
+    [HttpPost("reviews/{reviewId}/response")]
+    [Authorize(Roles = "RestaurantOwner")]
+    public async Task<IActionResult> AddRestaurantResponse(Guid reviewId, [FromBody] AddResponseRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ReviewService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsJsonAsync($"/api/review/{reviewId}/response", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding restaurant response");
+            return StatusCode(500, new { message = "Failed to add response" });
+        }
+    }
 }
 
 // ----------------------------
@@ -1489,3 +1695,7 @@ public record RefreshTokenRequest(string RefreshToken);
 public record ForgotPasswordRequest(string Email);
 public record ResetPasswordRequest(string Token, string Email, string NewPassword, string ConfirmPassword);
 public record UpdateOrderStatusRequest(string Status, string? Notes);
+public record CreateReviewRequest(Guid OrderId, Guid RestaurantId, CreateReviewDto Review);
+public record CreateReviewDto(int Rating, string? Comment, List<string>? Tags);
+public record UpdateReviewDto(int? Rating, string? Comment, List<string>? Tags);
+public record AddResponseRequest(string Response);

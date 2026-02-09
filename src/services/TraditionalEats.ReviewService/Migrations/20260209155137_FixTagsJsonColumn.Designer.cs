@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TraditionalEats.ReviewService.Data;
 
@@ -11,9 +12,11 @@ using TraditionalEats.ReviewService.Data;
 namespace TraditionalEats.ReviewService.Migrations
 {
     [DbContext(typeof(ReviewDbContext))]
-    partial class ReviewDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260209155137_FixTagsJsonColumn")]
+    partial class FixTagsJsonColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
