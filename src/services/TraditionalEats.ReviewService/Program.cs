@@ -57,6 +57,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// HTTP Client Factory for calling other services
+builder.Services.AddHttpClient("RestaurantService", client =>
+{
+    var baseAddress = builder.Configuration["Services:RestaurantService"] ?? "http://localhost:5007";
+    client.BaseAddress = new Uri(baseAddress);
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 // Application services
 builder.Services.AddScoped<IReviewService, ReviewService>();
 

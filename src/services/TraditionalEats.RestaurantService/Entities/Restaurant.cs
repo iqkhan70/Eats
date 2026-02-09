@@ -16,6 +16,7 @@ public class Restaurant
     public bool IsActive { get; set; } = true;
     public decimal? Rating { get; set; }
     public int? ReviewCount { get; set; }
+    public decimal EloRating { get; set; } = 1500m; // Elo rating starts at 1500
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

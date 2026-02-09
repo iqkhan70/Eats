@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TraditionalEats.ReviewService.Data;
 using TraditionalEats.ReviewService.Entities;
 using System.Text.Json;
+using System.Net.Http.Json;
 
 namespace TraditionalEats.ReviewService.Services;
 
@@ -20,11 +21,13 @@ public class ReviewService : IReviewService
 {
     private readonly ReviewDbContext _context;
     private readonly ILogger<ReviewService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public ReviewService(ReviewDbContext context, ILogger<ReviewService> logger)
+    public ReviewService(ReviewDbContext context, ILogger<ReviewService> logger, IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<Guid> CreateReviewAsync(Guid orderId, Guid userId, Guid restaurantId, CreateReviewDto dto)
@@ -327,9 +330,43 @@ public class ReviewService : IReviewService
     private async Task UpdateRestaurantRatingAsync(Guid restaurantId)
     {
         var rating = await GetRestaurantRatingAsync(restaurantId);
-        // TODO: Publish event to update RestaurantService
         _logger.LogInformation("Restaurant {RestaurantId} rating updated: {Rating} ({Count} reviews)", 
             restaurantId, rating.AverageRating, rating.TotalReviews);
+        
+        // Calculate and update Elo rating
+        try
+        {
+            // Get all reviews for this restaurant to recalculate Elo
+            var reviews = await _context.Reviews
+                .Where(r => r.RestaurantId == restaurantId && r.IsVisible)
+                .OrderBy(r => r.CreatedAt)
+                .Select(r => r.Rating)
+                .ToListAsync();
+
+            // Recalculate Elo from scratch based on all reviews (starting from base)
+            // This ensures consistency even if RestaurantService Elo gets out of sync
+            decimal newElo = EloRatingService.RecalculateElo(reviews, EloRatingService.GetBaseEloRating());
+
+            // Update Elo rating in RestaurantService
+            var httpClient = _httpClientFactory.CreateClient("RestaurantService");
+            var updateRequest = new { EloRating = newElo };
+            var updateResponse = await httpClient.PostAsJsonAsync($"/api/Restaurant/{restaurantId}/elo-rating", updateRequest);
+            
+            if (updateResponse.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Updated Elo rating for restaurant {RestaurantId} to {EloRating}", restaurantId, newElo);
+            }
+            else
+            {
+                var errorContent = await updateResponse.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to update Elo rating for restaurant {RestaurantId}. Status: {Status}, Response: {Response}", 
+                    restaurantId, updateResponse.StatusCode, errorContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update Elo rating for restaurant {RestaurantId}, but review was created", restaurantId);
+        }
     }
 
     private ReviewDto MapToDto(Review review)
