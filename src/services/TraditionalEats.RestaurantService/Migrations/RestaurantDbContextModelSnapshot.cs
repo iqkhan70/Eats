@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TraditionalEats.RestaurantService.Data;
 
@@ -16,8 +17,10 @@ namespace TraditionalEats.RestaurantService.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("ProductVersion", "9.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
+
+            MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
             modelBuilder.Entity("TraditionalEats.RestaurantService.Entities.DeliveryZone", b =>
                 {
@@ -80,6 +83,9 @@ namespace TraditionalEats.RestaurantService.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
 
+                    b.Property<decimal>("EloRating")
+                        .HasColumnType("decimal(65,30)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
@@ -122,6 +128,8 @@ namespace TraditionalEats.RestaurantService.Migrations
                     b.HasIndex("IsActive");
 
                     b.HasIndex("OwnerId");
+
+                    b.HasIndex("Latitude", "Longitude");
 
                     b.ToTable("Restaurants");
                 });

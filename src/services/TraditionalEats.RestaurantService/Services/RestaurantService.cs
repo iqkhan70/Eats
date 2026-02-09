@@ -28,6 +28,9 @@ public interface IRestaurantService
     Task<bool> AdminUpdateRestaurantAsync(Guid restaurantId, UpdateRestaurantDto dto);
     Task<bool> AdminDeleteRestaurantAsync(Guid restaurantId);
     Task<bool> AdminToggleRestaurantStatusAsync(Guid restaurantId, bool isActive);
+    
+    // Internal endpoints (called by other services)
+    Task<bool> UpdateEloRatingAsync(Guid restaurantId, decimal eloRating);
 }
 
 public class RestaurantService : IRestaurantService
@@ -189,6 +192,7 @@ public class RestaurantService : IRestaurantService
             var ordered = withDistance
                 .Where(x => x.DistanceMiles <= radiusMi || (isZipSearch && !string.IsNullOrEmpty(x.Restaurant.Address) && x.Restaurant.Address.Contains(zip5)))
                 .OrderBy(x => x.DistanceMiles)
+                .ThenByDescending(x => x.Restaurant.EloRating) // Higher Elo rating = better
                 .ThenBy(x => x.Restaurant.Name)
                 .Skip(skip)
                 .Take(take)
@@ -197,9 +201,10 @@ public class RestaurantService : IRestaurantService
             return ordered.Select(x => MapToDto(x.Restaurant)).ToList();
         }
 
-        // Default ordering by name, then skip/take
+        // Default ordering by Elo rating (descending), then name
         return restaurants
-            .OrderBy(r => r.Name)
+            .OrderByDescending(r => r.EloRating)
+            .ThenBy(r => r.Name)
             .Skip(skip)
             .Take(take)
             .Select(MapToDto)
@@ -578,6 +583,37 @@ public class RestaurantService : IRestaurantService
         return true;
     }
 
+    public async Task<bool> UpdateEloRatingAsync(Guid restaurantId, decimal eloRating)
+    {
+        try
+        {
+            var restaurant = await _context.Restaurants
+                .FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
+
+            if (restaurant == null)
+            {
+                _logger.LogWarning("Restaurant {RestaurantId} not found for Elo rating update", restaurantId);
+                return false;
+            }
+
+            restaurant.EloRating = eloRating;
+            restaurant.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            // Invalidate cache
+            await _redis.DeleteAsync($"restaurant:{restaurantId}");
+            await _redis.DeleteAsync($"restaurant:dto:{restaurantId}");
+
+            _logger.LogInformation("Updated Elo rating for restaurant {RestaurantId} to {EloRating}", restaurantId, eloRating);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update Elo rating for restaurant {RestaurantId}", restaurantId);
+            return false;
+        }
+    }
+
     /// <summary>Extract 5-digit US ZIP from address for geocoding fallback.</summary>
     /// <summary>Extract 5-digit US ZIP; use last match so "15120 Perry St... 66221" yields 66221 not 15120.</summary>
     private static string? ExtractZip5FromAddress(string? address)
@@ -608,6 +644,7 @@ public class RestaurantService : IRestaurantService
             IsActive = restaurant.IsActive,
             Rating = restaurant.Rating,
             ReviewCount = restaurant.ReviewCount,
+            EloRating = restaurant.EloRating,
             CreatedAt = restaurant.CreatedAt,
             UpdatedAt = restaurant.UpdatedAt,
             DeliveryZones = (restaurant.DeliveryZones ?? Enumerable.Empty<DeliveryZone>()).Select(z => new DeliveryZoneDto
@@ -670,6 +707,7 @@ public record RestaurantDto
     public bool IsActive { get; set; }
     public decimal? Rating { get; set; }
     public int? ReviewCount { get; set; }
+    public decimal EloRating { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<DeliveryZoneDto> DeliveryZones { get; set; } = new();

@@ -13,11 +13,15 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
+import BottomSearchBar from "../../components/BottomSearchBar";
 
 interface Order {
   orderId: string;
@@ -48,6 +52,7 @@ type OrderFilter = "all" | "active" | "past";
 
 export default function OrdersScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ refresh?: string }>();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -55,6 +60,7 @@ export default function OrdersScreen() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [filter, setFilter] = useState<OrderFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -225,12 +231,49 @@ export default function OrdersScreen() {
     }
     // 'all' shows everything, no filtering needed
 
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((order) => {
+        // Search by order ID (full ID and first 8 chars)
+        const orderId = (order.orderId || "").toLowerCase();
+        const orderIdShort = order.orderId
+          ? order.orderId.substring(0, 8).toLowerCase()
+          : "";
+        // Search by status
+        const status = (order.status || "").toLowerCase();
+        // Search by delivery address
+        const address = (order.deliveryAddress || "").toLowerCase();
+        // Search by item names
+        const itemNames = (order.items || [])
+          .map((item) => (item.name || "").toLowerCase())
+          .join(" ");
+
+        // Check if query matches any field
+        // For order ID: check both full ID and first 8 characters
+        const matchesOrderId =
+          (orderId && orderId.includes(query)) ||
+          (orderIdShort && orderIdShort.includes(query));
+        // For status: exact match or contains
+        const matchesStatus =
+          status === query || (status && status.includes(query));
+        // For address: contains
+        const matchesAddress = address && address.includes(query);
+        // For items: contains
+        const matchesItems = itemNames && itemNames.includes(query);
+
+        return (
+          matchesOrderId || matchesStatus || matchesAddress || matchesItems
+        );
+      });
+    }
+
     // Sort by newest first
     return filtered.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [orders, filter]);
+  }, [orders, filter, searchQuery]);
 
   function getStatusColor(status: string): string {
     switch (status) {
@@ -296,10 +339,30 @@ export default function OrdersScreen() {
     </View>
   );
 
+  // Tab bar height is typically ~49px + safe area bottom
+  // BottomSearchBar is positioned at insets.bottom + 70, so we need extra padding
+  const tabBarHeight = 49 + insets.bottom;
+  const bottomPadding = tabBarHeight + 80; // Extra space for search bar above tab bar
+  
   return (
     <View style={styles.container}>
+      {/* Search Query Indicator */}
+      {searchQuery.trim() && (
+        <View style={[styles.searchIndicator, { marginTop: insets.top + 10, paddingTop: 12 }]}>
+          <Text style={styles.searchIndicatorText}>
+            Searching: "{searchQuery}"
+          </Text>
+          <TouchableOpacity
+            onPress={() => setSearchQuery("")}
+            style={styles.clearSearchIcon}
+          >
+            <Ionicons name="close-circle" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
+      <BlurView intensity={80} tint="light" style={[styles.filterContainer, { marginTop: searchQuery.trim() ? 0 : insets.top }]}>
         <TouchableOpacity
           style={[styles.filterTab, filter === "all" && styles.filterTabActive]}
           onPress={() => setFilter("all")}
@@ -345,7 +408,7 @@ export default function OrdersScreen() {
             Past Orders
           </Text>
         </TouchableOpacity>
-      </View>
+      </BlurView>
 
       {filteredAndSortedOrders.length === 0 ? (
         <FlatList
@@ -355,67 +418,134 @@ export default function OrdersScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: bottomPadding }}
+          contentInsetAdjustmentBehavior="automatic"
         />
       ) : (
         <FlatList
           data={filteredAndSortedOrders}
           keyExtractor={(item) => item.orderId}
+          contentContainerStyle={{ paddingBottom: bottomPadding }}
+          contentInsetAdjustmentBehavior="automatic"
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.orderCard}
+              style={styles.orderCardWrapper}
               onPress={() => router.push(`/orders/${item.orderId}`)}
               activeOpacity={0.85}
             >
-              <View style={styles.orderHeader}>
-                <Text style={styles.orderId}>
-                  Order #{item.orderId.substring(0, 8)}
-                </Text>
-                <Text style={styles.orderDate}>
-                  {new Date(item.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-              </View>
-
-              <View style={styles.orderItems}>
-                {item.items.slice(0, 2).map((orderItem) => (
-                  <Text
-                    key={orderItem.orderItemId}
-                    style={styles.orderItemText}
-                  >
-                    {orderItem.name} x {orderItem.quantity}
+              <BlurView intensity={80} tint="light" style={styles.orderCard}>
+                <View style={styles.orderHeader}>
+                  <Text style={styles.orderId}>
+                    Order #{item.orderId.substring(0, 8)}
                   </Text>
-                ))}
-                {item.items.length > 2 && (
-                  <Text style={styles.orderItemText}>
-                    +{item.items.length - 2} more items
+                  <Text style={styles.orderDate}>
+                    {new Date(item.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </Text>
-                )}
-              </View>
-
-              <View style={styles.orderFooter}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(item.status) },
-                  ]}
-                >
-                  <Text style={styles.orderStatus}>{item.status}</Text>
                 </View>
-                <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
-              </View>
+
+                <View style={styles.orderItems}>
+                  {item.items.slice(0, 2).map((orderItem) => (
+                    <Text
+                      key={orderItem.orderItemId}
+                      style={styles.orderItemText}
+                    >
+                      {orderItem.name} x {orderItem.quantity}
+                    </Text>
+                  ))}
+                  {item.items.length > 2 && (
+                    <Text style={styles.orderItemText}>
+                      +{item.items.length - 2} more items
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.orderFooter}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: getStatusColor(item.status) },
+                    ]}
+                  >
+                    <Text style={styles.orderStatus}>{item.status}</Text>
+                  </View>
+                  <Text style={styles.orderTotal}>
+                    ${item.total.toFixed(2)}
+                  </Text>
+                </View>
+              </BlurView>
             </TouchableOpacity>
           )}
         />
       )}
+      <BottomSearchBar
+        onSearch={(query) => {
+          Keyboard.dismiss();
+          setSearchQuery(query);
+        }}
+        onClear={() => {
+          setSearchQuery("");
+        }}
+        placeholder="Search orders..."
+        emptyStateTitle="Search orders"
+        emptyStateSubtitle="Search by order ID, status, items, or address"
+        loadSuggestions={async (query) => {
+          // Return order IDs, statuses, and item names as suggestions
+          const suggestions: string[] = [];
+          const queryLower = query.toLowerCase();
+
+          // Get unique statuses
+          const statuses = Array.from(new Set(orders.map((o) => o.status)))
+            .filter((s) => s.toLowerCase().includes(queryLower))
+            .slice(0, 3);
+          suggestions.push(...statuses);
+
+          // Get order IDs
+          orders.forEach((order) => {
+            const orderId = order.orderId.substring(0, 8);
+            if (
+              orderId.toLowerCase().includes(queryLower) &&
+              suggestions.length < 10
+            ) {
+              suggestions.push(`Order #${orderId}`);
+            }
+          });
+
+          // Get item names
+          orders.forEach((order) => {
+            order.items.forEach((item) => {
+              if (
+                item.name.toLowerCase().includes(queryLower) &&
+                !suggestions.includes(item.name) &&
+                suggestions.length < 10
+              ) {
+                suggestions.push(item.name);
+              }
+            });
+          });
+
+          return suggestions.slice(0, 10);
+        }}
+        onSuggestionSelect={(suggestion) => {
+          Keyboard.dismiss();
+          // Extract the actual search term from suggestion
+          // Remove "Order #" prefix if present
+          let searchTerm = suggestion;
+          if (suggestion.startsWith("Order #")) {
+            searchTerm = suggestion.replace("Order #", "").trim();
+          }
+          // Set search query immediately - this will trigger filtering
+          setSearchQuery(searchTerm);
+        }}
+      />
     </View>
   );
 }
@@ -440,16 +570,33 @@ const styles = StyleSheet.create({
 
   loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 
-  browseButton: {
+  pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
+  searchIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(227, 242, 253, 0.8)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(25, 118, 210, 0.2)",
+  },
+  searchIndicatorText: {
+    fontSize: 14,
+    color: "#1976d2",
+    fontWeight: "500",
+  },
+  clearSearchIcon: {
+    padding: 4,
+  },
+  clearSearchButton: {
     backgroundColor: "#6200ee",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 20,
   },
-  browseButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-
-  pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
+  clearSearchButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 
   orderId: { fontSize: 18, fontWeight: "600", color: "#333" },
 
@@ -491,23 +638,29 @@ const styles = StyleSheet.create({
 
   filterContainer: {
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: "rgba(255, 255, 255, 0.3)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.3)",
     gap: 8,
+    overflow: "hidden",
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "rgba(245, 245, 245, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   filterTabActive: {
     backgroundColor: "#6200ee",
+    borderColor: "#6200ee",
   },
   filterTabText: {
     fontSize: 14,

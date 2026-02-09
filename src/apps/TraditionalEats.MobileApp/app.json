@@ -14,24 +14,38 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.traditionaleats.mobile"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.traditionaleats.mobile"
-    },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "scheme": "traditionaleats",
     "plugins": [
       "expo-router",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow TraditionalEats to use your location to find nearby restaurants."
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.traditionaleats.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TraditionalEats needs your location to show nearby restaurants.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TraditionalEats needs your location to show nearby restaurants."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.traditionaleats.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    }
   }
 }

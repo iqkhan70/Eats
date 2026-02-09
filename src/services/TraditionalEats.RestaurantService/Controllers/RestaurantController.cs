@@ -325,6 +325,26 @@ public class RestaurantController : ControllerBase
             return StatusCode(500, new { message = "Failed to toggle restaurant status" });
         }
     }
+
+    [HttpPost("{restaurantId}/elo-rating")]
+    public async Task<IActionResult> UpdateEloRating(Guid restaurantId, [FromBody] UpdateEloRatingRequest request)
+    {
+        try
+        {
+            var success = await _restaurantService.UpdateEloRatingAsync(restaurantId, request.EloRating);
+            if (!success)
+            {
+                return NotFound(new { message = "Restaurant not found" });
+            }
+            return Ok(new { message = "Elo rating updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update Elo rating for restaurant {RestaurantId}", restaurantId);
+            return StatusCode(500, new { message = "Failed to update Elo rating" });
+        }
+    }
 }
 
 public record ToggleStatusRequest(bool IsActive);
+public record UpdateEloRatingRequest(decimal EloRating);

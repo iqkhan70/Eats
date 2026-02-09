@@ -45,7 +45,7 @@ export default function OrderChatScreen() {
             style={styles.backButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Ionicons name="arrow-back" size={24} color="#333" />
+            <Ionicons name="chevron-back" size={28} color="#333" />
           </TouchableOpacity>
 
           <Text style={styles.title} numberOfLines={1}>

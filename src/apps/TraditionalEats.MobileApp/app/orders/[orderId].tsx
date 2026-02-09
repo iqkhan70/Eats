@@ -9,9 +9,14 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
+import { useLayoutEffect } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { cartService } from "../../services/cart";
+import ReviewForm from "../../components/ReviewForm";
+import ReviewDisplay, { Review } from "../../components/ReviewDisplay";
+import { authService } from "../../services/auth";
 
 interface Order {
   orderId: string;
@@ -53,16 +58,38 @@ interface StatusHistory {
 
 export default function OrderDetailsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{ orderId: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [reordering, setReordering] = useState(false);
+  const [hasReview, setHasReview] = useState(false);
+  const [existingReview, setExistingReview] = useState<Review | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'details' | 'review'>('details');
+
+  // Hide default header - we use custom header with SafeAreaView
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
 
   useEffect(() => {
     if (params.orderId) {
       loadOrder();
     }
   }, [params.orderId]);
+
+  useEffect(() => {
+    if (order && (order.status === "Delivered" || order.status === "Completed")) {
+      checkForExistingReview();
+    } else {
+      // Reset review state if order status changes
+      setHasReview(false);
+      setExistingReview(null);
+    }
+  }, [order?.orderId, order?.status]);
 
   const loadOrder = async () => {
     try {
@@ -92,6 +119,7 @@ export default function OrderDetailsScreen() {
       case "OutForDelivery":
         return "#e2e3e5";
       case "Delivered":
+      case "Completed":
         return "#d4edda";
       case "Cancelled":
         return "#f8d7da";
@@ -113,6 +141,7 @@ export default function OrderDetailsScreen() {
       case "OutForDelivery":
         return "#383d41";
       case "Delivered":
+      case "Completed":
         return "#155724";
       case "Cancelled":
         return "#721c24";
@@ -131,7 +160,7 @@ export default function OrderDetailsScreen() {
   };
 
   const isPastOrder = (status: string): boolean => {
-    return ["Delivered", "Cancelled", "Refunded"].includes(status);
+    return ["Delivered", "Completed", "Cancelled", "Refunded"].includes(status);
   };
 
   const handleReorder = async () => {
@@ -196,6 +225,47 @@ export default function OrderDetailsScreen() {
     }
   };
 
+  const checkForExistingReview = async () => {
+    if (!order) return;
+    
+    try {
+      const token = await authService.getAccessToken();
+      if (!token) {
+        console.log("No auth token, skipping review check");
+        setHasReview(false);
+        setExistingReview(null);
+        return;
+      }
+
+      const response = await api.get<Review[]>("/MobileBff/reviews/me?skip=0&take=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.data) {
+        const review = response.data.find((r) => r.orderId === order.orderId);
+        if (review) {
+          console.log("Found existing review:", review.reviewId);
+          setExistingReview(review);
+          setHasReview(true);
+        } else {
+          console.log("No existing review found for order:", order.orderId);
+          setHasReview(false);
+          setExistingReview(null);
+        }
+      }
+    } catch (error: any) {
+      console.error("Error checking for existing review:", error);
+      setHasReview(false);
+      setExistingReview(null);
+    }
+  };
+
+  const handleReviewSubmitted = async () => {
+    setShowEditForm(false);
+    await checkForExistingReview();
+    Alert.alert("Success", "Review submitted successfully!");
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -235,20 +305,74 @@ export default function OrderDetailsScreen() {
       )
     : [];
 
+  const canReview = order && (order.status === "Delivered" || order.status === "Completed");
+
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backIcon}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
+        <TouchableOpacity 
+          onPress={() => {
+            try {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/orders');
+              }
+            } catch (error) {
+              console.error('Error navigating back:', error);
+              router.replace('/(tabs)/orders');
+            }
+          }} 
+          style={styles.backIcon}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Details</Text>
         <View style={styles.backIcon} />
       </View>
 
+      {/* Tabs */}
+      {canReview && (
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'details' && styles.tabActive]}
+            onPress={() => setActiveTab('details')}
+          >
+            <Ionicons 
+              name="receipt" 
+              size={20} 
+              color={activeTab === 'details' ? '#6200ee' : '#666'} 
+            />
+            <Text style={[styles.tabText, activeTab === 'details' && styles.tabTextActive]}>
+              Order Details
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'review' && styles.tabActive]}
+            onPress={() => setActiveTab('review')}
+          >
+            <Ionicons 
+              name="star" 
+              size={20} 
+              color={activeTab === 'review' ? '#6200ee' : '#666'} 
+            />
+            <Text style={[styles.tabText, activeTab === 'review' && styles.tabTextActive]}>
+              Review
+              {hasReview && <Text style={styles.tabBadge}> ✓</Text>}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+      >
+        {(activeTab === 'details' || !canReview) ? (
+          <>
       {/* Order Info Card */}
       <View style={styles.card}>
         <View style={styles.orderHeader}>
@@ -421,6 +545,24 @@ export default function OrderDetailsScreen() {
         })}
       </View>
 
+      {/* Reorder Button - Only show for past orders */}
+      {isPastOrder(order.status) && (
+        <TouchableOpacity
+          style={[styles.reorderButton, reordering && styles.reorderButtonDisabled]}
+          onPress={handleReorder}
+          disabled={reordering}
+        >
+          {reordering ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="repeat" size={20} color="#fff" />
+              <Text style={styles.reorderButtonText}>Reorder</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+
       {/* Order Summary */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Order Summary</Text>
@@ -452,7 +594,56 @@ export default function OrderDetailsScreen() {
           </Text>
         </View>
       </View>
-    </ScrollView>
+
+          </>
+        ) : (
+          <>
+            {/* Review Tab Content */}
+            {!hasReview && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Review Your Order</Text>
+                <Text style={styles.reviewSubtitle}>
+                  Share your experience and help others discover great food!
+                </Text>
+                <ReviewForm
+                  orderId={order.orderId}
+                  restaurantId={order.restaurantId}
+                  onReviewSubmitted={handleReviewSubmitted}
+                />
+              </View>
+            )}
+
+            {hasReview && existingReview && (
+              <View style={styles.card}>
+                <View style={styles.reviewHeader}>
+                  <Text style={styles.cardTitle}>Your Review</Text>
+                  {!showEditForm && (
+                    <TouchableOpacity
+                      onPress={() => setShowEditForm(true)}
+                      style={styles.editButton}
+                    >
+                      <Ionicons name="create-outline" size={18} color="#6200ee" />
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {!showEditForm ? (
+                  <ReviewDisplay reviews={[existingReview]} />
+                ) : (
+                  <ReviewForm
+                    orderId={order.orderId}
+                    restaurantId={order.restaurantId}
+                    existingReviewId={existingReview.reviewId}
+                    onReviewSubmitted={handleReviewSubmitted}
+                    onCancel={() => setShowEditForm(false)}
+                  />
+                )}
+              </View>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -461,8 +652,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
+  scrollView: {
+    flex: 1,
+  },
   contentContainer: {
     padding: 16,
+  },
+  tabsContainer: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+    paddingHorizontal: 16,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    gap: 6,
+  },
+  tabActive: {
+    borderBottomColor: "#6200ee",
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#666",
+  },
+  tabTextActive: {
+    color: "#6200ee",
+    fontWeight: "600",
+  },
+  tabBadge: {
+    fontSize: 14,
+    color: "#6200ee",
+    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,
@@ -509,7 +737,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    padding: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
   },
   backIcon: {
     width: 40,
@@ -599,6 +830,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     marginBottom: 12,
+  },
+  reviewSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
+    fontStyle: "italic",
   },
   chatCard: {
     flexDirection: "row",
@@ -769,5 +1006,25 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  reviewHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  editButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+  },
+  editButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#6200ee",
   },
 });

@@ -22,7 +22,7 @@ public static class ConfigurationExtensions
             Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "shared", "TraditionalEats.BuildingBlocks", "Configuration", "appsettings.Shared.json"),
             // Absolute path from base directory
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "shared", "TraditionalEats.BuildingBlocks", "Configuration", "appsettings.Shared.json"),
-            // From bin/Debug/net8.0 when running
+            // From bin/Debug/net10.0 when running
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "shared", "TraditionalEats.BuildingBlocks", "Configuration", "appsettings.Shared.json")
         };
 

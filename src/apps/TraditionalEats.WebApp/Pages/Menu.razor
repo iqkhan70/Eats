@@ -3,10 +3,13 @@
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
 @using TraditionalEats.WebApp.Services
+@using TraditionalEats.WebApp.Components
+@using TraditionalEats.WebApp.Models
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 @inject CartService CartService
 @inject NotificationService NotificationService
+@inject AuthService AuthService
 @inject ILogger<Menu> _logger
 
 <PageTitle>Menu - TraditionalEats</PageTitle>
@@ -86,6 +89,33 @@
                 </RadzenStack>
             </RadzenCard>
         }
+        
+        <!-- Reviews Section -->
+        <RadzenCard>
+            <RadzenStack Gap="1.5rem">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H3" Style="font-weight: bold;">Reviews</RadzenText>
+                    @if (restaurantRating != null)
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                            <ReviewRating Value="@((int)Math.Round(restaurantRating.AverageRating))" IsEditable="false" ShowValue="true" Size="24" />
+                            <RadzenText TextStyle="TextStyle.Body1" Style="font-weight: 500;">
+                                @restaurantRating.AverageRating.ToString("F1") (@restaurantRating.TotalReviews reviews)
+                            </RadzenText>
+                        </RadzenStack>
+                    }
+                </RadzenStack>
+                
+                @if (loadingReviews)
+                {
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                }
+                else
+                {
+                    <ReviewDisplay Reviews="@reviews" />
+                }
+            </RadzenStack>
+        </RadzenCard>
     }
     else
     {
@@ -102,6 +132,9 @@
     private List<MenuItemDto> menuItems = new();
     private List<CategoryDto> categories = new();
     private Guid? selectedCategoryId = null;
+    private List<ReviewDto> reviews = new();
+    private bool loadingReviews = false;
+    private RestaurantRatingDto? restaurantRating;
 
     protected override async Task OnInitializedAsync()
     {
@@ -109,6 +142,8 @@
         currentCartId = null;
         await LoadMenu();
         await LoadCategories();
+        await LoadReviews();
+        await LoadRestaurantRating();
     }
     
     protected override async Task OnParametersSetAsync()
@@ -279,5 +314,37 @@
         public Guid CategoryId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
+    }
+
+    private async Task LoadReviews()
+    {
+        try
+        {
+            loadingReviews = true;
+            var response = await Http.GetFromJsonAsync<List<ReviewDto>>($"WebBff/reviews/restaurant/{RestaurantId}?skip=0&take=10");
+            reviews = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading reviews");
+            reviews = new();
+        }
+        finally
+        {
+            loadingReviews = false;
+        }
+    }
+
+    private async Task LoadRestaurantRating()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<RestaurantRatingDto>($"WebBff/reviews/restaurant/{RestaurantId}/rating");
+            restaurantRating = response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading restaurant rating");
+        }
     }
 }

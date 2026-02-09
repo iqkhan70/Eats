@@ -1,0 +1,86 @@
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components
+
+<div class="review-display">
+    @if (Reviews == null || !Reviews.Any())
+    {
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem" Style="align-items: center; padding: 1rem;">
+                <RadzenIcon Icon="rate_review" Style="font-size: 48px; color: var(--rz-text-secondary-color);" />
+                <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
+                    No reviews yet. Be the first to review!
+                </RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenStack Gap="1rem">
+            @foreach (var review in Reviews)
+            {
+                <RadzenCard>
+                    <RadzenStack Gap="0.75rem">
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Start">
+                            <RadzenStack Gap="0.5rem" Style="flex: 1;">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+                                    <ReviewRating Value="@review.Rating" IsEditable="false" ShowValue="true" Size="18" />
+                                    @if (review.IsVerified)
+                                    {
+                                        <RadzenBadge Text="Verified Purchase" Size="BadgeSize.Small" 
+                                                    Style="background-color: #e8f5e9; color: #2e7d32;" />
+                                    }
+                                </RadzenStack>
+                                @if (!string.IsNullOrEmpty(review.Comment))
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body1" Style="margin-top: 0.5rem;">
+                                        @review.Comment
+                                    </RadzenText>
+                                }
+                                @if (review.Tags != null && review.Tags.Any())
+                                {
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap; margin-top: 0.5rem;">
+                                        @foreach (var tag in review.Tags)
+                                        {
+                                            <RadzenBadge Text="@tag" Size="BadgeSize.Small" 
+                                                        Style="background-color: #e3f2fd; color: #1976d2;" />
+                                        }
+                                    </RadzenStack>
+                                }
+                            </RadzenStack>
+                            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); white-space: nowrap;">
+                                @review.CreatedAt.ToString("MMM dd, yyyy")
+                            </RadzenText>
+                        </RadzenStack>
+                        
+                        @if (!string.IsNullOrEmpty(review.Response))
+                        {
+                            <RadzenCard Style="background-color: #f5f5f5; margin-top: 0.5rem; padding: 0.75rem;">
+                                <RadzenStack Gap="0.5rem">
+                                    <RadzenText TextStyle="TextStyle.Body2" Style="font-weight: 600; color: var(--rz-primary);">
+                                        Restaurant Response
+                                    </RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body2">
+                                        @review.Response
+                                    </RadzenText>
+                                    @if (review.ResponseAt.HasValue)
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                                            @review.ResponseAt.Value.ToString("MMM dd, yyyy")
+                                        </RadzenText>
+                                    }
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+            }
+        </RadzenStack>
+    }
+</div>
+
+@using TraditionalEats.WebApp.Models
+
+@code {
+    [Parameter] public List<ReviewDto>? Reviews { get; set; }
+}

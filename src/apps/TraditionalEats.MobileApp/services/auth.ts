@@ -304,3 +304,4 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+export const auth = authService; // Alias for convenience

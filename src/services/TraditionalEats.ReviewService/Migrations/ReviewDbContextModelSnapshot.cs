@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TraditionalEats.ReviewService.Data;
 
@@ -16,8 +17,10 @@ namespace TraditionalEats.ReviewService.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("ProductVersion", "9.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
+
+            MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
             modelBuilder.Entity("TraditionalEats.ReviewService.Entities.Review", b =>
                 {
@@ -54,7 +57,7 @@ namespace TraditionalEats.ReviewService.Migrations
                     b.Property<Guid>("RestaurantId")
                         .HasColumnType("char(36)");
 
-                    b.Property<string>("Tags")
+                    b.Property<string>("TagsJson")
                         .IsRequired()
                         .HasColumnType("json");
 
