@@ -9,7 +9,9 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
+import { useLayoutEffect } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { cartService } from "../../services/cart";
 import ReviewForm from "../../components/ReviewForm";
@@ -56,6 +58,7 @@ interface StatusHistory {
 
 export default function OrderDetailsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{ orderId: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +67,13 @@ export default function OrderDetailsScreen() {
   const [existingReview, setExistingReview] = useState<Review | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'review'>('details');
+
+  // Hide default header - we use custom header with SafeAreaView
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
 
   useEffect(() => {
     if (params.orderId) {
@@ -298,10 +308,26 @@ export default function OrderDetailsScreen() {
   const canReview = order && (order.status === "Delivered" || order.status === "Completed");
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backIcon}>
+        <TouchableOpacity 
+          onPress={() => {
+            try {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/orders');
+              }
+            } catch (error) {
+              console.error('Error navigating back:', error);
+              router.replace('/(tabs)/orders');
+            }
+          }} 
+          style={styles.backIcon}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
           <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Details</Text>
@@ -617,7 +643,7 @@ export default function OrderDetailsScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -711,7 +737,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    padding: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
   },
   backIcon: {
     width: 40,

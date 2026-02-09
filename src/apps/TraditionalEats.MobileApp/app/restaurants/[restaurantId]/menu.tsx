@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../../services/api';
 import { cartService } from '../../../services/cart';
 import ReviewDisplay, { Review } from '../../../components/ReviewDisplay';
@@ -29,6 +30,7 @@ interface Category {
 
 export default function MenuScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{
     restaurantId?: string;
     refreshedAt?: string;
@@ -37,6 +39,13 @@ export default function MenuScreen() {
 
   const restaurantId = params.restaurantId as string;
   const refreshedAt = params.refreshedAt; // 👈 will change after save
+
+  // Hide default header - we use custom header with SafeAreaView
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -185,7 +194,12 @@ console.log("FIRST ITEM", response.data?.[0]);
 
   const handleBackPress = useCallback(() => {
     try {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        // Fallback if there's no history
+        router.replace('/(tabs)/restaurants');
+      }
     } catch (error) {
       console.error('Error navigating back:', error);
       // Fallback: try to go back using replace if back fails
@@ -249,13 +263,13 @@ console.log("FIRST ITEM", response.data?.[0]);
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={handleBackPress} 
             style={styles.backButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            disabled={false}
+            activeOpacity={0.7}
           >
             <Ionicons name="chevron-back" size={28} color="#333" />
           </TouchableOpacity>
@@ -264,18 +278,18 @@ console.log("FIRST ITEM", response.data?.[0]);
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6200ee" />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity 
           onPress={handleBackPress} 
           style={styles.backButton}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          disabled={false}
+          activeOpacity={0.7}
         >
           <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
@@ -441,7 +455,7 @@ console.log("FIRST ITEM", response.data?.[0]);
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
