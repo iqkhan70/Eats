@@ -279,7 +279,7 @@ CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
   echo ""
 
   echo -e "${GREEN}Step 2b: Generating nginx.conf (DOMAIN=$DOMAIN, HTTPS_ONLY=$HTTPS_ONLY)${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && source .env 2>/dev/null; export DOMAIN HTTPS_ONLY; bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && mkdir -p nginx && source .env 2>/dev/null; export DOMAIN HTTPS_ONLY; bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf"
   echo ""
 
   echo -e "${GREEN}Step 3: Building images on server (one at a time to avoid OOM, ~10–25 min)${NC}"

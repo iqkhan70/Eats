@@ -8,7 +8,7 @@
             @for (int i = 1; i <= 5; i++)
             {
                 <RadzenIcon Icon="@(i <= Value ? "star" : "star_border")" 
-                           Style="font-size: @(Size)px; color: @(i <= Value ? "#FFD700" : "#ccc"); cursor: pointer;"
+                           Style="@($"font-size: {Size}px; color: {(i <= Value ? "#FFD700" : "#ccc")}; cursor: pointer;")"
                            Click="@(() => OnRatingChanged(i))" />
             }
             @if (ShowValue)
@@ -23,7 +23,7 @@
             @for (int i = 1; i <= 5; i++)
             {
                 <RadzenIcon Icon="@(i <= Value ? "star" : "star_border")" 
-                           Style="font-size: @(Size)px; color: @(i <= Value ? "#FFD700" : "#ccc");" />
+                           Style="@($"font-size: {Size}px; color: {(i <= Value ? "#FFD700" : "#ccc")};")" />
             }
             @if (ShowValue)
             {
