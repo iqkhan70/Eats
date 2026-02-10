@@ -19,6 +19,7 @@ import { authService } from "../../services/auth";
 interface Document {
   documentId: string;
   vendorId: string;
+  vendorName?: string;
   fileName: string;
   documentType: string;
   fileSize: number;
@@ -39,7 +40,15 @@ export default function AdminDocumentsScreen() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [vendorIdFilter, setVendorIdFilter] = useState("");
+  const [vendorNameFilter, setVendorNameFilter] = useState("");
+
+  const displayedDocuments = React.useMemo(() => {
+    const name = vendorNameFilter.trim().toLowerCase();
+    if (!name) return documents;
+    return documents.filter(
+      (d) => (d.vendorName ?? "").toLowerCase().includes(name) || (d.vendorId ?? "").toLowerCase().includes(name)
+    );
+  }, [documents, vendorNameFilter]);
 
   useEffect(() => {
     checkAuthAndLoad();
@@ -50,7 +59,7 @@ export default function AdminDocumentsScreen() {
       if (isAuthenticated && isAdmin) {
         loadDocuments();
       }
-    }, [isAuthenticated, isAdmin, statusFilter, vendorIdFilter]),
+    }, [isAuthenticated, isAdmin, statusFilter]),
   );
 
   const checkAuthAndLoad = async () => {
@@ -84,7 +93,6 @@ export default function AdminDocumentsScreen() {
       setLoading(true);
       const queryParams = new URLSearchParams();
       if (statusFilter !== "all") queryParams.append("isActive", statusFilter === "active" ? "true" : "false");
-      if (vendorIdFilter.trim()) queryParams.append("vendorId", vendorIdFilter.trim());
 
       const queryString = queryParams.toString();
       const response = await api.get<Document[]>(
@@ -267,14 +275,14 @@ export default function AdminDocumentsScreen() {
         <View style={styles.vendorFilterContainer}>
           <TextInput
             style={styles.vendorFilterInput}
-            placeholder="Filter by Vendor ID"
-            value={vendorIdFilter}
-            onChangeText={setVendorIdFilter}
+            placeholder="Filter by Vendor Name"
+            value={vendorNameFilter}
+            onChangeText={setVendorNameFilter}
             placeholderTextColor="#999"
           />
-          {vendorIdFilter.length > 0 && (
+          {vendorNameFilter.length > 0 && (
             <TouchableOpacity
-              onPress={() => setVendorIdFilter("")}
+              onPress={() => setVendorNameFilter("")}
               style={styles.clearButton}
             >
               <Ionicons name="close-circle" size={20} color="#666" />
@@ -288,6 +296,11 @@ export default function AdminDocumentsScreen() {
           <Ionicons name="document-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>No documents found</Text>
         </View>
+      ) : displayedDocuments.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="search-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No documents match vendor name</Text>
+        </View>
       ) : (
         <ScrollView
           style={styles.scrollView}
@@ -295,7 +308,7 @@ export default function AdminDocumentsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          {documents.map((doc) => (
+          {displayedDocuments.map((doc) => (
             <View key={doc.documentId} style={styles.documentCard}>
               <View style={styles.documentHeader}>
                 <View style={styles.documentInfo}>
@@ -308,7 +321,7 @@ export default function AdminDocumentsScreen() {
                       {doc.documentType} • {formatFileSize(doc.fileSize)}
                     </Text>
                     <Text style={styles.documentVendor}>
-                      Vendor: {doc.vendorId.substring(0, 8)}...
+                      Vendor: {doc.vendorName ?? doc.vendorId}
                     </Text>
                     <Text style={styles.documentDate}>
                       Uploaded: {formatDate(doc.uploadedAt)}

@@ -2384,7 +2384,7 @@ public class WebBffController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAllDocuments(
         [FromQuery] int skip = 0,
-        [FromQuery] int take = 100,
+        [FromQuery] int take = 500,
         [FromQuery] Guid? vendorId = null,
         [FromQuery] bool? isActive = null)
     {
@@ -2393,16 +2393,74 @@ public class WebBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("DocumentService");
             ForwardBearerToken(client);
 
-            var queryParams = new List<string>();
-            if (skip > 0) queryParams.Add($"skip={skip}");
-            if (take != 100) queryParams.Add($"take={take}");
+            var queryParams = new List<string> { "skip=" + skip, "take=" + take };
             if (vendorId.HasValue) queryParams.Add($"vendorId={vendorId.Value}");
             if (isActive.HasValue) queryParams.Add($"isActive={isActive.Value}");
 
-            var queryString = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
+            var queryString = "?" + string.Join("&", queryParams);
             var response = await client.GetAsync($"/api/document/admin/all{queryString}");
             var content = await response.Content.ReadAsStringAsync();
-            return JsonContent(content, (int)response.StatusCode);
+            if (!response.IsSuccessStatusCode)
+                return JsonContent(content, (int)response.StatusCode);
+
+            // Enrich with vendor first + last name from CustomerService
+            var docs = JsonSerializer.Deserialize<List<JsonElement>>(content);
+            if (docs == null || docs.Count == 0)
+                return Content(content, "application/json");
+
+            var vendorIds = docs
+                .Select(d =>
+                {
+                    if (!d.TryGetProperty("vendorId", out var v)) return (Guid?)null;
+                    var s = v.GetString();
+                    return string.IsNullOrEmpty(s) || !Guid.TryParse(s, out var g) ? (Guid?)null : g;
+                })
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            var customerClient = _httpClientFactory.CreateClient("CustomerService");
+            var vendorNames = new Dictionary<Guid, string>();
+            foreach (var vid in vendorIds)
+            {
+                try
+                {
+                    var custResponse = await customerClient.GetAsync($"api/Customer/by-user/{vid}");
+                    if (custResponse.IsSuccessStatusCode)
+                    {
+                        var cust = await custResponse.Content.ReadFromJsonAsync<CustomerInfoDto>(JsonOptions);
+                        if (cust != null)
+                            vendorNames[vid] = $"{cust.FirstName} {cust.LastName}".Trim();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not resolve vendor name for {VendorId}", vid);
+                }
+            }
+
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+            {
+                writer.WriteStartArray();
+                foreach (var doc in docs)
+                {
+                    writer.WriteStartObject();
+                    foreach (var prop in doc.EnumerateObject())
+                    {
+                        prop.WriteTo(writer);
+                    }
+                    if (doc.TryGetProperty("vendorId", out var vProp) && Guid.TryParse(vProp.GetString(), out var vId) && vendorNames.TryGetValue(vId, out var name))
+                    {
+                        writer.WriteString("vendorName", name);
+                    }
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+            var enriched = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+            return Content(enriched, "application/json");
         }
         catch (Exception ex)
         {
@@ -2478,6 +2536,7 @@ public class WebBffController : ControllerBase
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount);
 public record UpdateDocumentStatusRequest(bool IsActive);
+public record CustomerInfoDto(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
 
 public record CreateCartRequest(Guid? RestaurantId);
 

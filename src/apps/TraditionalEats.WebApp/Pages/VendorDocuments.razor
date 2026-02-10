@@ -55,21 +55,7 @@
     {
         <RadzenCard Style="width: 100%;">
             <RadzenStack Gap="0.75rem">
-                <RadzenStack Orientation="Orientation.Horizontal"
-                             JustifyContent="JustifyContent.SpaceBetween"
-                             AlignItems="AlignItems.Center"
-                             Gap="0.75rem"
-                             Style="flex-wrap: wrap;">
-                    <RadzenText TextStyle="TextStyle.Body1">@documents.Count document(s)</RadzenText>
-                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-                        <RadzenDropDown @bind-Value="statusFilter"
-                                        Data="@statusFilterOptions"
-                                        TextProperty="Label"
-                                        ValueProperty="Value"
-                                        Change="@(args => LoadDocuments())"
-                                        Style="width: 200px;" />
-                    </RadzenStack>
-                </RadzenStack>
+                <RadzenText TextStyle="TextStyle.Body1">@documents.Count document(s)</RadzenText>
 
                 <RadzenDataGrid @ref="documentsGrid"
                                 Data="@documents"
@@ -77,6 +63,9 @@
                                 AllowPaging="true"
                                 PageSize="15"
                                 AllowSorting="true"
+                                AllowFiltering="true"
+                                FilterMode="FilterMode.Advanced"
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                 GridLines="DataGridGridLines.Both"
                                 ShowPagingSummary="true"
                                 PagerHorizontalAlign="HorizontalAlign.Left"
@@ -85,6 +74,10 @@
                     <Columns>
                         <RadzenDataGridColumn TItem="DocumentDto" Property="FileName" Title="File Name" Width="300px" />
                         <RadzenDataGridColumn TItem="DocumentDto" Property="DocumentType" Title="Type" Width="200px" />
+                        @if (isAdmin)
+                        {
+                            <RadzenDataGridColumn TItem="DocumentDto" Property="VendorName" Title="Vendor" Width="180px" />
+                        }
                         <RadzenDataGridColumn TItem="DocumentDto" Title="File Size" Width="120px" Sortable="true">
                             <Template Context="doc">
                                 <RadzenText>@FormatFileSize(doc.FileSize)</RadzenText>
@@ -145,13 +138,6 @@
     private List<DocumentDto>? documents;
     private RadzenDataGrid<DocumentDto>? documentsGrid;
 
-    private string? statusFilter = null;
-    private List<StatusFilterOption> statusFilterOptions = new()
-    {
-        new StatusFilterOption { Label = "All", Value = null },
-        new StatusFilterOption { Label = "Active", Value = "true" },
-        new StatusFilterOption { Label = "Inactive", Value = "false" }
-    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -247,17 +233,7 @@
                 return;
             }
 
-            var queryString = statusFilter != null ? $"?isActive={statusFilter}" : "";
-            string url;
-
-            if (isAdmin)
-            {
-                url = $"WebBff/documents/admin/all{queryString}";
-            }
-            else
-            {
-                url = $"WebBff/documents/vendor/my-documents{queryString}";
-            }
+            string url = isAdmin ? "WebBff/documents/admin/all" : "WebBff/documents/vendor/my-documents";
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -382,6 +358,7 @@
     {
         public Guid DocumentId { get; set; }
         public Guid VendorId { get; set; }
+        public string? VendorName { get; set; }
         public string FileName { get; set; } = string.Empty;
         public string DocumentType { get; set; } = string.Empty;
         public long FileSize { get; set; }
@@ -392,11 +369,5 @@
         public DateTime? ExpiresAt { get; set; }
         public string? Notes { get; set; }
         public string? DownloadUrl { get; set; }
-    }
-
-    public class StatusFilterOption
-    {
-        public string Label { get; set; } = string.Empty;
-        public string? Value { get; set; }
     }
 }

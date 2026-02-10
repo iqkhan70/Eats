@@ -45,27 +45,7 @@
     {
         <RadzenCard Style="width: 100%;">
             <RadzenStack Gap="0.75rem">
-                <RadzenStack Orientation="Orientation.Horizontal"
-                             JustifyContent="JustifyContent.SpaceBetween"
-                             AlignItems="AlignItems.Center"
-                             Gap="0.75rem"
-                             Style="flex-wrap: wrap;">
-                    <RadzenText TextStyle="TextStyle.Body1">@documents.Count document(s)</RadzenText>
-                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-                        <RadzenDropDown @bind-Value="statusFilter"
-                                        Data="@statusFilterOptions"
-                                        TextProperty="Label"
-                                        ValueProperty="Value"
-                                        Change="@(args => LoadDocuments())"
-                                        Style="width: 200px;" />
-                        <RadzenTextBox @bind-Value="vendorIdFilter"
-                                       Placeholder="Filter by Vendor ID"
-                                       Style="width: 300px;"
-                                       Change="@(args => LoadDocuments())" />
-                        <RadzenButton Text="Clear Filters" Icon="close" Variant="Variant.Outlined" Size="ButtonSize.Small"
-                                      Click="ClearFilters" />
-                    </RadzenStack>
-                </RadzenStack>
+                <RadzenText TextStyle="TextStyle.Body1">@documents.Count document(s)</RadzenText>
 
                 <RadzenDataGrid @ref="documentsGrid"
                                 Data="@documents"
@@ -85,7 +65,7 @@
                     <Columns>
                         <RadzenDataGridColumn TItem="DocumentDto" Property="FileName" Title="File Name" Width="250px" />
                         <RadzenDataGridColumn TItem="DocumentDto" Property="DocumentType" Title="Type" Width="150px" />
-                        <RadzenDataGridColumn TItem="DocumentDto" Property="VendorId" Title="Vendor ID" Width="200px" />
+                        <RadzenDataGridColumn TItem="DocumentDto" Property="VendorName" Title="Vendor" Width="180px" />
                         <RadzenDataGridColumn TItem="DocumentDto" Title="File Size" Width="120px" Sortable="true">
                             <Template Context="doc">
                                 <RadzenText>@FormatFileSize(doc.FileSize)</RadzenText>
@@ -142,15 +122,6 @@
     private List<DocumentDto> documents = new();
     private RadzenDataGrid<DocumentDto>? documentsGrid;
 
-    private string? statusFilter = null;
-    private string? vendorIdFilter = string.Empty;
-    private List<StatusFilterOption> statusFilterOptions = new()
-    {
-        new StatusFilterOption { Label = "All", Value = null },
-        new StatusFilterOption { Label = "Active", Value = "true" },
-        new StatusFilterOption { Label = "Inactive", Value = "false" }
-    };
-
     protected override async Task OnInitializedAsync()
     {
         isAuthChecked = false;
@@ -197,13 +168,7 @@
                 return;
             }
 
-            var queryParams = new List<string>();
-            if (statusFilter != null) queryParams.Add($"isActive={statusFilter}");
-            if (!string.IsNullOrWhiteSpace(vendorIdFilter) && Guid.TryParse(vendorIdFilter, out _))
-                queryParams.Add($"vendorId={vendorIdFilter}");
-
-            var queryString = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
-            var request = new HttpRequestMessage(HttpMethod.Get, $"WebBff/documents/admin/all{queryString}");
+            var request = new HttpRequestMessage(HttpMethod.Get, "WebBff/documents/admin/all");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await Http.SendAsync(request);
@@ -254,13 +219,6 @@
         {
             isLoading = false;
         }
-    }
-
-    private async Task ClearFilters()
-    {
-        statusFilter = null;
-        vendorIdFilter = string.Empty;
-        await LoadDocuments();
     }
 
     private async Task DownloadDocument(DocumentDto doc)
@@ -374,6 +332,7 @@
     {
         public Guid DocumentId { get; set; }
         public Guid VendorId { get; set; }
+        public string? VendorName { get; set; }
         public string FileName { get; set; } = string.Empty;
         public string DocumentType { get; set; } = string.Empty;
         public long FileSize { get; set; }
@@ -384,11 +343,5 @@
         public DateTime? ExpiresAt { get; set; }
         public string? Notes { get; set; }
         public string? DownloadUrl { get; set; }
-    }
-
-    public class StatusFilterOption
-    {
-        public string Label { get; set; } = string.Empty;
-        public string? Value { get; set; }
     }
 }
