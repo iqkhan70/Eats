@@ -16,5 +16,6 @@ CREATE DATABASE IF NOT EXISTS traditional_eats_payment;
 CREATE DATABASE IF NOT EXISTS traditional_eats_chat;
 CREATE DATABASE IF NOT EXISTS traditional_eats_ai;
 CREATE DATABASE IF NOT EXISTS traditional_eats_review;
+CREATE DATABASE IF NOT EXISTS traditional_eats_document;
 "
 echo "MySQL databases ready."

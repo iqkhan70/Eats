@@ -136,7 +136,7 @@ Create `secrets.env` and set any of: `APP_BASE_URL`, `STAGING_DOMAIN`, `PRODUCTI
 
 ## MySQL databases
 
-The script runs `scripts/mysql-init.sh` on the server after `docker compose up -d`, creating all eight databases (identity, customer, order, catalog, notification, restaurant, payment, chat) if they don't exist. Each service runs EF migrations on startup. If init fails (e.g. MySQL not ready yet), on the server run: `cd /opt/traditionaleats && ./scripts/mysql-init.sh`.
+The script runs `deploy/digitalocean/scripts/mysql-init.sh` on the server after `docker compose up -d`, creating all required databases (identity, customer, order, catalog, notification, restaurant, payment, chat, ai, review, document) if they don't exist. Each service runs EF migrations on startup. If init fails (e.g. MySQL not ready yet), on the server run: `cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh`.
 
 **MySQL is exposed on port 3306** for direct access from your Mac. Connect using:
 
@@ -162,6 +162,8 @@ ADMIN_EMAIL=your-admin@example.com
 ADMIN_PASSWORD=YourSecurePassword123!
 SEED_ADMIN=true  # Set to false to skip seeding
 ```
+
+**DocumentService (vendor documents):** The `document-service` container stores uploaded files in **DigitalOcean Spaces** (S3-compatible). Set `DIGITALOCEAN_SPACES_*` in `secrets.env` (see `secrets.env.example`) so uploads work. The document database (`traditional_eats_document`) is created by `mysql-init.sh`; the service runs EF migrations on startup.
 
 **To seed manually:** On the server:
 

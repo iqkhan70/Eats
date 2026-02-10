@@ -261,6 +261,12 @@ REPO_NAME=$REPO_NAME
 DOMAIN=$DOMAIN
 HTTPS_ONLY=$HTTPS_ONLY
 CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+DIGITALOCEAN_SPACES_BUCKET_NAME=${DIGITALOCEAN_SPACES_BUCKET_NAME:-}
+DIGITALOCEAN_SPACES_ACCESS_KEY=${DIGITALOCEAN_SPACES_ACCESS_KEY:-}
+DIGITALOCEAN_SPACES_SECRET_KEY=${DIGITALOCEAN_SPACES_SECRET_KEY:-}
+DIGITALOCEAN_SPACES_REGION=${DIGITALOCEAN_SPACES_REGION:-sfo3}
+DIGITALOCEAN_SPACES_SERVICE_URL=${DIGITALOCEAN_SPACES_SERVICE_URL:-https://sfo3.digitaloceanspaces.com}
+DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
 "
   echo "$ENV_CONTENT" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats && cat > /opt/traditionaleats/.env && chmod 600 /opt/traditionaleats/.env"
   echo ""
@@ -465,6 +471,12 @@ ENDSWAP
     OPENAI_API_KEY=$(get_var OPENAI_API_KEY)
     REGISTRY=$(get_var REGISTRY)
     REPO_NAME=$(get_var REPO_NAME)
+    DIGITALOCEAN_SPACES_BUCKET_NAME=$(get_var DIGITALOCEAN_SPACES_BUCKET_NAME)
+    DIGITALOCEAN_SPACES_ACCESS_KEY=$(get_var DIGITALOCEAN_SPACES_ACCESS_KEY)
+    DIGITALOCEAN_SPACES_SECRET_KEY=$(get_var DIGITALOCEAN_SPACES_SECRET_KEY)
+    DIGITALOCEAN_SPACES_REGION=$(get_var DIGITALOCEAN_SPACES_REGION)
+    DIGITALOCEAN_SPACES_SERVICE_URL=$(get_var DIGITALOCEAN_SPACES_SERVICE_URL)
+    DIGITALOCEAN_SPACES_FOLDER=$(get_var DIGITALOCEAN_SPACES_FOLDER)
   fi
   [ -z "$MYSQL_ROOT_PASSWORD" ] && MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
   [ -z "$JWT_SECRET" ] && JWT_SECRET=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-48)
@@ -511,6 +523,13 @@ ENDSWAP
   # Single repo (DOCR 1-repo limit): registry.digitalocean.com/cha-registry/traditionaleats:service-name
   REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}"
   REPO_NAME="${REPO_NAME:-traditionaleats}"
+  # DocumentService: DigitalOcean Spaces (S3-compatible); set in secrets.env for vendor document uploads
+  DIGITALOCEAN_SPACES_BUCKET_NAME="${DIGITALOCEAN_SPACES_BUCKET_NAME:-}"
+  DIGITALOCEAN_SPACES_ACCESS_KEY="${DIGITALOCEAN_SPACES_ACCESS_KEY:-}"
+  DIGITALOCEAN_SPACES_SECRET_KEY="${DIGITALOCEAN_SPACES_SECRET_KEY:-}"
+  DIGITALOCEAN_SPACES_REGION="${DIGITALOCEAN_SPACES_REGION:-sfo3}"
+  DIGITALOCEAN_SPACES_SERVICE_URL="${DIGITALOCEAN_SPACES_SERVICE_URL:-https://sfo3.digitaloceanspaces.com}"
+  DIGITALOCEAN_SPACES_FOLDER="${DIGITALOCEAN_SPACES_FOLDER:-content/}"
 
   # Require DOCR token when using DigitalOcean registry (otherwise pull gets 401)
   if echo "$REGISTRY" | grep -q registry.digitalocean.com; then
@@ -594,6 +613,12 @@ REGISTRY=$REGISTRY
 REPO_NAME=$REPO_NAME
 DOMAIN=$DOMAIN
 HTTPS_ONLY=$HTTPS_ONLY
+DIGITALOCEAN_SPACES_BUCKET_NAME=$DIGITALOCEAN_SPACES_BUCKET_NAME
+DIGITALOCEAN_SPACES_ACCESS_KEY=$DIGITALOCEAN_SPACES_ACCESS_KEY
+DIGITALOCEAN_SPACES_SECRET_KEY=$DIGITALOCEAN_SPACES_SECRET_KEY
+DIGITALOCEAN_SPACES_REGION=$DIGITALOCEAN_SPACES_REGION
+DIGITALOCEAN_SPACES_SERVICE_URL=$DIGITALOCEAN_SPACES_SERVICE_URL
+DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
 "
   echo "$ENV_CONTENT" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats && cat > /opt/traditionaleats/.env && chmod 600 /opt/traditionaleats/.env && echo '.env created'"
   echo -e "${GREEN}.env ready on server${NC}"
@@ -671,10 +696,10 @@ HTTPS_ONLY=$HTTPS_ONLY
   # Step 5: MySQL init (create DBs)
   echo -e "${GREEN}Step 5: Creating databases${NC}"
   sleep 10
-  if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && ./scripts/mysql-init.sh" 2>/dev/null; then
+  if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh" 2>/dev/null; then
     echo -e "${GREEN}Databases ready${NC}"
   else
-    echo -e "${YELLOW}If a service fails to start, on the server run: cd /opt/traditionaleats && ./scripts/mysql-init.sh${NC}"
+    echo -e "${YELLOW}If a service fails to start, on the server run: cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh${NC}"
   fi
   echo ""
 
