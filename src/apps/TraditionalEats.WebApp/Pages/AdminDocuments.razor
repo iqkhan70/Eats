@@ -114,11 +114,8 @@
                                                       Variant="Variant.Outlined" 
                                                       Title="@(doc.IsActive ? "Deactivate" : "Activate")"
                                                       Click="@(() => AdminToggleDocumentStatus(doc))" />
-                                        <button type="button" class="rz-button rz-button-sm rz-outline-button rz-danger-button" title="Delete"
-                                                @onclick="@(() => AdminDeleteDocument(doc))" @onclick:stopPropagation="true">
-                                            <span class="rz-button-icon-left rz-icon rz-icon-delete" aria-hidden="true"></span>
-                                            <span class="rz-button-label">Delete</span>
-                                        </button>
+                                        <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Danger"
+                                                      Title="Delete" Click="@(() => AdminDeleteDocument(doc))" />
                                     </RadzenStack>
                                 </div>
                             </Template>
