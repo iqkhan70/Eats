@@ -1,0 +1,405 @@
+@page "/vendor/documents"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject AuthService AuthService
+@inject ILogger<VendorDocuments> Logger
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>My Documents - TraditionalEats</PageTitle>
+
+<RadzenStack Gap="1.5rem"
+            Style="padding: 0.75rem; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box;">
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <RadzenText TextStyle="TextStyle.H2">My Documents</RadzenText>
+        <RadzenButton Text="+ Upload Document" Icon="upload" Click="ShowUploadDialog" Variant="Variant.Filled" />
+    </RadzenStack>
+
+    @if (!isAuthChecked)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading...</RadzenText>
+        </RadzenStack>
+    }
+    else if (!isAuthenticated)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to access this page." />
+    }
+    else if (!(isVendor || isAdmin))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Access Denied" Text="Vendor or Admin role required." />
+    }
+    else if (isLoading)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading documents...</RadzenText>
+        </RadzenStack>
+    }
+    else if (documents == null || !documents.Any())
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+                <RadzenText TextStyle="TextStyle.Body1">No documents uploaded yet.</RadzenText>
+                <RadzenButton Text="Upload Your First Document" Icon="upload" Click="ShowUploadDialog" Variant="Variant.Filled" />
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenCard Style="width: 100%;">
+            <RadzenStack Gap="0.75rem">
+                <RadzenStack Orientation="Orientation.Horizontal"
+                             JustifyContent="JustifyContent.SpaceBetween"
+                             AlignItems="AlignItems.Center"
+                             Gap="0.75rem"
+                             Style="flex-wrap: wrap;">
+                    <RadzenText TextStyle="TextStyle.Body1">@documents.Count document(s)</RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                        <RadzenDropDown @bind-Value="statusFilter"
+                                        Data="@statusFilterOptions"
+                                        TextProperty="Label"
+                                        ValueProperty="Value"
+                                        Change="@(args => LoadDocuments())"
+                                        Style="width: 200px;" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenDataGrid @ref="documentsGrid"
+                                Data="@documents"
+                                TItem="DocumentDto"
+                                AllowPaging="true"
+                                PageSize="15"
+                                AllowSorting="true"
+                                GridLines="DataGridGridLines.Both"
+                                ShowPagingSummary="true"
+                                PagerHorizontalAlign="HorizontalAlign.Left"
+                                Responsive="true"
+                                Style="width: 100%;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="DocumentDto" Property="FileName" Title="File Name" Width="300px" />
+                        <RadzenDataGridColumn TItem="DocumentDto" Property="DocumentType" Title="Type" Width="200px" />
+                        <RadzenDataGridColumn TItem="DocumentDto" Title="File Size" Width="120px" Sortable="true">
+                            <Template Context="doc">
+                                <RadzenText>@FormatFileSize(doc.FileSize)</RadzenText>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DocumentDto" Title="Uploaded" Width="180px" Sortable="true">
+                            <Template Context="doc">
+                                <RadzenText>@doc.UploadedAt.ToString("g")</RadzenText>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DocumentDto" Title="Status" Width="120px" Filterable="true" Sortable="true">
+                            <Template Context="doc">
+                                <RadzenBadge Text="@(doc.IsActive ? "Active" : "Inactive")"
+                                             Variant="Variant.Flat"
+                                             Style="@(doc.IsActive ? "background-color: var(--rz-success); color: white;" : "background-color: var(--rz-secondary); color: white;")" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DocumentDto" Title="Actions" Width="200px" Sortable="false" Filterable="false" TextAlign="TextAlign.Center">
+                            <Template Context="doc">
+                                <div @onclick:stopPropagation="true">
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.Center">
+                                        <RadzenButton Icon="download" Size="ButtonSize.Small" Variant="Variant.Outlined" Title="Download"
+                                                    Click="@(() => DownloadDocument(doc))" />
+                                        <RadzenButton Icon="@(doc.IsActive ? "toggle_off" : "toggle_on")"
+                                                    Size="ButtonSize.Small"
+                                                    Variant="Variant.Outlined"
+                                                    Title="@(doc.IsActive ? "Deactivate" : "Activate")"
+                                                    Click="@(() => ToggleDocumentStatus(doc))" />
+                                        @if (isAdmin)
+                                        {
+                                            <button type="button" class="rz-button rz-button-sm rz-outline-button rz-danger-button" title="Delete"
+                                                    @onclick="@(() => ConfirmDelete(doc))" @onclick:stopPropagation="true">
+                                                <span class="rz-button-icon-left rz-icon rz-icon-delete" aria-hidden="true"></span>
+                                                <span class="rz-button-label">Delete</span>
+                                            </button>
+                                        }
+                                    </RadzenStack>
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenStack>
+        </RadzenCard>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isVendor = false;
+    private bool isAdmin = false;
+    private bool isAuthChecked = false;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+
+    private List<DocumentDto>? documents;
+    private RadzenDataGrid<DocumentDto>? documentsGrid;
+
+    private string? statusFilter = null;
+    private List<StatusFilterOption> statusFilterOptions = new()
+    {
+        new StatusFilterOption { Label = "All", Value = null },
+        new StatusFilterOption { Label = "Active", Value = "true" },
+        new StatusFilterOption { Label = "Inactive", Value = "false" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthChecked = false;
+        isLoading = true;
+
+        try
+        {
+            isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (isAuthenticated)
+            {
+                isVendor = await AuthService.IsVendorAsync();
+                isAdmin = await AuthService.IsAdminAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error checking authentication");
+        }
+        finally
+        {
+            isAuthChecked = true;
+        }
+
+        if (isAuthenticated && (isVendor || isAdmin))
+        {
+            await LoadDocuments();
+        }
+        else
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ConfirmDelete(DocumentDto doc)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("blazorConfirm", $"Delete document '{doc.FileName}'?");
+        if (confirmed)
+        {
+            await DeleteDocument(doc);
+        }
+    }
+    private async Task DeleteDocument(DocumentDto doc)
+    {
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Authentication required");
+                return;
+            }
+
+            // Use absolute URI so delete works regardless of BaseAddress resolution (same as mobile)
+            var deleteUri = Http.BaseAddress != null
+                ? new Uri(Http.BaseAddress, $"WebBff/documents/admin/{doc.DocumentId}")
+                : new Uri($"WebBff/documents/admin/{doc.DocumentId}", UriKind.Relative);
+            var request = new HttpRequestMessage(HttpMethod.Delete, deleteUri);
+            request.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Document deleted");
+                await LoadDocuments();
+            }
+            else
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Delete failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting document");
+            NotificationService.Notify(NotificationSeverity.Error, "Delete failed");
+        }
+    }
+
+
+    private async Task LoadDocuments()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Authentication token not found";
+                return;
+            }
+
+            var queryString = statusFilter != null ? $"?isActive={statusFilter}" : "";
+            string url;
+
+            if (isAdmin)
+            {
+                url = $"WebBff/documents/admin/all{queryString}";
+            }
+            else
+            {
+                url = $"WebBff/documents/vendor/my-documents{queryString}";
+            }
+
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                documents = System.Text.Json.JsonSerializer.Deserialize<List<DocumentDto>>(json, new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            else
+            {
+                errorMessage = $"Failed to load documents: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading documents");
+            errorMessage = "Failed to load documents";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ShowUploadDialog()
+    {
+        try
+        {
+            var result = await DialogService.OpenAsync<UploadDocumentDialog>("Upload Document",
+                new Dictionary<string, object>(),
+                new DialogOptions { Width = "600px", Height = "500px" });
+
+            if (result == true)
+            {
+                await LoadDocuments();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening upload dialog");
+            errorMessage = "Failed to open upload dialog. Please try again.";
+        }
+    }
+
+    private async Task DownloadDocument(DocumentDto doc)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(doc.DownloadUrl))
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Download URL not available");
+                return;
+            }
+
+            await JSRuntime.InvokeVoidAsync("open", doc.DownloadUrl, "_blank");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error downloading document");
+            NotificationService.Notify(NotificationSeverity.Error, "Failed to download document");
+        }
+    }
+
+    private async Task ToggleDocumentStatus(DocumentDto doc)
+    {
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Authentication required");
+                return;
+            }
+
+            // Admin can toggle any vendor's documents; vendor endpoint only works for own documents.
+            var url = isAdmin
+                ? $"WebBff/documents/admin/{doc.DocumentId}/status"
+                : $"WebBff/documents/{doc.DocumentId}/status";
+
+            var request = new HttpRequestMessage(HttpMethod.Patch, url);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = System.Net.Http.Json.JsonContent.Create(new { isActive = !doc.IsActive });
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(NotificationSeverity.Success, $"Document {(doc.IsActive ? "deactivated" : "activated")} successfully");
+                await LoadDocuments();
+            }
+            else
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Failed to update document status");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling document status");
+            NotificationService.Notify(NotificationSeverity.Error, "Failed to update document status");
+        }
+    }
+
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+
+    public class DocumentDto
+    {
+        public Guid DocumentId { get; set; }
+        public Guid VendorId { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public string DocumentType { get; set; } = string.Empty;
+        public long FileSize { get; set; }
+        public string ContentType { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime UploadedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+        public string? Notes { get; set; }
+        public string? DownloadUrl { get; set; }
+    }
+
+    public class StatusFilterOption
+    {
+        public string Label { get; set; } = string.Empty;
+        public string? Value { get; set; }
+    }
+}

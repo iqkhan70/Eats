@@ -243,6 +243,12 @@ builder.Services.AddHttpClient("ReviewService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
 });
 
+builder.Services.AddHttpClient("DocumentService", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for file uploads
+    client.BaseAddress = new Uri(builder.Configuration["Services:DocumentService"] ?? "http://localhost:5014");
+});
+
 builder.Services.AddHttpClient("OrderService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");

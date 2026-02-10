@@ -39,6 +39,7 @@
                 });
             }
         };
+        window.blazorConfirm = function (msg) { return confirm(msg); };
         window.attachChatEnterToSend = function (inputWrapperId, dotNetRef) {
             function tryAttach() {
                 var wrapper = document.getElementById(inputWrapperId);

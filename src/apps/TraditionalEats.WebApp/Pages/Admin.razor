@@ -137,6 +137,12 @@
                         <div class="tile-sub">Users, roles, and permissions</div>
                     </button>
 
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/documents"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-description"></i></div>
+                        <div class="tile-title">Document Management</div>
+                        <div class="tile-sub">View and manage all vendor documents</div>
+                    </button>
+
                     <button class="admin-tile" @onclick="@(() => NotifyComingSoon("Order Management"))">
                         <div class="tile-icon"><i class="rz-icon rz-icon-receipt_long"></i></div>
                         <div class="tile-title">Order Management</div>

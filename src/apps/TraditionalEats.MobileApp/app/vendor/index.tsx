@@ -218,6 +218,12 @@ export default function VendorDashboardScreen() {
         <Text style={styles.headerTitle}>My Restaurants</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
+            onPress={() => router.push("/vendor/documents")}
+            style={styles.ordersButton}
+          >
+            <Ionicons name="document-text-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={() => router.push("/vendor/orders")}
             style={styles.ordersButton}
           >

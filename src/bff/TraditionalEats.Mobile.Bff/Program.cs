@@ -134,6 +134,12 @@ builder.Services.AddHttpClient("ChatService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ChatService"] ?? "http://localhost:5012");
 });
 
+builder.Services.AddHttpClient("DocumentService", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for file uploads
+    client.BaseAddress = new Uri(builder.Configuration["Services:DocumentService"] ?? "http://localhost:5014");
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())

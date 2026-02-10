@@ -28,6 +28,11 @@ class ApiClient {
         const sessionId = await cartSessionService.getOrCreateSessionId();
         config.headers['X-Cart-Session-Id'] = sessionId;
 
+        // Don't set Content-Type for FormData - let axios set it automatically with boundary
+        if (config.data instanceof FormData) {
+          delete config.headers['Content-Type'];
+        }
+
         return config;
       },
       (error) => {
@@ -60,6 +65,9 @@ class ApiClient {
           // Don't log 404 for geocode-zip (ZIP not in lookup table is expected; app falls back to location search)
           const isGeocodeZip404 = url.includes('geocode-zip') && status === 404;
 
+          // Don't log 401 on login - wrong email/password is expected; UI shows "Invalid email or password"
+          const isLogin401 = url.includes('auth/login') && status === 401;
+
           // Don't log 401 errors for vendor/admin endpoints if user might not be authenticated
           // These are handled by the UI components with user-friendly messages
           const isAuthEndpoint = url.includes('/vendor/') || url.includes('/admin/');
@@ -68,10 +76,12 @@ class ApiClient {
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
           // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
-          // 3. 401 errors on vendor/admin endpoints (handled by UI)
+          // 3. 401 on login (invalid credentials; UI shows message)
+          // 4. 401 errors on vendor/admin endpoints (handled by UI)
           const shouldSuppress =
             (isCartGetEndpoint && isExpectedEmptyResponse) ||
             isGeocodeZip404 ||
+            isLogin401 ||
             (isAuthEndpoint && isUnauthorized);
 
           if (!shouldSuppress) {

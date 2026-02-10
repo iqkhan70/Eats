@@ -410,6 +410,45 @@ services:
       - internal
     restart: unless-stopped
 
+  document-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.DocumentService/TraditionalEats.DocumentService.csproj
+        PROJECT_NAME: TraditionalEats.DocumentService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:document-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.DocumentService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5014
+      ConnectionStrings__DocumentDb: "server=mysql;port=3306;database=traditional_eats_document;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
+      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      DigitalOceanSpaces__BucketName: ${DIGITALOCEAN_SPACES_BUCKET_NAME:-kram-content}
+      DigitalOceanSpaces__AccessKey: ${DIGITALOCEAN_SPACES_ACCESS_KEY:-${AWS_ACCESS_KEY_ID:-}}
+      DigitalOceanSpaces__SecretKey: ${DIGITALOCEAN_SPACES_SECRET_KEY:-${AWS_SECRET_ACCESS_KEY:-}}
+      DigitalOceanSpaces__Region: ${DIGITALOCEAN_SPACES_REGION:-sfo3}
+      DigitalOceanSpaces__ServiceUrl: ${DIGITALOCEAN_SPACES_SERVICE_URL:-https://sfo3.digitaloceanspaces.com}
+      DigitalOceanSpaces__Folder: ${DIGITALOCEAN_SPACES_FOLDER:-content/}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
   # ---------- BFFs (internal only, HTTP) ----------
   web-bff:
     build:
@@ -438,6 +477,7 @@ services:
       Services__ChatService: "http://chat-service:5012"
       Services__AIService: "http://ai-service:5011"
       Services__ReviewService: "http://review-service:5013"
+      Services__DocumentService: "http://document-service:5014"
       Redis__ConnectionString: "redis:6379"
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
@@ -454,6 +494,7 @@ services:
       chat-service: { condition: service_started }
       ai-service: { condition: service_started }
       review-service: { condition: service_started }
+      document-service: { condition: service_started }
     networks:
       - internal
     restart: unless-stopped
@@ -481,6 +522,7 @@ services:
       Services__ChatService: "http://chat-service:5012"
       Services__AIService: "http://ai-service:5011"
       Services__ReviewService: "http://review-service:5013"
+      Services__DocumentService: "http://document-service:5014"
       Redis__ConnectionString: "redis:6379"
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
@@ -493,6 +535,7 @@ services:
       restaurant-service: { condition: service_started }
       ai-service: { condition: service_started }
       review-service: { condition: service_started }
+      document-service: { condition: service_started }
     networks:
       - internal
     restart: unless-stopped

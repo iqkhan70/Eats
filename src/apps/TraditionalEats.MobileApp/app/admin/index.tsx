@@ -62,6 +62,13 @@ export default function AdminDashboardScreen() {
       color: '#1976d2',
     },
     {
+      icon: 'document-text-outline',
+      label: 'Document Management',
+      description: 'View and manage all vendor documents',
+      route: '/admin/documents',
+      color: '#7b1fa2',
+    },
+    {
       icon: 'receipt-outline',
       label: 'View Orders',
       description: 'Monitor all orders across the platform',
