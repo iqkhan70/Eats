@@ -15,7 +15,11 @@
     </RadzenFormField>
 
     <RadzenFormField Text="File" class="rz-col-12">
-        <RadzenFileInput @bind-Value="selectedFile" Accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" Style="width: 100%;" />
+        <InputFile Accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" OnChange="OnFileSelected" class="rz-fileinput" style="display: block; margin: 0.5rem 0;" />
+        @if (selectedFile != null)
+        {
+            <RadzenText TextStyle="TextStyle.Body2">@selectedFile.Name</RadzenText>
+        }
         <RadzenText TextStyle="TextStyle.Caption" Style="margin-top: 0.5rem;">Maximum file size: 10MB</RadzenText>
     </RadzenFormField>
 
@@ -66,6 +70,13 @@
         "IdentityVerification",
         "Other"
     };
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        errorMessage = string.Empty;
+        StateHasChanged();
+    }
 
     private async Task UploadDocument()
     {
