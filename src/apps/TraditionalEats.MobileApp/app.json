@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "TraditionalEats",
-    "slug": "traditionaleats-mobile",
+    "name": "Kram",
+    "slug": "kram-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,23 +17,23 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "traditionaleats",
+    "scheme": "kram",
     "plugins": [
       "expo-router",
       "expo-font",
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow TraditionalEats to use your location to find nearby restaurants."
+          "locationAlwaysAndWhenInUsePermission": "Allow Kram to use your location to find nearby vendors."
         }
       ]
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.traditionaleats.mobile",
+      "bundleIdentifier": "com.kram.mobile",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "TraditionalEats needs your location to show nearby restaurants.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "TraditionalEats needs your location to show nearby restaurants."
+        "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors."
       }
     },
     "android": {
@@ -41,7 +41,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.traditionaleats.mobile",
+      "package": "com.kram.mobile",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"

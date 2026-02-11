@@ -8,7 +8,7 @@
 @inject ILogger<Admin> Logger
 @inject NotificationService NotificationService
 
-<PageTitle>Admin Dashboard - TraditionalEats</PageTitle>
+<PageTitle>Admin Dashboard - Kram</PageTitle>
 
 <RadzenStack Class="admin-shell" Gap="1.25rem">
 
@@ -128,7 +128,7 @@
                     <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/vendor"))">
                         <div class="tile-icon"><i class="rz-icon rz-icon-store"></i></div>
                         <div class="tile-title">Vendor Management</div>
-                        <div class="tile-sub">Manage restaurants, menus, vendor access</div>
+                        <div class="tile-sub">Manage vendors, menus, vendor access</div>
                     </button>
 
                     <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/users"))">

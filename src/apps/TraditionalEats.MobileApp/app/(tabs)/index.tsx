@@ -174,7 +174,7 @@ export default function HomeScreen() {
 
         setNearbyRestaurants(mappedRestaurants);
       } catch (error: any) {
-        console.error("Error loading nearby restaurants:", error);
+        console.error("Error loading nearby vendors:", error);
         setNearbyRestaurants([]);
       } finally {
         setLoadingRestaurants(false);
@@ -228,7 +228,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-          <Text style={styles.title}>Welcome to TraditionalEats</Text>
+          <Text style={styles.title}>Welcome to Kram</Text>
           <Text style={styles.subtitle}>
             Discover authentic traditional food
           </Text>
@@ -297,7 +297,7 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Nearby Restaurants</Text>
+            <Text style={styles.sectionTitle}>Nearby Vendors</Text>
             {userLocation && nearbyRestaurants.length > 0 && (
               <TouchableOpacity
                 onPress={() => navigateToRestaurantDetails()}
@@ -313,7 +313,7 @@ export default function HomeScreen() {
             <View style={styles.locationPrompt}>
               <Ionicons name="location-outline" size={24} color="#666" />
               <Text style={styles.locationPromptText}>
-                Enable location to see nearby restaurants
+                Enable location to see nearby vendors
               </Text>
             </View>
           )}
@@ -330,14 +330,14 @@ export default function HomeScreen() {
           {loadingRestaurants && userLocation && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#6200ee" />
-              <Text style={styles.loadingText}>Loading restaurants...</Text>
+              <Text style={styles.loadingText}>Loading vendors...</Text>
             </View>
           )}
 
           {!loadingRestaurants && userLocation && nearbyRestaurants.length === 0 && (
             <View style={styles.emptyContainer}>
               <Ionicons name="restaurant-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>No restaurants found</Text>
+              <Text style={styles.emptyText}>No vendors found</Text>
               <Text style={styles.emptySubtext}>
                 Try increasing the distance range
               </Text>
@@ -401,9 +401,9 @@ export default function HomeScreen() {
       {/* Bottom Search Bar */}
       <BottomSearchBar
         onSearch={handleSearch}
-        placeholder="Search for restaurants, cuisine, or location..."
-        emptyStateTitle="Search for restaurants"
-        emptyStateSubtitle="Enter an address, ZIP code, or restaurant name"
+        placeholder="Search for vendors, cuisine, or location..."
+        emptyStateTitle="Search for vendors"
+        emptyStateSubtitle="Enter an address, ZIP code, or vendor name"
         loadSuggestions={loadSuggestions}
         onSuggestionSelect={handleSuggestionSelect}
       />

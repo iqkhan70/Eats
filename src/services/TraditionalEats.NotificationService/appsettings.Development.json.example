@@ -14,7 +14,7 @@
     "MailgunApiKey": "YOUR_MAILGUN_API_KEY",
     "MailgunDomain": "YOUR_MAILGUN_DOMAIN",
     "FromEmail": "your-email@example.com",
-    "FromName": "TraditionalEats",
+    "FromName": "Kram",
     "SmtpHost": "smtp.gmail.com",
     "SmtpPort": 587,
     "SmtpUsername": "your-email@gmail.com",

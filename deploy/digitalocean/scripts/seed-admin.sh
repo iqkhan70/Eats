@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Seed admin role and admin user. Run from /opt/traditionaleats on the server.
+# Seed admin role and admin user. Run from /opt/kram on the server.
 # Usage: bash deploy/digitalocean/scripts/seed-admin.sh [admin-email] [admin-password]
-# Defaults: admin@traditionaleats.com / Admin123!
+# Defaults: admin@kram.com / Admin123!
 
 set -e
 
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/../.."
 source .env 2>/dev/null || true
 
-ADMIN_EMAIL="${1:-admin@traditionaleats.com}"
+ADMIN_EMAIL="${1:-admin@kram.com}"
 ADMIN_PASSWORD="${2:-Admin123!}"
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}"
 DB_NAME="traditional_eats_identity"

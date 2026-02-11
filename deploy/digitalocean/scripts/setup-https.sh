@@ -8,8 +8,8 @@ set -e
 
 DOMAIN="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Script is at: /opt/traditionaleats/deploy/digitalocean/scripts/setup-https.sh
-# So APP_DIR should be /opt/traditionaleats (go up 3 levels: scripts -> digitalocean -> deploy -> traditionaleats)
+# Script is at: /opt/kram/deploy/digitalocean/scripts/setup-https.sh
+# So APP_DIR should be /opt/kram (go up 3 levels: scripts -> digitalocean -> deploy -> kram)
 APP_DIR="${SCRIPT_DIR}/../../.."
 
 if [ -z "$DOMAIN" ]; then
@@ -28,8 +28,8 @@ fi
 cd "$APP_DIR"
 APP_DIR_ABS="$(pwd)"
 
-# Compose project name (used for volume names). Default: traditionaleats. If certbot fails with "volume not found", run: docker compose -f deploy/digitalocean/docker-compose.prod.yml ps and check the project name (e.g. digitalocean), then: export COMPOSE_PROJECT=digitalocean; ./deploy/digitalocean/scripts/setup-https.sh <domain>
-COMPOSE_PROJECT="${COMPOSE_PROJECT:-traditionaleats}"
+# Compose project name (used for volume names). Default: kram. If certbot fails with "volume not found", run: docker compose -f deploy/digitalocean/docker-compose.prod.yml ps and check the project name (e.g. digitalocean), then: export COMPOSE_PROJECT=digitalocean; ./deploy/digitalocean/scripts/setup-https.sh <domain>
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-kram}"
 VOLUME_WWW="${COMPOSE_PROJECT}_certbot_www"
 VOLUME_CERTS="${COMPOSE_PROJECT}_certbot_certs"
 

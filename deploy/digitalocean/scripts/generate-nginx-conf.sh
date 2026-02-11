@@ -14,7 +14,7 @@ if [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [ -z "$DOMAIN" ] || [[ "
 fi
 
 cat << 'NGINX_HEAD'
-# TraditionalEats edge – generated (DOMAIN, HTTPS_ONLY)
+# Kram edge – generated (DOMAIN, HTTPS_ONLY)
 # Staging: HTTP + HTTPS. Production: HTTPS only (HTTP redirects).
 
 events {

@@ -25,8 +25,8 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Kram";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Kram";
 
 // Log JWT configuration for debugging
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger<Program>();
@@ -302,7 +302,7 @@ app.MapControllers();
 // Root endpoint for testing
 app.MapGet("/", () => new
 {
-    service = "TraditionalEats.Web.Bff",
+    service = "Kram.Web.Bff",
     status = "running",
     endpoints = new[] {
         "/api/WebBff/health",

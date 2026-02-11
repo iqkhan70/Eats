@@ -332,7 +332,7 @@ export default function OrdersScreen() {
         style={styles.browseButton}
         onPress={() => router.push("/(tabs)")}
       >
-        <Text style={styles.browseButtonText}>Browse Restaurants</Text>
+        <Text style={styles.browseButtonText}>Browse Vendors</Text>
       </TouchableOpacity>
 
       <Text style={styles.pullHint}>Pull down to refresh</Text>

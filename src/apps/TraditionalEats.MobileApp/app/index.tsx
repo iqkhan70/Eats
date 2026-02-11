@@ -10,9 +10,9 @@ export default function WelcomeScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         <Ionicons name="restaurant" size={80} color="#6200ee" />
-        <Text style={styles.title}>TraditionalEats</Text>
+        <Text style={styles.title}>Kram</Text>
         <Text style={styles.subtitle}>
-          Discover authentic traditional food from local restaurants
+          Discover authentic traditional food from local vendors
         </Text>
       </View>
       

@@ -336,7 +336,7 @@ public class MobileBffController : ControllerBase
                         if (!paymentReady)
                         {
                             _logger.LogWarning("PlaceOrder: Vendor Stripe not set up for restaurant {RestaurantId}, blocking order creation", restaurantId);
-                            return BadRequest(new { error = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later." });
+                            return BadRequest(new { error = "This vendor is not set up to accept payments yet. Please contact the vendor directly or try again later." });
                         }
                     }
                     else
@@ -457,7 +457,7 @@ public class MobileBffController : ControllerBase
             }
 
             // Default user-friendly message if no specific error was extracted
-            errorMessage ??= "This restaurant is not set up to accept payments yet. Your order has been placed, but payment cannot be processed. Please contact the restaurant directly.";
+            errorMessage ??= "This vendor is not set up to accept payments yet. Your order has been placed, but payment cannot be processed. Please contact the vendor directly.";
 
             _logger.LogWarning("PlaceOrder: Checkout session failed for order {OrderId}: {Content}", orderId, checkoutContent);
             return Ok(new { orderId, checkoutUrl = (string?)null, error = errorMessage });

@@ -349,7 +349,7 @@ export default function CartScreen() {
             style={styles.browseButton}
             onPress={() => router.push("/(tabs)/restaurants")}
           >
-            <Text style={styles.browseButtonText}>Browse Restaurants</Text>
+            <Text style={styles.browseButtonText}>Browse Vendors</Text>
           </TouchableOpacity>
 
           <Text style={styles.pullHint}>Pull down to refresh</Text>

@@ -32,9 +32,9 @@ interface BottomSearchBarProps {
 
 export default function BottomSearchBar({
   onSearch,
-  placeholder = "Search for restaurants, cuisine, or location...",
-  emptyStateTitle = "Search for restaurants",
-  emptyStateSubtitle = "Enter an address, ZIP code, or restaurant name",
+  placeholder = "Search for vendors, cuisine, or location...",
+  emptyStateTitle = "Search for vendors",
+  emptyStateSubtitle = "Enter an address, ZIP code, or vendor name",
   loadSuggestions,
   onSuggestionSelect,
   onClear,

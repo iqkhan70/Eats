@@ -73,12 +73,12 @@ export default function EditRestaurantScreen() {
           imageUrl: found.imageUrl || "",
         });
       } else {
-        Alert.alert("Error", "Restaurant not found");
+        Alert.alert("Error", "Vendor not found");
         router.back();
       }
     } catch (error: any) {
       console.error("Error loading restaurant:", error);
-      Alert.alert("Error", "Failed to load restaurant details");
+      Alert.alert("Error", "Failed to load vendor details");
       router.back();
     } finally {
       setLoading(false);
@@ -87,14 +87,14 @@ export default function EditRestaurantScreen() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert("Validation Error", "Restaurant name is required");
+      Alert.alert("Validation Error", "Vendor name is required");
       return;
     }
 
     try {
       setSaving(true);
       await api.put(`/MobileBff/vendor/restaurants/${restaurantId}`, formData);
-      Alert.alert("Success", "Restaurant updated successfully", [
+      Alert.alert("Success", "Vendor updated successfully", [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (error: any) {
@@ -102,7 +102,7 @@ export default function EditRestaurantScreen() {
       const errorMessage =
         error.response?.data?.error ||
         error.message ||
-        "Failed to update restaurant";
+        "Failed to update vendor";
       Alert.alert("Error", errorMessage);
     } finally {
       setSaving(false);
@@ -113,7 +113,7 @@ export default function EditRestaurantScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#6200ee" />
-        <Text style={styles.loadingText}>Loading restaurant...</Text>
+        <Text style={styles.loadingText}>Loading vendor...</Text>
       </View>
     );
   }
@@ -131,7 +131,7 @@ export default function EditRestaurantScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Restaurant</Text>
+        <Text style={styles.headerTitle}>Edit Vendor</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -144,12 +144,12 @@ export default function EditRestaurantScreen() {
       >
         <View style={styles.form}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Restaurant Name *</Text>
+            <Text style={styles.label}>Vendor Name *</Text>
             <TextInput
               style={styles.input}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="Enter restaurant name"
+              placeholder="Enter vendor name"
             />
           </View>
 

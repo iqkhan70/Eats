@@ -37,8 +37,8 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"; // Default fallback
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Kram";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Kram";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

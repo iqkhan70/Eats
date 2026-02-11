@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create all TraditionalEats databases if missing. Run from /opt/traditionaleats on the server.
+# Create all Kram databases if missing. Run from /opt/kram on the server.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."

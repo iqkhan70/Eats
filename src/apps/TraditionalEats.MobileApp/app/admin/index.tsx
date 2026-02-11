@@ -49,8 +49,8 @@ export default function AdminDashboardScreen() {
   const adminMenuItems = [
     {
       icon: 'restaurant-outline',
-      label: 'Manage Restaurants',
-      description: 'View and manage all restaurants',
+      label: 'Manage Vendors',
+      description: 'View and manage all vendors',
       route: '/admin/restaurants',
       color: '#6200ee',
     },
@@ -148,7 +148,7 @@ export default function AdminDashboardScreen() {
             <View style={styles.statCard}>
               <Ionicons name="restaurant" size={24} color="#6200ee" />
               <Text style={styles.statValue}>-</Text>
-              <Text style={styles.statLabel}>Restaurants</Text>
+              <Text style={styles.statLabel}>Vendors</Text>
             </View>
             <View style={styles.statCard}>
               <Ionicons name="people" size={24} color="#1976d2" />

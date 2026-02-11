@@ -9,7 +9,7 @@
 @inject CartService CartService
 @inject NotificationService NotificationService
 
-<PageTitle>Cart - TraditionalEats</PageTitle>
+<PageTitle>Cart - Kram</PageTitle>
 
 <RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;"
     Class="page-container">
@@ -18,7 +18,7 @@
         <RadzenText TextStyle="TextStyle.H1">Shopping Cart</RadzenText>
     </RadzenStack>
 
-    @* Payment readiness banner - show if restaurant cannot accept payments AND cart has items *@
+    @* Payment readiness banner - show if vendor cannot accept payments AND cart has items *@
     @if (!loading && cart != null && cart.Items != null && cart.Items.Any() && cart.RestaurantId.HasValue && !paymentReady)
     {
         <RadzenCard Style="background: var(--rz-warning); color: #000; border: none;">
@@ -129,7 +129,7 @@
                 <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
                     Add items from the menu to get started
                 </RadzenText>
-                <RadzenButton Text="Browse Restaurants" Icon="restaurant"
+                <RadzenButton Text="Browse Vendors" Icon="restaurant"
                     Click="@(() => NavigationManager.NavigateTo("/restaurants"))" Variant="Variant.Flat" />
             </RadzenStack>
         </RadzenCard>
@@ -143,7 +143,7 @@
     private string deliveryAddress = "Delivery is not available yet, might be available later based on customer needs. Pickup only!";
     private string specialInstructions = string.Empty;
     private bool paymentReady = true; // Default to true, check when cart loads
-    private string paymentBlockedMessage = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.";
+    private string paymentBlockedMessage = "This vendor is not set up to accept payments yet. Please contact the vendor directly or try again later.";
 
     private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress) || !paymentReady;
 
@@ -159,14 +159,14 @@
             loading = true;
             cart = await CartService.GetCartAsync();
             
-            // Check payment readiness if cart has a restaurant
+            // Check payment readiness if cart has a vendor
             if (cart != null && cart.RestaurantId.HasValue)
             {
                 await CheckPaymentReadiness(cart.RestaurantId.Value);
             }
             else
             {
-                paymentReady = true; // Reset if no restaurant
+                paymentReady = true; // Reset if no vendor
             }
         }
         catch (Exception ex)
@@ -193,7 +193,7 @@
                 paymentReady = result?.PaymentReady ?? true;
                 if (!paymentReady)
                 {
-                    paymentBlockedMessage = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.";
+                    paymentBlockedMessage = "This vendor is not set up to accept payments yet. Please contact the vendor directly or try again later.";
                 }
             }
             else
@@ -266,11 +266,11 @@
         if (cart == null) return;
         await CartService.RemoveCartItemAsync(cart.CartId, item.CartItemId);
         await LoadCart();
-        // Reset payment readiness when cart becomes empty (user might switch restaurants)
+        // Reset payment readiness when cart becomes empty (user might switch vendors)
         if (cart == null || cart.Items == null || !cart.Items.Any())
         {
             paymentReady = true;
-            paymentBlockedMessage = "This restaurant is not set up to accept payments yet. Please contact the restaurant directly or try again later.";
+            paymentBlockedMessage = "This vendor is not set up to accept payments yet. Please contact the vendor directly or try again later.";
         }
         // Trigger navigation to refresh cart count in MainLayout
         NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
@@ -306,7 +306,7 @@
                 {
                     Severity = NotificationSeverity.Warning,
                     Summary = "Order Placed - Payment Issue",
-                    Detail = $"Your order #{result.OrderId.ToString().Substring(0, 8)} has been placed, but {result.Error} Please contact the restaurant directly to complete payment."
+                    Detail = $"Your order #{result.OrderId.ToString().Substring(0, 8)} has been placed, but {result.Error} Please contact the vendor directly to complete payment."
                 });
             }
             else

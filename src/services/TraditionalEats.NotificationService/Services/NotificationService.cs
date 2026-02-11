@@ -231,7 +231,7 @@ public class NotificationService : INotificationService
 
         var emailProvider = _configuration["Email:Provider"] ?? "Mailgun";
         var fromEmail = _configuration["Email:FromEmail"] ?? "noreply@traditionaleats.com";
-        var fromName = _configuration["Email:FromName"] ?? "TraditionalEats";
+        var fromName = _configuration["Email:FromName"] ?? "Kram";
 
         try
         {

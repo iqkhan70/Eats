@@ -102,7 +102,7 @@ export default function VendorDashboardScreen() {
         const errorMessage =
           error.response?.data?.error ||
           error.message ||
-          "Failed to load restaurants. Please try again.";
+          "Failed to load vendors. Please try again.";
         Alert.alert("Error", errorMessage);
       }
     } finally {
@@ -164,7 +164,7 @@ export default function VendorDashboardScreen() {
 
   const handleDeleteRestaurant = (restaurant: Restaurant) => {
     Alert.alert(
-      "Delete Restaurant",
+      "Delete Vendor",
       `Are you sure you want to delete "${restaurant.name}"?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -176,14 +176,14 @@ export default function VendorDashboardScreen() {
               await api.delete(
                 `/MobileBff/vendor/restaurants/${restaurant.restaurantId}`,
               );
-              Alert.alert("Success", "Restaurant deleted successfully.");
+              Alert.alert("Success", "Vendor deleted successfully.");
               await loadRestaurants();
             } catch (error: any) {
               // Don't log expected errors (axios interceptor handles logging)
               const errorMessage =
                 error.response?.data?.error ||
                 error.message ||
-                "Failed to delete restaurant. Please try again.";
+                "Failed to delete vendor. Please try again.";
               Alert.alert("Error", errorMessage);
             }
           },
@@ -196,7 +196,7 @@ export default function VendorDashboardScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#6200ee" />
-        <Text style={styles.loadingText}>Loading restaurants...</Text>
+        <Text style={styles.loadingText}>Loading vendors...</Text>
       </View>
     );
   }
@@ -215,7 +215,7 @@ export default function VendorDashboardScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Restaurants</Text>
+        <Text style={styles.headerTitle}>My Vendors</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
             onPress={() => router.push("/vendor/documents")}
@@ -270,15 +270,15 @@ export default function VendorDashboardScreen() {
       {restaurants.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="restaurant-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No restaurants yet</Text>
+          <Text style={styles.emptyText}>No vendors yet</Text>
           <Text style={styles.emptySubtext}>
-            Create your first restaurant to get started
+            Create your first vendor to get started
           </Text>
           <TouchableOpacity
             style={styles.createButton}
             onPress={handleCreateRestaurant}
           >
-            <Text style={styles.createButtonText}>Create Restaurant</Text>
+            <Text style={styles.createButtonText}>Create Vendor</Text>
           </TouchableOpacity>
         </View>
       ) : (

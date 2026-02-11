@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# TraditionalEats – Consolidated deploy script (aligned with mental health app)
+# Kram – Consolidated deploy script (aligned with mental health app)
 # ============================================================================
 # One-command deploy: put your Droplet IP in DROPLET_IP (or DROPLET_IP_STAGING /
 # DROPLET_IP_PRODUCTION), then run ./deploy.sh. No .env editing required for
@@ -74,7 +74,7 @@ cmd_build() {
   if [ -f "$ENV_FILE" ]; then
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
   else
-    REGISTRY="${REGISTRY:-traditionaleats}" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" build
+    REGISTRY="${REGISTRY:-kram}" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" build
   fi
   if [ -n "$REGISTRY" ] && [ -n "$DIGITALOCEAN_ACCESS_TOKEN" ]; then
     echo "Logging in to $REGISTRY..."
@@ -123,7 +123,7 @@ cmd_build_on_server() {
   fi
 
   echo -e "${GREEN}========================================${NC}"
-  echo -e "${GREEN}TraditionalEats – Build on server${NC}"
+  echo -e "${GREEN}Kram – Build on server${NC}"
   echo -e "${GREEN}========================================${NC}"
   echo -e "  Droplet: ${YELLOW}$DROPLET_IP${NC}"
   echo ""
@@ -185,7 +185,7 @@ ENDSWAP
   echo ""
 
   echo -e "${GREEN}Step 1: Creating .env on server${NC}"
-  EXISTING_ENV=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cat /opt/traditionaleats/.env 2>/dev/null" || echo "")
+  EXISTING_ENV=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cat /opt/kram/.env 2>/dev/null" || echo "")
   get_var() { echo "$EXISTING_ENV" | grep "^$1=" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo ""; }
   if [ -n "$EXISTING_ENV" ]; then
     MYSQL_ROOT_PASSWORD=$(get_var MYSQL_ROOT_PASSWORD)
@@ -205,7 +205,7 @@ ENDSWAP
   fi
   APP_BASE_URL="${APP_BASE_URL%/}"
   REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}"
-  REPO_NAME="${REPO_NAME:-traditionaleats}"
+  REPO_NAME="${REPO_NAME:-kram}"
   [ "$ENV_ARG" = "staging" ] && ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Staging}" || ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
   [ -z "$STRIPE_CONNECT_RETURN_URL" ] && STRIPE_CONNECT_RETURN_URL="$APP_BASE_URL"
   HTTPS_ONLY="false"
@@ -226,21 +226,21 @@ ENDSWAP
   fi
   CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS_OVERRIDE:-$CORS_ALLOWED_ORIGINS}"
   
-  ENV_CONTENT="# TraditionalEats – build-on-server
+  ENV_CONTENT="# Kram – build-on-server
 ASPNETCORE_ENVIRONMENT=$ASPNETCORE_ENVIRONMENT
 APP_BASE_URL=$APP_BASE_URL
 MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
 RABBITMQ_USER=${RABBITMQ_USER:-admin}
 RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD
 JWT_SECRET=$JWT_SECRET
-JWT_ISSUER=${JWT_ISSUER:-TraditionalEats}
-JWT_AUDIENCE=${JWT_AUDIENCE:-TraditionalEats}
+JWT_ISSUER=${JWT_ISSUER:-Kram}
+JWT_AUDIENCE=${JWT_AUDIENCE:-Kram}
 EMAIL_ENABLED=${EMAIL_ENABLED:-true}
 EMAIL_PROVIDER=${EMAIL_PROVIDER:-Mailgun}
 EMAIL_MAILGUN_API_KEY=${EMAIL_MAILGUN_API_KEY:-}
 EMAIL_MAILGUN_DOMAIN=${EMAIL_MAILGUN_DOMAIN:-}
-EMAIL_FROM_EMAIL=${EMAIL_FROM_EMAIL:-noreply@traditionaleats.com}
-EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-TraditionalEats}
+EMAIL_FROM_EMAIL=${EMAIL_FROM_EMAIL:-noreply@kram.com}
+EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Kram}
 EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-smtp.gmail.com}
 EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
 EMAIL_SMTP_USERNAME=${EMAIL_SMTP_USERNAME:-}
@@ -268,29 +268,29 @@ DIGITALOCEAN_SPACES_REGION=${DIGITALOCEAN_SPACES_REGION:-sfo3}
 DIGITALOCEAN_SPACES_SERVICE_URL=${DIGITALOCEAN_SPACES_SERVICE_URL:-https://sfo3.digitaloceanspaces.com}
 DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
 "
-  echo "$ENV_CONTENT" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats && cat > /opt/traditionaleats/.env && chmod 600 /opt/traditionaleats/.env"
+  echo "$ENV_CONTENT" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram && cat > /opt/kram/.env && chmod 600 /opt/kram/.env"
   echo ""
 
   echo -e "${GREEN}Step 2: Syncing repo to server (this may take a few minutes)${NC}"
   if [ -f "$SSH_KEY_PATH" ]; then
     rsync -az -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=accept-new" \
       --exclude='.git' --exclude='node_modules' --exclude='bin' --exclude='obj' --exclude='.env' --exclude='.vs' --exclude='*.user' \
-      "$REPO_ROOT/" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/"
+      "$REPO_ROOT/" "$DROPLET_USER@$DROPLET_IP:/opt/kram/"
   else
     rsync -az -e "ssh -o StrictHostKeyChecking=accept-new" \
       --exclude='.git' --exclude='node_modules' --exclude='bin' --exclude='obj' --exclude='.env' --exclude='.vs' --exclude='*.user' \
-      "$REPO_ROOT/" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/"
+      "$REPO_ROOT/" "$DROPLET_USER@$DROPLET_IP:/opt/kram/"
   fi
   echo -e "${GREEN}Sync done${NC}"
   echo ""
 
   echo -e "${GREEN}Step 2b: Generating nginx.conf (DOMAIN=$DOMAIN, HTTPS_ONLY=$HTTPS_ONLY)${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && mkdir -p nginx && source .env 2>/dev/null; export DOMAIN HTTPS_ONLY; bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && mkdir -p nginx && source .env 2>/dev/null; export DOMAIN HTTPS_ONLY; bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf"
   echo ""
 
   echo -e "${GREEN}Step 3: Building images on server (one at a time to avoid OOM, ~10–25 min)${NC}"
   # Export BUILDX_NO_DEFAULT_ATTESTATIONS to prevent 502 errors on DOCR attestation uploads
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && export BUILDX_NO_DEFAULT_ATTESTATIONS=1 && COMPOSE_PARALLEL_LIMIT=1 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env build"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && export BUILDX_NO_DEFAULT_ATTESTATIONS=1 && COMPOSE_PARALLEL_LIMIT=1 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env build"
   echo ""
 
   # Step 3b: Push to registry from server (like mental health app – images in DOCR, no build on Mac)
@@ -304,7 +304,7 @@ DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
       RETRY=0
       PUSH_FAILED=false
       while [ $RETRY -lt $MAX_RETRIES ]; do
-        PUSH_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && export BUILDX_NO_DEFAULT_ATTESTATIONS=1 && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env push 2>&1" || echo "PUSH_FAILED")
+        PUSH_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && export BUILDX_NO_DEFAULT_ATTESTATIONS=1 && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env push 2>&1" || echo "PUSH_FAILED")
         if echo "$PUSH_OUTPUT" | grep -qE "(520|503|502|504|5[0-9]{2})"; then
           RETRY=$((RETRY + 1))
           if [ $RETRY -lt $MAX_RETRIES ]; then
@@ -332,7 +332,7 @@ DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
   MAX_RETRIES=3
   RETRY=0
   while [ $RETRY -lt $MAX_RETRIES ]; do
-    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
     if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
       RETRY=$((RETRY + 1))
       if [ $RETRY -lt $MAX_RETRIES ]; then
@@ -346,12 +346,12 @@ DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
       break
     fi
   done
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
   echo ""
 
   echo -e "${GREEN}Step 5: Creating databases${NC}"
   sleep 10
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cp /opt/traditionaleats/.env /opt/traditionaleats/deploy/digitalocean/.env 2>/dev/null; cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh" 2>/dev/null && echo -e "${GREEN}Databases ready${NC}" || echo -e "${YELLOW}If needed, on server run: cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh${NC}"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cp /opt/kram/.env /opt/kram/deploy/digitalocean/.env 2>/dev/null; cd /opt/kram && bash deploy/digitalocean/scripts/mysql-init.sh" 2>/dev/null && echo -e "${GREEN}Databases ready${NC}" || echo -e "${YELLOW}If needed, on server run: cd /opt/kram && bash deploy/digitalocean/scripts/mysql-init.sh${NC}"
   echo ""
   echo -e "${GREEN}Done. App: http://$DROPLET_IP (ports 80/443).${NC}"
 }
@@ -383,7 +383,7 @@ cmd_droplet() {
   fi
 
   echo -e "${GREEN}========================================${NC}"
-  echo -e "${GREEN}TraditionalEats – Deploy to Droplet${NC}"
+  echo -e "${GREEN}Kram – Deploy to Droplet${NC}"
   echo -e "${GREEN}========================================${NC}"
   echo -e "  Droplet: ${YELLOW}$DROPLET_IP${NC}"
   echo ""
@@ -450,7 +450,7 @@ ENDSWAP
   # Deploy never builds on your Mac (like mental health app). Images come from: build-on-server (build on droplet + push) or CI. Step 1 is create .env and copy files only.
   # Step 2: Create .env on server (reuse existing or use defaults from appsettings / secrets.env)
   echo -e "${GREEN}Step 2: Creating .env on server${NC}"
-  EXISTING_ENV=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cat /opt/traditionaleats/.env 2>/dev/null" || echo "")
+  EXISTING_ENV=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cat /opt/kram/.env 2>/dev/null" || echo "")
   get_var() { echo "$EXISTING_ENV" | grep "^$1=" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo ""; }
   if [ -n "$EXISTING_ENV" ]; then
     MYSQL_ROOT_PASSWORD=$(get_var MYSQL_ROOT_PASSWORD)
@@ -497,14 +497,14 @@ ENDSWAP
 
   # Defaults from appsettings (staging); override via secrets.env or existing .env
   RABBITMQ_USER="${RABBITMQ_USER:-admin}"
-  JWT_ISSUER="${JWT_ISSUER:-TraditionalEats}"
-  JWT_AUDIENCE="${JWT_AUDIENCE:-TraditionalEats}"
+  JWT_ISSUER="${JWT_ISSUER:-Kram}"
+  JWT_AUDIENCE="${JWT_AUDIENCE:-Kram}"
   EMAIL_ENABLED="${EMAIL_ENABLED:-true}"
   EMAIL_PROVIDER="${EMAIL_PROVIDER:-Mailgun}"
   EMAIL_MAILGUN_API_KEY="${EMAIL_MAILGUN_API_KEY:-}"
   EMAIL_MAILGUN_DOMAIN="${EMAIL_MAILGUN_DOMAIN:-}"
-  EMAIL_FROM_EMAIL="${EMAIL_FROM_EMAIL:-noreply@traditionaleats.com}"
-  EMAIL_FROM_NAME="${EMAIL_FROM_NAME:-TraditionalEats}"
+  EMAIL_FROM_EMAIL="${EMAIL_FROM_EMAIL:-noreply@kram.com}"
+  EMAIL_FROM_NAME="${EMAIL_FROM_NAME:-Kram}"
   EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST:-smtp.gmail.com}"
   EMAIL_SMTP_PORT="${EMAIL_SMTP_PORT:-587}"
   EMAIL_SMTP_USERNAME="${EMAIL_SMTP_USERNAME:-}"
@@ -520,9 +520,9 @@ ENDSWAP
   STRIPE_CONNECT_RETURN_URL="${STRIPE_CONNECT_RETURN_URL:-$APP_BASE_URL}"
   OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://ollama:11434}"
   OPENAI_API_KEY="${OPENAI_API_KEY:-}"
-  # Single repo (DOCR 1-repo limit): registry.digitalocean.com/cha-registry/traditionaleats:service-name
+  # Single repo (DOCR 1-repo limit): registry.digitalocean.com/cha-registry/kram:service-name
   REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}"
-  REPO_NAME="${REPO_NAME:-traditionaleats}"
+  REPO_NAME="${REPO_NAME:-kram}"
   # DocumentService: DigitalOcean Spaces (S3-compatible); set in secrets.env for vendor document uploads
   DIGITALOCEAN_SPACES_BUCKET_NAME="${DIGITALOCEAN_SPACES_BUCKET_NAME:-}"
   DIGITALOCEAN_SPACES_ACCESS_KEY="${DIGITALOCEAN_SPACES_ACCESS_KEY:-}"
@@ -578,7 +578,7 @@ ENDSWAP
   # Allow override via secrets.env
   CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS_OVERRIDE:-$CORS_ALLOWED_ORIGINS}"
 
-  ENV_CONTENT="# TraditionalEats – generated by deploy.sh ($ENV_ARG) – from appsettings + secrets.env
+  ENV_CONTENT="# Kram – generated by deploy.sh ($ENV_ARG) – from appsettings + secrets.env
 ASPNETCORE_ENVIRONMENT=$ASPNETCORE_ENVIRONMENT
 APP_BASE_URL=$APP_BASE_URL
 MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
@@ -620,26 +620,26 @@ DIGITALOCEAN_SPACES_REGION=$DIGITALOCEAN_SPACES_REGION
 DIGITALOCEAN_SPACES_SERVICE_URL=$DIGITALOCEAN_SPACES_SERVICE_URL
 DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
 "
-  echo "$ENV_CONTENT" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats && cat > /opt/traditionaleats/.env && chmod 600 /opt/traditionaleats/.env && echo '.env created'"
+  echo "$ENV_CONTENT" | $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram && cat > /opt/kram/.env && chmod 600 /opt/kram/.env && echo '.env created'"
   echo -e "${GREEN}.env ready on server${NC}"
   echo ""
 
   # Step 3: Copy compose, nginx (generated), scripts
   echo -e "${GREEN}Step 3: Copying files to server${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats/nginx /opt/traditionaleats/deploy/digitalocean/scripts"
-  $SCP_CMD "$COMPOSE_FILE" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/docker-compose.prod.yml"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram/nginx /opt/kram/deploy/digitalocean/scripts"
+  $SCP_CMD "$COMPOSE_FILE" "$DROPLET_USER@$DROPLET_IP:/opt/kram/docker-compose.prod.yml"
   DOMAIN="$DOMAIN" HTTPS_ONLY="$HTTPS_ONLY" bash "$SCRIPT_DIR/scripts/generate-nginx-conf.sh" > "$SCRIPT_DIR/nginx/nginx.generated.conf" 2>/dev/null || true
   if [ -f "$SCRIPT_DIR/nginx/nginx.generated.conf" ] && [ -s "$SCRIPT_DIR/nginx/nginx.generated.conf" ]; then
-    $SCP_CMD "$SCRIPT_DIR/nginx/nginx.generated.conf" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/nginx/nginx.conf"
+    $SCP_CMD "$SCRIPT_DIR/nginx/nginx.generated.conf" "$DROPLET_USER@$DROPLET_IP:/opt/kram/nginx/nginx.conf"
   else
-    $SCP_CMD "$SCRIPT_DIR/nginx/nginx.conf" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/nginx/nginx.conf"
+    $SCP_CMD "$SCRIPT_DIR/nginx/nginx.conf" "$DROPLET_USER@$DROPLET_IP:/opt/kram/nginx/nginx.conf"
   fi
   # Copy all scripts to server (needed for setup-https.sh, seed-admin.sh, etc.)
   for script in "$SCRIPT_DIR/scripts"/*.sh; do
     if [ -f "$script" ]; then
       script_name=$(basename "$script")
-      $SCP_CMD "$script" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/deploy/digitalocean/scripts/$script_name"
-      $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/traditionaleats/deploy/digitalocean/scripts/$script_name"
+      $SCP_CMD "$script" "$DROPLET_USER@$DROPLET_IP:/opt/kram/deploy/digitalocean/scripts/$script_name"
+      $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/kram/deploy/digitalocean/scripts/$script_name"
     fi
   done
   echo -e "${GREEN}Files copied${NC}"
@@ -670,7 +670,7 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
     fi
     
     # Try pull, capture output
-    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
     
     # Check if it's a 503 error
     if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
@@ -690,30 +690,30 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
   done
   
   echo -e "${GREEN}Starting containers${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && docker compose -f docker-compose.prod.yml --env-file .env up -d"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f docker-compose.prod.yml --env-file .env up -d"
   echo ""
 
   # Step 5: MySQL init (create DBs)
   echo -e "${GREEN}Step 5: Creating databases${NC}"
   sleep 10
-  if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh" 2>/dev/null; then
+  if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && bash deploy/digitalocean/scripts/mysql-init.sh" 2>/dev/null; then
     echo -e "${GREEN}Databases ready${NC}"
   else
-    echo -e "${YELLOW}If a service fails to start, on the server run: cd /opt/traditionaleats && bash deploy/digitalocean/scripts/mysql-init.sh${NC}"
+    echo -e "${YELLOW}If a service fails to start, on the server run: cd /opt/kram && bash deploy/digitalocean/scripts/mysql-init.sh${NC}"
   fi
   echo ""
 
   # Step 6: Seed admin user (if enabled)
   if [ "${SEED_ADMIN:-true}" = "true" ]; then
     echo -e "${GREEN}Step 6: Seeding admin user${NC}"
-    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@traditionaleats.com}"
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@kram.com}"
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin123!}"
     sleep 5  # Wait for identity-service to be fully ready
-    if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && bash deploy/digitalocean/scripts/seed-admin.sh '$ADMIN_EMAIL' '$ADMIN_PASSWORD'" 2>/dev/null; then
+    if $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && bash deploy/digitalocean/scripts/seed-admin.sh '$ADMIN_EMAIL' '$ADMIN_PASSWORD'" 2>/dev/null; then
       echo -e "${GREEN}Admin user seeded${NC}"
     else
       echo -e "${YELLOW}Admin seeding failed or skipped. To seed manually, on server run:${NC}"
-      echo -e "${YELLOW}  cd /opt/traditionaleats && bash deploy/digitalocean/scripts/seed-admin.sh${NC}"
+      echo -e "${YELLOW}  cd /opt/kram && bash deploy/digitalocean/scripts/seed-admin.sh${NC}"
     fi
     echo ""
   fi
@@ -726,7 +726,7 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
     echo ""
     echo -e "${YELLOW}Domain detected: $DOMAIN${NC}"
     echo -e "${YELLOW}To enable HTTPS, run: ./deploy.sh setup-https $ENV_ARG${NC}"
-    echo -e "${YELLOW}Or on the server: cd /opt/traditionaleats && bash deploy/digitalocean/scripts/setup-https.sh $DOMAIN${NC}"
+    echo -e "${YELLOW}Or on the server: cd /opt/kram && bash deploy/digitalocean/scripts/setup-https.sh $DOMAIN${NC}"
   fi
 }
 
@@ -742,7 +742,7 @@ cmd_setup_https() {
   fi
 
   # Get DOMAIN from server .env or ask user
-  DOMAIN=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-" || true)
+  DOMAIN=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-" || true)
   
   if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [[ "$DOMAIN" != *.* ]]; then
     if [ -z "$2" ]; then
@@ -765,7 +765,7 @@ cmd_setup_https() {
   fi
   
   echo -e "${BLUE}Ensuring scripts are on server...${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/traditionaleats/deploy/digitalocean/scripts"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram/deploy/digitalocean/scripts"
   
   if [ ! -d "$SCRIPT_DIR/scripts" ]; then
     echo -e "${RED}ERROR: Scripts directory not found at $SCRIPT_DIR/scripts${NC}"
@@ -777,8 +777,8 @@ cmd_setup_https() {
     if [ -f "$script" ]; then
       script_name=$(basename "$script")
       echo -e "${BLUE}Copying $script_name...${NC}"
-      if $SCP_CMD "$script" "$DROPLET_USER@$DROPLET_IP:/opt/traditionaleats/deploy/digitalocean/scripts/$script_name"; then
-        $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/traditionaleats/deploy/digitalocean/scripts/$script_name"
+      if $SCP_CMD "$script" "$DROPLET_USER@$DROPLET_IP:/opt/kram/deploy/digitalocean/scripts/$script_name"; then
+        $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "chmod +x /opt/kram/deploy/digitalocean/scripts/$script_name"
         SCRIPT_COUNT=$((SCRIPT_COUNT + 1))
       else
         echo -e "${RED}Failed to copy $script_name${NC}"
@@ -793,7 +793,7 @@ cmd_setup_https() {
   fi
   
   # Verify critical script exists
-  if ! $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "test -f /opt/traditionaleats/deploy/digitalocean/scripts/generate-nginx-conf.sh"; then
+  if ! $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "test -f /opt/kram/deploy/digitalocean/scripts/generate-nginx-conf.sh"; then
     echo -e "${RED}ERROR: generate-nginx-conf.sh not found on server after copy${NC}"
     exit 1
   fi
@@ -801,7 +801,7 @@ cmd_setup_https() {
   echo -e "${GREEN}✓ Copied $SCRIPT_COUNT script(s) to server${NC}"
   echo ""
   
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/traditionaleats && bash deploy/digitalocean/scripts/setup-https.sh $DOMAIN"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && bash deploy/digitalocean/scripts/setup-https.sh $DOMAIN"
   
   echo ""
   echo -e "${GREEN}HTTPS setup complete. Test: https://$DOMAIN${NC}"
