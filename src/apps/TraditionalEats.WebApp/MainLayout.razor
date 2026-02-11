@@ -15,14 +15,14 @@
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center"
                 Class="logo-container">
                 <RadzenIcon Icon="restaurant_menu" Style="font-size: 24px;" />
-                <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">TraditionalEats</RadzenText>
+                <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">Kram</RadzenText>
             </RadzenStack>
             <div class="nav-container">
                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center"
                     Class="desktop-nav">
                     <RadzenButton Text="Home" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat"
                         Size="ButtonSize.Small" />
-                    <RadzenButton Text="Restaurants" Click="@(() => NavigationManager.NavigateTo("/restaurants"))"
+                    <RadzenButton Text="Vendors" Click="@(() => NavigationManager.NavigateTo("/restaurants"))"
                         Variant="Variant.Flat" Size="ButtonSize.Small" />
                     <div style="position: relative; overflow: visible;">
                         <RadzenButton Text="Cart" Icon="shopping_cart"
@@ -75,7 +75,7 @@
     <RadzenSidebar @bind-Expanded="@sidebarExpanded">
         <RadzenPanelMenu>
             <RadzenPanelMenuItem Text="Home" Icon="home" Path="/" />
-            <RadzenPanelMenuItem Text="Restaurants" Icon="restaurant" Path="/restaurants" />
+            <RadzenPanelMenuItem Text="Vendors" Icon="restaurant" Path="/restaurants" />
             <RadzenPanelMenuItem Text="My Orders" Icon="receipt" Path="/orders" />
             <RadzenPanelMenuItem Text="Profile" Icon="account_circle" Path="/profile" />
         </RadzenPanelMenu>

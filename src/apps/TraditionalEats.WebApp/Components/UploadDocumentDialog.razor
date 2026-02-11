@@ -1,0 +1,134 @@
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using TraditionalEats.WebApp.Services
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject ILogger<UploadDocumentDialog> Logger
+@inject NotificationService NotificationService
+
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H3">Upload Document</RadzenText>
+
+    <RadzenFormField Text="Document Type" class="rz-col-12">
+        <RadzenDropDown @bind-Value="documentType" Data="@documentTypes" Placeholder="Select document type" Style="width: 100%;" />
+    </RadzenFormField>
+
+    <RadzenFormField Text="File" class="rz-col-12">
+        <RadzenFileInput @bind-Value="selectedFile" Accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" Style="width: 100%;" />
+        <RadzenText TextStyle="TextStyle.Caption" Style="margin-top: 0.5rem;">Maximum file size: 10MB</RadzenText>
+    </RadzenFormField>
+
+    <RadzenFormField Text="Notes (Optional)" class="rz-col-12">
+        <RadzenTextArea @bind-Value="notes" Rows="3" Placeholder="Add any notes about this document..." Style="width: 100%;" />
+    </RadzenFormField>
+
+    <RadzenFormField Text="Expiration Date (Optional)" class="rz-col-12">
+        <RadzenDatePicker @bind-Value="expiresAt" DateFormat="MM/dd/yyyy" Style="width: 100%;" />
+    </RadzenFormField>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+        <RadzenButton Text="Cancel" Click="@(() => DialogService.Close(false))" Variant="Variant.Outlined" />
+        <RadzenButton Text="Upload" Click="UploadDocument" Variant="Variant.Filled" Disabled="@(isUploading || selectedFile == null || string.IsNullOrEmpty(documentType))" />
+    </RadzenStack>
+
+    @if (isUploading)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 1rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Uploading...</RadzenText>
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Inject] public DialogService DialogService { get; set; } = default!;
+
+    private string? documentType;
+    private IBrowserFile? selectedFile;
+    private string? notes;
+    private DateTime? expiresAt;
+    private bool isUploading = false;
+    private string errorMessage = string.Empty;
+
+    private List<string> documentTypes = new()
+    {
+        "BusinessLicense",
+        "HealthCertificate",
+        "Insurance",
+        "TaxDocument",
+        "IdentityVerification",
+        "Other"
+    };
+
+    private async Task UploadDocument()
+    {
+        if (selectedFile == null || string.IsNullOrEmpty(documentType))
+        {
+            errorMessage = "Please select a file and document type";
+            return;
+        }
+
+        // Check file size (10MB limit)
+        const long maxFileSize = 10 * 1024 * 1024;
+        if (selectedFile.Size > maxFileSize)
+        {
+            errorMessage = "File size exceeds 10MB limit";
+            return;
+        }
+
+        isUploading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Authentication required";
+                return;
+            }
+
+            using var content = new MultipartFormDataContent();
+            using var fileStream = selectedFile.OpenReadStream(maxFileSize);
+            content.Add(new StreamContent(fileStream), "file", selectedFile.Name);
+            content.Add(new StringContent(documentType), "documentType");
+            if (!string.IsNullOrEmpty(notes))
+                content.Add(new StringContent(notes), "notes");
+            if (expiresAt.HasValue)
+                content.Add(new StringContent(expiresAt.Value.ToString("O")), "expiresAt");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/WebBff/documents/upload");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = content;
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Document uploaded successfully");
+                DialogService.Close(true);
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Upload failed: {response.StatusCode}";
+                Logger.LogError("Upload failed: {StatusCode} - {Content}", response.StatusCode, errorContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error uploading document");
+            errorMessage = "Failed to upload document";
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+}

@@ -31,7 +31,7 @@ export default function CreateRestaurantScreen() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert("Validation Error", "Restaurant name is required");
+      Alert.alert("Validation Error", "Vendor name is required");
       return;
     }
 
@@ -47,7 +47,7 @@ export default function CreateRestaurantScreen() {
         formData,
       );
 
-      Alert.alert("Success", "Restaurant created successfully", [
+      Alert.alert("Success", "Vendor created successfully", [
         {
           text: "OK",
           onPress: () => {
@@ -61,7 +61,7 @@ export default function CreateRestaurantScreen() {
       const errorMessage =
         error.response?.data?.error ||
         error.message ||
-        "Failed to create restaurant";
+        "Failed to create vendor";
       Alert.alert("Error", errorMessage);
     } finally {
       setSaving(false);
@@ -81,7 +81,7 @@ export default function CreateRestaurantScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Restaurant</Text>
+        <Text style={styles.headerTitle}>Create Vendor</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -94,12 +94,12 @@ export default function CreateRestaurantScreen() {
       >
         <View style={styles.form}>
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Restaurant Name *</Text>
+            <Text style={styles.label}>Vendor Name *</Text>
             <TextInput
               style={styles.input}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="Enter restaurant name"
+              placeholder="Enter vendor name"
               autoFocus
             />
           </View>
@@ -195,7 +195,7 @@ export default function CreateRestaurantScreen() {
                   color="#fff"
                   style={{ marginRight: 8 }}
                 />
-                <Text style={styles.saveButtonText}>Create Restaurant</Text>
+                <Text style={styles.saveButtonText}>Create Vendor</Text>
               </>
             )}
           </TouchableOpacity>

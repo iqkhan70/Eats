@@ -1,4 +1,4 @@
-# Deploy TraditionalEats to DigitalOcean
+# Deploy Kram to DigitalOcean
 
 Deploy with **HTTPS at the edge** and **HTTP inside** a private network. Same one-command pattern as the mental health app: put your Droplet IP in a file, run the script, and the app is ready.
 
@@ -19,7 +19,7 @@ Deploy with **HTTPS at the edge** and **HTTP inside** a private network. Same on
    - Load `DROPLET_IP` from the file
    - Test SSH and install Docker on the droplet if needed
    - Create `.env` on the server (generates passwords if first run; reuses existing if redeploying)
-   - Copy compose, nginx config, and scripts to `/opt/traditionaleats`
+   - Copy compose, nginx config, and scripts to `/opt/kram`
    - Pull images and start the stack
    - Create all MySQL databases
      After that, open **http://&lt;your-droplet-ip&gt;** and the app is ready.
@@ -44,8 +44,8 @@ The same **docker-compose.prod.yml** is used for both; the deploy script sets **
 Example for production:
 
 ```bash
-PRODUCTION_BASE_URL=https://www.traditionaleats.com
-PRODUCTION_DOMAIN=www.traditionaleats.com
+PRODUCTION_BASE_URL=https://www.kram.com
+PRODUCTION_DOMAIN=www.kram.com
 ```
 
 ## Prerequisites
@@ -103,7 +103,7 @@ To enable HTTPS you need a **domain** (Let's Encrypt does not issue certs for ra
 2. **Get a certificate** on the server (once Nginx and the stack are running with HTTP):
    ```bash
    # On the server (or from a one-off certbot container using certbot_www/certbot_certs volumes)
-   docker run --rm -v traditionaleats_certbot_www:/var/www/certbot -v traditionaleats_certbot_certs:/etc/letsencrypt certbot/certbot certonly --webroot -w /var/www/certbot -d YOUR_STAGING_DOMAIN
+   docker run --rm -v kram_certbot_www:/var/www/certbot -v kram_certbot_certs:/etc/letsencrypt certbot/certbot certonly --webroot -w /var/www/certbot -d YOUR_STAGING_DOMAIN
    ```
 3. **Set domain and base URL** in `secrets.env`:
    - Staging: `STAGING_BASE_URL=https://www.caseflowstage.store`, `STAGING_DOMAIN=www.caseflowstage.store` (or leave empty to use HTTP only).
@@ -123,7 +123,7 @@ If `DOMAIN` is empty (e.g. you use only an IP), Nginx stays HTTP-only. The gener
    Or manually on the server:
    ```bash
    ssh root@YOUR_DROPLET_IP
-   cd /opt/traditionaleats
+   cd /opt/kram
    bash deploy/digitalocean/scripts/setup-https.sh www.caseflowstage.store
    ```
    This runs certbot (using the same Docker volumes as the stack), regenerates nginx.conf with HTTPS for that domain, and restarts the edge container.
@@ -136,7 +136,7 @@ Create `secrets.env` and set any of: `APP_BASE_URL`, `STAGING_DOMAIN`, `PRODUCTI
 
 ## MySQL databases
 
-The script runs `scripts/mysql-init.sh` on the server after `docker compose up -d`, creating all eight databases (identity, customer, order, catalog, notification, restaurant, payment, chat) if they don't exist. Each service runs EF migrations on startup. If init fails (e.g. MySQL not ready yet), on the server run: `cd /opt/traditionaleats && ./scripts/mysql-init.sh`.
+The script runs `deploy/digitalocean/scripts/mysql-init.sh` on the server after `docker compose up -d`, creating all required databases (identity, customer, order, catalog, notification, restaurant, payment, chat, ai, review, document) if they don't exist. Each service runs EF migrations on startup. If init fails (e.g. MySQL not ready yet), on the server run: `cd /opt/kram && bash deploy/digitalocean/scripts/mysql-init.sh`.
 
 **MySQL is exposed on port 3306** for direct access from your Mac. Connect using:
 
@@ -151,7 +151,7 @@ Example connection string: `server=165.227.182.46;port=3306;user=root;password=Y
 
 After database creation, the deploy script automatically seeds an admin user (enabled by default):
 
-- **Email:** `admin@traditionaleats.com` (default, configurable via `ADMIN_EMAIL` in `secrets.env`)
+- **Email:** `admin@kram.com` (default, configurable via `ADMIN_EMAIL` in `secrets.env`)
 - **Password:** `Admin123!` (default, **change this in production** via `ADMIN_PASSWORD` in `secrets.env`)
 - **Role:** Admin (full system access)
 
@@ -163,10 +163,12 @@ ADMIN_PASSWORD=YourSecurePassword123!
 SEED_ADMIN=true  # Set to false to skip seeding
 ```
 
+**DocumentService (vendor documents):** The `document-service` container stores uploaded files in **DigitalOcean Spaces** (S3-compatible). Set `DIGITALOCEAN_SPACES_*` in `secrets.env` (see `secrets.env.example`) so uploads work. The document database (`traditional_eats_document`) is created by `mysql-init.sh`; the service runs EF migrations on startup.
+
 **To seed manually:** On the server:
 
 ```bash
-cd /opt/traditionaleats
+cd /opt/kram
 bash deploy/digitalocean/scripts/seed-admin.sh [email] [password]
 ```
 
@@ -213,7 +215,7 @@ Pull fails with `503 Service Unavailable` from `nyc3.digitaloceanspaces.com`. Th
 
 ```bash
 # On server, if images are already there from a previous build-on-server:
-cd /opt/traditionaleats
+cd /opt/kram
 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d
 ```
 
@@ -245,7 +247,7 @@ Push fails with `520` or other `5xx` status codes when uploading layers to DOCR.
 
 ```bash
 # On server, retry pushing:
-cd /opt/traditionaleats
+cd /opt/kram
 export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env push
 ```
@@ -255,7 +257,7 @@ If you used `build-on-server`, the images are already on the Droplet, so you can
 
 ```bash
 # On server:
-cd /opt/traditionaleats
+cd /opt/kram
 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d
 ```
 
@@ -282,7 +284,7 @@ After a **fresh deploy**, the generated nginx is already HTTP-only until you run
 
 See [HTTPS not working? (step-by-step)](#https-not-working-step-by-step) above: use a domain (not IP), deploy with HTTP first, then run `setup-https.sh <domain>` on the server. Ensure DNS points to the Droplet.
 
-**If your server `.env` has `DOMAIN=https`:** That is wrong and breaks HTTPS (Nginx looks for certs at `/etc/letsencrypt/live/https/`). `DOMAIN` must be the **hostname only**, e.g. `www.caseflowstage.store`. Fix: in `secrets.env` set **`STAGING_DOMAIN=www.caseflowstage.store`** (not `https`), then redeploy so the server `.env` gets the correct DOMAIN. Or on the server: edit `/opt/traditionaleats/.env` and change `DOMAIN=https` to `DOMAIN=www.caseflowstage.store`, then run `bash deploy/digitalocean/scripts/setup-https.sh www.caseflowstage.store` (or regenerate nginx and restart edge).
+**If your server `.env` has `DOMAIN=https`:** That is wrong and breaks HTTPS (Nginx looks for certs at `/etc/letsencrypt/live/https/`). `DOMAIN` must be the **hostname only**, e.g. `www.caseflowstage.store`. Fix: in `secrets.env` set **`STAGING_DOMAIN=www.caseflowstage.store`** (not `https`), then redeploy so the server `.env` gets the correct DOMAIN. Or on the server: edit `/opt/kram/.env` and change `DOMAIN=https` to `DOMAIN=www.caseflowstage.store`, then run `bash deploy/digitalocean/scripts/setup-https.sh www.caseflowstage.store` (or regenerate nginx and restart edge).
 
 ### 502 Bad Gateway (after some time)
 
@@ -291,7 +293,7 @@ Nginx is up but the upstream (e.g. web-bff) is not responding – often a backen
 **On the Droplet (SSH in):**
 
 ```bash
-cd /opt/traditionaleats   # or cd /opt/traditionaleats && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env ps
+cd /opt/kram   # or cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env ps
 docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env ps
 ```
 

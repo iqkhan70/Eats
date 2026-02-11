@@ -1,4 +1,4 @@
-# Deploy TraditionalEats to DigitalOcean App Platform
+# Deploy Kram to DigitalOcean App Platform
 
 Use **app-spec.yaml** with `doctl` to deploy with **HTTPS at the edge** (App Platform ingress) and **HTTP** between your components.
 
@@ -25,7 +25,7 @@ This builds all images (edge, web-bff, mobile-bff, identity-service, etc.) and p
 
 - **registry**: Set to your DOCR name (e.g. `registry.digitalocean.com/your-registry-name`). Leave empty if your doctl/default registry is already set.
 - **envs**: Fill secrets and URLs:
-  - **edge**: `APP_BASE_URL` = your app’s public URL (e.g. `https://traditionaleats-xxx.ondigitalocean.app`) so the Blazor app and reset-password links use the right API base.
+  - **edge**: `APP_BASE_URL` = your app’s public URL (e.g. `https://kram-xxx.ondigitalocean.app`) so the Blazor app and reset-password links use the right API base.
   - **web-bff / mobile-bff**: Set `Services__IdentityService`, `Services__CustomerService`, etc. to the **default URLs** of the corresponding App Platform services (e.g. `https://identity-service-xxx.ondigitalocean.app`). You can get these after the first deploy from the DO control panel, or use [bindable env vars](https://docs.digitalocean.com/products/app-platform/how-to/use-environment-variables/) if your account supports them.
   - **identity-service**: `ConnectionStrings__IdentityDb`, `Jwt__Secret`, `AppSettings__BaseUrl`, `Services__NotificationService` (notification-service URL).
   - **Other services**: Set `ConnectionStrings__*` (and any Redis/RabbitMQ URLs if you use managed DBs).

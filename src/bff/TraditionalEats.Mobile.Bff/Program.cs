@@ -29,8 +29,8 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Kram";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Kram";
 
 // Log JWT configuration for debugging
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger<Program>();
@@ -101,7 +101,7 @@ builder.Services.AddHttpClient("RestaurantService", client =>
 builder.Services.AddHttpClient("Geocoding", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
-    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "TraditionalEats/1.0");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Kram/1.0");
 });
 
 builder.Services.AddHttpClient("PaymentService", client =>
@@ -134,6 +134,12 @@ builder.Services.AddHttpClient("ChatService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ChatService"] ?? "http://localhost:5012");
 });
 
+builder.Services.AddHttpClient("DocumentService", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for file uploads
+    client.BaseAddress = new Uri(builder.Configuration["Services:DocumentService"] ?? "http://localhost:5014");
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -151,7 +157,7 @@ app.MapControllers();
 
 // Root endpoint for testing
 app.MapGet("/", () => new { 
-    service = "TraditionalEats.Mobile.Bff", 
+    service = "Kram.Mobile.Bff", 
     status = "running",
     endpoints = new[] {
         "/api/MobileBff/health",

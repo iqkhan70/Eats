@@ -2233,6 +2233,301 @@ public class WebBffController : ControllerBase
             return StatusCode(500, new { message = "Failed to add response" });
         }
     }
+
+    // ----------------------------
+    // Document endpoints
+    // ----------------------------
+
+    [HttpPost("documents/upload")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UploadDocument(
+        [FromForm] IFormFile file,
+        [FromForm] string documentType,
+        [FromForm] string? notes = null,
+        [FromForm] DateTime? expiresAt = null)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+            {
+                _logger.LogWarning("Upload request received with null or empty file");
+                return BadRequest(new { message = "File is required" });
+            }
+
+            if (string.IsNullOrEmpty(documentType))
+            {
+                _logger.LogWarning("Upload request received without documentType");
+                return BadRequest(new { message = "Document type is required" });
+            }
+
+            _logger.LogInformation("Uploading document: {FileName}, Type: {DocumentType}, Size: {FileSize}", 
+                file.FileName, documentType, file.Length);
+
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            // Copy file stream to memory stream to avoid disposal issues
+            MemoryStream memoryStream;
+            using (var fileStream = file.OpenReadStream())
+            {
+                memoryStream = new MemoryStream();
+                await fileStream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+            }
+
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                content.Add(new StreamContent(memoryStream), "file", file.FileName);
+                content.Add(new StringContent(documentType), "documentType");
+                if (!string.IsNullOrEmpty(notes))
+                    content.Add(new StringContent(notes), "notes");
+                if (expiresAt.HasValue)
+                    content.Add(new StringContent(expiresAt.Value.ToString("O")), "expiresAt");
+
+                var response = await client.PostAsync("/api/document/upload", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("DocumentService returned error: {StatusCode} - {Content}", 
+                        response.StatusCode, responseContent);
+                }
+                
+                return JsonContent(responseContent, (int)response.StatusCode);
+            }
+            finally
+            {
+                memoryStream?.Dispose();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error uploading document: {Message}", ex.Message);
+            return StatusCode(500, new { message = $"Failed to connect to DocumentService: {ex.Message}" });
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "Timeout uploading document");
+            return StatusCode(500, new { message = "Upload timeout - DocumentService may be unavailable" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading document: {Message}", ex.Message);
+            return StatusCode(500, new { message = $"Failed to upload document: {ex.Message}" });
+        }
+    }
+
+    [HttpGet("documents/vendor/my-documents")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetMyDocuments([FromQuery] bool? isActive = null)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var queryString = isActive.HasValue ? $"?isActive={isActive.Value}" : "";
+            var response = await client.GetAsync($"/api/document/vendor/my-documents{queryString}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor documents");
+            return StatusCode(500, new { message = "Failed to fetch documents" });
+        }
+    }
+
+    [HttpGet("documents/{documentId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetDocument(Guid documentId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/document/{documentId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching document");
+            return StatusCode(500, new { message = "Failed to fetch document" });
+        }
+    }
+
+    [HttpPatch("documents/{documentId}/status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UpdateDocumentStatus(Guid documentId, [FromBody] UpdateDocumentStatusRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var response = await client.PatchAsJsonAsync($"/api/document/{documentId}/status", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating document status");
+            return StatusCode(500, new { message = "Failed to update document status" });
+        }
+    }
+
+    // Admin document endpoints (more specific routes first)
+    [HttpGet("documents/admin/all")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllDocuments(
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 500,
+        [FromQuery] Guid? vendorId = null,
+        [FromQuery] bool? isActive = null)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var queryParams = new List<string> { "skip=" + skip, "take=" + take };
+            if (vendorId.HasValue) queryParams.Add($"vendorId={vendorId.Value}");
+            if (isActive.HasValue) queryParams.Add($"isActive={isActive.Value}");
+
+            var queryString = "?" + string.Join("&", queryParams);
+            var response = await client.GetAsync($"/api/document/admin/all{queryString}");
+            var content = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                return JsonContent(content, (int)response.StatusCode);
+
+            // Enrich with vendor first + last name from CustomerService
+            var docs = JsonSerializer.Deserialize<List<JsonElement>>(content);
+            if (docs == null || docs.Count == 0)
+                return Content(content, "application/json");
+
+            var vendorIds = docs
+                .Select(d =>
+                {
+                    if (!d.TryGetProperty("vendorId", out var v)) return (Guid?)null;
+                    var s = v.GetString();
+                    return string.IsNullOrEmpty(s) || !Guid.TryParse(s, out var g) ? (Guid?)null : g;
+                })
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            var customerClient = _httpClientFactory.CreateClient("CustomerService");
+            var vendorNames = new Dictionary<Guid, string>();
+            foreach (var vid in vendorIds)
+            {
+                try
+                {
+                    var custResponse = await customerClient.GetAsync($"api/Customer/by-user/{vid}");
+                    if (custResponse.IsSuccessStatusCode)
+                    {
+                        var cust = await custResponse.Content.ReadFromJsonAsync<CustomerInfoDto>(JsonOptions);
+                        if (cust != null)
+                            vendorNames[vid] = $"{cust.FirstName} {cust.LastName}".Trim();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not resolve vendor name for {VendorId}", vid);
+                }
+            }
+
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+            {
+                writer.WriteStartArray();
+                foreach (var doc in docs)
+                {
+                    writer.WriteStartObject();
+                    foreach (var prop in doc.EnumerateObject())
+                    {
+                        prop.WriteTo(writer);
+                    }
+                    if (doc.TryGetProperty("vendorId", out var vProp) && Guid.TryParse(vProp.GetString(), out var vId) && vendorNames.TryGetValue(vId, out var name))
+                    {
+                        writer.WriteString("vendorName", name);
+                    }
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+            var enriched = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+            return Content(enriched, "application/json");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching all documents");
+            return StatusCode(500, new { message = "Failed to fetch documents" });
+        }
+    }
+
+    [HttpPatch("documents/admin/{documentId}/status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminUpdateDocumentStatus(Guid documentId, [FromBody] UpdateDocumentStatusRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var response = await client.PatchAsJsonAsync($"/api/document/admin/{documentId}/status", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating document status");
+            return StatusCode(500, new { message = "Failed to update document status" });
+        }
+    }
+
+    [HttpDelete("documents/admin/{documentId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminDeleteDocument(Guid documentId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var response = await client.DeleteAsync($"/api/document/admin/{documentId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting document");
+            return StatusCode(500, new { message = "Failed to delete document" });
+        }
+    }
+
+    [HttpDelete("documents/{documentId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteDocument(Guid documentId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            var response = await client.DeleteAsync($"/api/document/{documentId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting document");
+            return StatusCode(500, new { message = "Failed to delete document" });
+        }
+    }
 }
 
 // ----------------------------
@@ -2240,6 +2535,8 @@ public class WebBffController : ControllerBase
 // ----------------------------
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount);
+public record UpdateDocumentStatusRequest(bool IsActive);
+public record CustomerInfoDto(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
 
 public record CreateCartRequest(Guid? RestaurantId);
 

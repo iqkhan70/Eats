@@ -19,10 +19,11 @@
         <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
 
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+            <RadzenButton Text="Documents" Icon="description" Click="@(() => Navigation.NavigateTo("/vendor/documents"))" Variant="Variant.Outlined" />
             <RadzenButton Text="View Orders" Icon="shopping_cart" Click="@(() => Navigation.NavigateTo("/vendor/orders"))" Variant="Variant.Outlined" />
             @if (CanCreateRestaurants)
             {
-                <RadzenButton Text="+ Add Restaurant" Icon="add" Click="ShowCreateForm" Variant="Variant.Filled" />
+                <RadzenButton Text="+ Add Vendor" Icon="add" Click="ShowCreateForm" Variant="Variant.Filled" />
             }
         </RadzenStack>
     </RadzenStack>
@@ -80,7 +81,7 @@
     {
         <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
             <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
-            <RadzenText>Loading restaurants...</RadzenText>
+            <RadzenText>Loading vendors...</RadzenText>
         </RadzenStack>
     }
     else if (restaurants == null || !restaurants.Any())
@@ -107,7 +108,7 @@
                                  AlignItems="AlignItems.Center"
                                  Gap="0.75rem"
                                  Style="flex-wrap: wrap;">
-                        <RadzenText TextStyle="TextStyle.Body1">@restaurants.Count restaurant(s)</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body1">@restaurants.Count vendor(s)</RadzenText>
 
                         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
                             <RadzenTextBox @bind-Value="adminSearch"
@@ -153,9 +154,9 @@
                                         <RadzenButton Icon="restaurant_menu" Size="ButtonSize.Small" Variant="Variant.Outlined"
                                                       Click="@(() => ManageMenuItems(r.RestaurantId))" Title="Manage Menu Items" />
                                         <RadzenButton Icon="edit" Size="ButtonSize.Small" Variant="Variant.Flat"
-                                                      Click="@(() => EditRestaurant(r))" Title="Edit Restaurant" />
+                                                      Click="@(() => EditRestaurant(r))" Title="Edit Vendor" />
                                         <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Danger"
-                                                      Click="@(() => DeleteRestaurant(r.RestaurantId))" Title="Delete Restaurant" />
+                                                      Click="@(() => DeleteRestaurant(r.RestaurantId))" Title="Delete Vendor" />
                                     </RadzenStack>
                                 </Template>
                             </RadzenDataGridColumn>
@@ -168,7 +169,7 @@
         else
         {
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
-                <RadzenText TextStyle="TextStyle.Body1">@restaurants.Count restaurant(s)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body1">@restaurants.Count vendor(s)</RadzenText>
             </RadzenStack>
 
             <RadzenRow Gap="1rem">
@@ -217,15 +218,15 @@
         <RadzenCard Style="max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1001;">
             <RadzenStack Gap="1rem">
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
-                    <RadzenText TextStyle="TextStyle.H3">@(editingRestaurant != null ? "Edit Restaurant" : "Create Restaurant")</RadzenText>
+                    <RadzenText TextStyle="TextStyle.H3">@(editingRestaurant != null ? "Edit Vendor" : "Create Vendor")</RadzenText>
                     <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseForm" />
                 </RadzenStack>
 
-                <RadzenFormField Text="Restaurant Name *" class="w-100">
-                    <RadzenTextBox @bind-Value="restaurantForm.Name" Placeholder="Enter restaurant name" Style="width: 100%;" />
+                <RadzenFormField Text="Vendor Name *" class="w-100">
+                    <RadzenTextBox @bind-Value="restaurantForm.Name" Placeholder="Enter vendor name" Style="width: 100%;" />
                     @if (string.IsNullOrWhiteSpace(restaurantForm.Name))
                     {
-                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Restaurant name is required</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger);">Vendor name is required</RadzenText>
                     }
                 </RadzenFormField>
 
@@ -440,10 +441,10 @@
     private string? remediationLinkInput = null;
     private string? stripeConnectError = null;
 
-    private string HeaderText => isAdmin ? "All Restaurants" : "My Restaurants";
-    private string PageTitleText => isAdmin ? "Admin Restaurants - TraditionalEats" : "Vendor Dashboard - TraditionalEats";
-    private string EmptyStateText => isAdmin ? "No restaurants exist yet." : "You don't have any restaurants yet.";
-    private string CreateButtonText => isAdmin ? "Create Restaurant" : "Create Your First Restaurant";
+    private string HeaderText => isAdmin ? "All Vendors" : "My Vendors";
+    private string PageTitleText => isAdmin ? "Admin Vendors - Kram" : "Vendor Dashboard - Kram";
+    private string EmptyStateText => isAdmin ? "No vendors exist yet." : "You don't have any vendors yet.";
+    private string CreateButtonText => isAdmin ? "Create Vendor" : "Create Your First Vendor";
     private bool CanCreateRestaurants => isVendor || isAdmin;
 
     protected override async Task OnInitializedAsync()
@@ -827,7 +828,7 @@
     {
         if (!CanCreateRestaurants)
         {
-            errorMessage = "You do not have permission to create/update restaurants.";
+            errorMessage = "You do not have permission to create/update vendors.";
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Error,
@@ -839,7 +840,7 @@
 
         if (string.IsNullOrWhiteSpace(restaurantForm.Name))
         {
-            errorMessage = "Restaurant name is required";
+            errorMessage = "Vendor name is required";
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Error,
@@ -888,7 +889,7 @@
                 {
                     Severity = NotificationSeverity.Success,
                     Summary = "Success",
-                    Detail = $"Restaurant {(editingRestaurant != null ? "updated" : "created")} successfully",
+                    Detail = $"Vendor {(editingRestaurant != null ? "updated" : "created")} successfully",
                     Duration = 3000
                 });
 
@@ -902,7 +903,7 @@
                 var body = await response.Content.ReadAsStringAsync();
                 Logger.LogError("Failed to save restaurant: {StatusCode} - {Body}", response.StatusCode, body);
 
-                errorMessage = $"Failed to save restaurant: {response.StatusCode}";
+                errorMessage = $"Failed to save vendor: {response.StatusCode}";
                 NotificationService.Notify(new NotificationMessage
                 {
                     Severity = NotificationSeverity.Error,
@@ -931,7 +932,7 @@
 
     private async Task DeleteRestaurant(Guid restaurantId)
     {
-        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this restaurant?"))
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this vendor?"))
             return;
 
         try
@@ -948,7 +949,7 @@
                 {
                     Severity = NotificationSeverity.Success,
                     Summary = "Deleted",
-                    Detail = "Restaurant deleted successfully",
+                    Detail = "Vendor deleted successfully",
                     Duration = 2500
                 });
 
@@ -976,7 +977,7 @@
             {
                 Severity = NotificationSeverity.Error,
                 Summary = "Error",
-                Detail = $"Error deleting restaurant: {ex.Message}",
+                Detail = $"Error deleting vendor: {ex.Message}",
                 Duration = 5000
             });
         }

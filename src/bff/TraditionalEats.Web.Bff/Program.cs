@@ -25,8 +25,8 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? builder.Configuration["Jwt:Key"]
     ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!";
 
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TraditionalEats";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "TraditionalEats";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Kram";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Kram";
 
 // Log JWT configuration for debugging
 var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger<Program>();
@@ -243,6 +243,12 @@ builder.Services.AddHttpClient("ReviewService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ReviewService"] ?? "http://localhost:5009");
 });
 
+builder.Services.AddHttpClient("DocumentService", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for file uploads
+    client.BaseAddress = new Uri(builder.Configuration["Services:DocumentService"] ?? "http://localhost:5014");
+});
+
 builder.Services.AddHttpClient("OrderService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:OrderService"] ?? "http://localhost:5002");
@@ -296,7 +302,7 @@ app.MapControllers();
 // Root endpoint for testing
 app.MapGet("/", () => new
 {
-    service = "TraditionalEats.Web.Bff",
+    service = "Kram.Web.Bff",
     status = "running",
     endpoints = new[] {
         "/api/WebBff/health",

@@ -81,7 +81,7 @@ public class NotificationController : ControllerBase
         }
         try
         {
-            var success = await _notificationService.SendEmailToAddressAsync(request.To, request.Subject ?? "TraditionalEats", request.Body ?? "");
+            var success = await _notificationService.SendEmailToAddressAsync(request.To, request.Subject ?? "Kram", request.Body ?? "");
             return Ok(new { success, message = success ? "Email sent" : "Email not sent (check Email config)." });
         }
         catch (Exception ex)

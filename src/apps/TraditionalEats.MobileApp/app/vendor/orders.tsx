@@ -475,7 +475,7 @@ export default function VendorOrdersScreen() {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading restaurants...</Text>
+        <Text style={styles.loadingText}>Loading vendors...</Text>
       </View>
     );
   }
@@ -484,7 +484,7 @@ export default function VendorOrdersScreen() {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>
-          You don&apos;t have any restaurants yet.
+          You don&apos;t have any vendors yet.
         </Text>
       </View>
     );
@@ -540,7 +540,7 @@ export default function VendorOrdersScreen() {
 
             <View style={styles.filterContainer}>
               <View style={styles.filterHeaderRow}>
-                <Text style={styles.filterLabel}>Filter by Restaurant:</Text>
+                <Text style={styles.filterLabel}>Filter by Vendor:</Text>
                 {!!searchTextDebounced && (
                   <Text style={styles.resultsText}>
                     {filteredOrders.length} result
@@ -712,9 +712,9 @@ export default function VendorOrdersScreen() {
           setSearchText("");
           setSearchTextDebounced("");
         }}
-        placeholder="Search orders or restaurants..."
+        placeholder="Search orders or vendors..."
         emptyStateTitle="Search orders"
-        emptyStateSubtitle="Search by order ID, restaurant name, or status"
+        emptyStateSubtitle="Search by order ID, vendor name, or status"
         loadSuggestions={async (query) => {
           // Return restaurant names and order IDs as suggestions
           const suggestions: string[] = [];

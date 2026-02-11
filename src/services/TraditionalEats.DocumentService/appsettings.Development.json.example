@@ -1,0 +1,20 @@
+{
+  "ConnectionStrings": {
+    "DocumentDb": "server=localhost;port=3306;database=traditional_eats_document;user=root;password=YOUR_PASSWORD_HERE"
+  },
+  "DigitalOceanSpaces": {
+    "BucketName": "kram-content",
+    "AccessKey": "",
+    "SecretKey": "",
+    "Region": "sfo3",
+    "ServiceUrl": "https://sfo3.digitaloceanspaces.com",
+    "Folder": "content/"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://localhost:5014"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# TraditionalEats – Production Architecture (DigitalOcean)
+# Kram – Production Architecture (DigitalOcean)
 
 ## Pattern: HTTPS at the edge, HTTP inside private network
 

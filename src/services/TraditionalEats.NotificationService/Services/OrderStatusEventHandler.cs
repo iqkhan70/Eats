@@ -173,11 +173,11 @@ public class OrderStatusEventHandler : BackgroundService
     <p>Hello {customer.FirstName},</p>
     <p>Your order #{evt.OrderId.ToString().Substring(0, 8)} is now ready for pickup!</p>
     <p>Please come to the restaurant to collect your order.</p>
-    <p>Thank you for choosing TraditionalEats!</p>
+    <p>Thank you for choosing Kram!</p>
 </body>
 </html>";
 
-            var smsBody = $"Your order #{evt.OrderId.ToString().Substring(0, 8)} is ready for pickup! Please come to the restaurant to collect it. - TraditionalEats";
+            var smsBody = $"Your order #{evt.OrderId.ToString().Substring(0, 8)} is ready for pickup! Please come to the restaurant to collect it. - Kram";
 
             // Send email notification
             if (!string.IsNullOrEmpty(customer.Email))

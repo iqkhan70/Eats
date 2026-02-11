@@ -189,17 +189,17 @@ export default function RestaurantsScreen() {
 
       setRestaurants(mappedRestaurants);
     } catch (error: any) {
-      console.error("Error loading restaurants:", error);
+      console.error("Error loading vendors:", error);
       setRestaurants([]);
       const status = error?.response?.status;
       const bodyMessage =
         error?.response?.data?.message ?? error?.response?.data?.error;
       const friendlyMessage =
         status === 404 || bodyMessage?.toLowerCase().includes("not found")
-          ? "No restaurants found for this area. Try another location or browse all restaurants."
+          ? "No vendors found for this area. Try another location or browse all vendors."
           : (bodyMessage ?? error?.message ?? "Request failed");
       setLoadError(
-        `Could not load restaurants. ${friendlyMessage}${status && status !== 404 ? ` Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/app.config.ts.` : ""}`,
+        `Could not load vendors. ${friendlyMessage}${status && status !== 404 ? ` Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/app.config.ts.` : ""}`,
       );
     } finally {
       setLoading(false);
@@ -301,7 +301,7 @@ export default function RestaurantsScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text>Loading restaurants...</Text>
+        <Text>Loading vendors...</Text>
       </View>
     );
   }
@@ -350,7 +350,7 @@ export default function RestaurantsScreen() {
         ListEmptyComponent={
           <View style={styles.centerContainer}>
             <Text style={styles.emptyText}>
-              {debouncedSearch ? "No matches found" : "No restaurants found"}
+              {debouncedSearch ? "No matches found" : "No vendors found"}
             </Text>
           </View>
         }
@@ -361,9 +361,9 @@ export default function RestaurantsScreen() {
           setSearchText("");
           setDebouncedSearch("");
         }}
-        placeholder="Search restaurants..."
-        emptyStateTitle="Search restaurants"
-        emptyStateSubtitle="Find restaurants by name, cuisine, or location"
+        placeholder="Search vendors..."
+        emptyStateTitle="Search vendors"
+        emptyStateSubtitle="Find vendors by name, cuisine, or location"
         loadSuggestions={loadSuggestions}
         onSuggestionSelect={handleSearch}
       />

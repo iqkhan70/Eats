@@ -39,12 +39,12 @@
     {
         <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
             <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
-            <RadzenText>Loading restaurants...</RadzenText>
+            <RadzenText>Loading vendors...</RadzenText>
         </RadzenStack>
     }
     else if (restaurants == null || !restaurants.Any())
     {
-        <RadzenAlert AlertStyle="AlertStyle.Info" Title="No Restaurants" Text="@NoRestaurantsText" />
+        <RadzenAlert AlertStyle="AlertStyle.Info" Title="No Vendors" Text="@NoRestaurantsText" />
     }
     else
     {
@@ -58,9 +58,9 @@
                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center"
                         Style="flex-wrap: wrap;">
 
-                        <RadzenFormField Text="Restaurant">
+                        <RadzenFormField Text="Vendor">
                             <RadzenDropDown Data="@restaurants" @bind-Value="@selectedRestaurantId" TextProperty="Name"
-                                ValueProperty="RestaurantId" Placeholder="All Restaurants" AllowClear="true"
+                                ValueProperty="RestaurantId" Placeholder="All Vendors" AllowClear="true"
                                 Change="@OnFiltersChanged" Style="width: 360px;" />
                         </RadzenFormField>
 
@@ -126,7 +126,7 @@
                             </Template>
                         </RadzenDataGridColumn>
 
-                        <RadzenDataGridColumn TItem="OrderRowDto" Property="RestaurantName" Title="Restaurant" Width="260px"
+                        <RadzenDataGridColumn TItem="OrderRowDto" Property="RestaurantName" Title="Vendor" Width="260px"
                             Filterable="true" />
 
                         <RadzenDataGridColumn TItem="OrderRowDto" Property="Status" Title="Status" Width="170px"
@@ -273,10 +273,10 @@
     private readonly List<string> statusOptions = new() { "Pending", "Preparing", "Ready", "Completed", "Cancelled" };
 
     private string HeaderText => isAdmin ? "All Orders" : "Vendor Orders";
-    private string PageTitleText => isAdmin ? "Admin Orders - TraditionalEats" : "Vendor Orders - TraditionalEats";
+    private string PageTitleText => isAdmin ? "Admin Orders - Kram" : "Vendor Orders - Kram";
     private string NoRestaurantsText => isAdmin
-    ? "No restaurants exist yet."
-    : "You don't have any restaurants yet. Create a restaurant to start receiving orders.";
+    ? "No vendors exist yet."
+    : "You don't have any vendors yet. Create a vendor to start receiving orders.";
 
     private bool IsClearDisabled =>
     selectedRestaurantId == null && string.IsNullOrWhiteSpace(searchText) && string.IsNullOrWhiteSpace(selectedStatus);
@@ -335,7 +335,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading restaurants");
-            loadError = "Failed to load restaurants.";
+            loadError = "Failed to load vendors.";
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Error,

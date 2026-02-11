@@ -1,10 +1,10 @@
-# TraditionalEats – Compose for both staging and production
-# Single registry repo (DOCR 1-repo limit): REGISTRY/REPO_NAME:service-tag (e.g. registry.digitalocean.com/cha-registry/traditionaleats:identity-service)
-# Set REGISTRY=registry.digitalocean.com/cha-registry, REPO_NAME=traditionaleats in .env
+# Kram – Compose for both staging and production
+# Single registry repo (DOCR 1-repo limit): REGISTRY/REPO_NAME:service-tag (e.g. registry.digitalocean.com/cha-registry/kram:identity-service)
+# Set REGISTRY=registry.digitalocean.com/cha-registry, REPO_NAME=kram in .env
 # Run: docker compose -f docker-compose.prod.yml --env-file .env up -d
-# name: ensures project/volume names are "traditionaleats_*" (used by setup-https.sh)
+# name: ensures project/volume names are "kram_*" (used by setup-https.sh)
 
-name: traditionaleats
+name: kram
 
 services:
   # ---------- Data & messaging (internal only) ----------
@@ -77,7 +77,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.IdentityService/TraditionalEats.IdentityService.csproj
         PROJECT_NAME: TraditionalEats.IdentityService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:identity-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:identity-service
     platform: linux/amd64
     deploy:
       resources:
@@ -93,8 +93,8 @@ services:
       RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
-      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
       AppSettings__BaseUrl: ${APP_BASE_URL}
       Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:-YourSuperSecretEncryptionKeyThatIsAtLeast32CharactersLong!}
       Services__CustomerService: "http://customer-service:5001"
@@ -114,7 +114,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.CustomerService/TraditionalEats.CustomerService.csproj
         PROJECT_NAME: TraditionalEats.CustomerService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:customer-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:customer-service
     platform: linux/amd64
     deploy:
       resources:
@@ -144,7 +144,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.OrderService/TraditionalEats.OrderService.csproj
         PROJECT_NAME: TraditionalEats.OrderService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:order-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:order-service
     platform: linux/amd64
     deploy:
       resources:
@@ -174,7 +174,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.CatalogService/TraditionalEats.CatalogService.csproj
         PROJECT_NAME: TraditionalEats.CatalogService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:catalog-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:catalog-service
     platform: linux/amd64
     deploy:
       resources:
@@ -200,7 +200,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.NotificationService/TraditionalEats.NotificationService.csproj
         PROJECT_NAME: TraditionalEats.NotificationService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:notification-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:notification-service
     platform: linux/amd64
     deploy:
       resources:
@@ -220,8 +220,8 @@ services:
       Email__Provider: ${EMAIL_PROVIDER:-Mailgun}
       Email__MailgunApiKey: ${EMAIL_MAILGUN_API_KEY:-}
       Email__MailgunDomain: ${EMAIL_MAILGUN_DOMAIN:-}
-      Email__FromEmail: ${EMAIL_FROM_EMAIL:-noreply@traditionaleats.com}
-      Email__FromName: ${EMAIL_FROM_NAME:-TraditionalEats}
+      Email__FromEmail: ${EMAIL_FROM_EMAIL:-noreply@kram.com}
+      Email__FromName: ${EMAIL_FROM_NAME:-Kram}
       Email__SmtpHost: ${EMAIL_SMTP_HOST:-}
       Email__SmtpPort: ${EMAIL_SMTP_PORT:-587}
       Email__SmtpUsername: ${EMAIL_SMTP_USERNAME:-}
@@ -246,7 +246,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.RestaurantService/TraditionalEats.RestaurantService.csproj
         PROJECT_NAME: TraditionalEats.RestaurantService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:restaurant-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:restaurant-service
     platform: linux/amd64
     deploy:
       resources:
@@ -272,7 +272,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.PaymentService/TraditionalEats.PaymentService.csproj
         PROJECT_NAME: TraditionalEats.PaymentService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:payment-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:payment-service
     platform: linux/amd64
     deploy:
       resources:
@@ -305,7 +305,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.ChatService/TraditionalEats.ChatService.csproj
         PROJECT_NAME: TraditionalEats.ChatService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:chat-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:chat-service
     platform: linux/amd64
     deploy:
       resources:
@@ -318,8 +318,8 @@ services:
       ConnectionStrings__ChatDb: "server=mysql;port=3306;database=traditional_eats_chat;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
-      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
       HttpClients__OrderService__BaseAddress: "http://order-service:5002"
       HttpClients__RestaurantService__BaseAddress: "http://restaurant-service:5007"
     depends_on:
@@ -352,7 +352,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.AIService/TraditionalEats.AIService.csproj
         PROJECT_NAME: TraditionalEats.AIService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:ai-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:ai-service
     platform: linux/amd64
     deploy:
       resources:
@@ -368,8 +368,8 @@ services:
       RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
-      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
       Ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OpenAI__ApiKey: ${OPENAI_API_KEY:-}
     depends_on:
@@ -388,7 +388,7 @@ services:
       args:
         PROJECT_PATH: src/services/TraditionalEats.ReviewService/TraditionalEats.ReviewService.csproj
         PROJECT_NAME: TraditionalEats.ReviewService
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:review-service
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:review-service
     platform: linux/amd64
     deploy:
       resources:
@@ -401,11 +401,50 @@ services:
       ConnectionStrings__ReviewDb: "server=mysql;port=3306;database=traditional_eats_review;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
       Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
-      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
+    networks:
+      - internal
+    restart: unless-stopped
+
+  document-service:
+    build:
+      context: ../..
+      dockerfile: deploy/digitalocean/Dockerfile.api
+      args:
+        PROJECT_PATH: src/services/TraditionalEats.DocumentService/TraditionalEats.DocumentService.csproj
+        PROJECT_NAME: TraditionalEats.DocumentService
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:document-service
+    platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      PROJECT_NAME: TraditionalEats.DocumentService
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5014
+      ConnectionStrings__DocumentDb: "server=mysql;port=3306;database=traditional_eats_document;user=root;password=${MYSQL_ROOT_PASSWORD};"
+      Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
+      DigitalOceanSpaces__BucketName: ${DIGITALOCEAN_SPACES_BUCKET_NAME:-kram-content}
+      DigitalOceanSpaces__AccessKey: ${DIGITALOCEAN_SPACES_ACCESS_KEY:-${AWS_ACCESS_KEY_ID:-}}
+      DigitalOceanSpaces__SecretKey: ${DIGITALOCEAN_SPACES_SECRET_KEY:-${AWS_SECRET_ACCESS_KEY:-}}
+      DigitalOceanSpaces__Region: ${DIGITALOCEAN_SPACES_REGION:-sfo3}
+      DigitalOceanSpaces__ServiceUrl: ${DIGITALOCEAN_SPACES_SERVICE_URL:-https://sfo3.digitaloceanspaces.com}
+      DigitalOceanSpaces__Folder: ${DIGITALOCEAN_SPACES_FOLDER:-content/}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
     networks:
       - internal
     restart: unless-stopped
@@ -418,7 +457,7 @@ services:
       args:
         PROJECT_PATH: src/bff/TraditionalEats.Web.Bff/TraditionalEats.Web.Bff.csproj
         PROJECT_NAME: TraditionalEats.Web.Bff
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:web-bff
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:web-bff
     platform: linux/amd64
     deploy:
       resources:
@@ -438,10 +477,11 @@ services:
       Services__ChatService: "http://chat-service:5012"
       Services__AIService: "http://ai-service:5011"
       Services__ReviewService: "http://review-service:5013"
+      Services__DocumentService: "http://document-service:5014"
       Redis__ConnectionString: "redis:6379"
       Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
-      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
     depends_on:
       redis: { condition: service_healthy }
       identity-service: { condition: service_started }
@@ -454,6 +494,7 @@ services:
       chat-service: { condition: service_started }
       ai-service: { condition: service_started }
       review-service: { condition: service_started }
+      document-service: { condition: service_started }
     networks:
       - internal
     restart: unless-stopped
@@ -465,7 +506,7 @@ services:
       args:
         PROJECT_PATH: src/bff/TraditionalEats.Mobile.Bff/TraditionalEats.Mobile.Bff.csproj
         PROJECT_NAME: TraditionalEats.Mobile.Bff
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:mobile-bff
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:mobile-bff
     platform: linux/amd64
     environment:
       PROJECT_NAME: TraditionalEats.Mobile.Bff
@@ -481,10 +522,11 @@ services:
       Services__ChatService: "http://chat-service:5012"
       Services__AIService: "http://ai-service:5011"
       Services__ReviewService: "http://review-service:5013"
+      Services__DocumentService: "http://document-service:5014"
       Redis__ConnectionString: "redis:6379"
       Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER:-TraditionalEats}
-      Jwt__Audience: ${JWT_AUDIENCE:-TraditionalEats}
+      Jwt__Issuer: ${JWT_ISSUER:-Kram}
+      Jwt__Audience: ${JWT_AUDIENCE:-Kram}
     depends_on:
       redis: { condition: service_healthy }
       identity-service: { condition: service_started }
@@ -493,6 +535,7 @@ services:
       restaurant-service: { condition: service_started }
       ai-service: { condition: service_started }
       review-service: { condition: service_started }
+      document-service: { condition: service_started }
     networks:
       - internal
     restart: unless-stopped
@@ -504,7 +547,7 @@ services:
       dockerfile: deploy/digitalocean/Dockerfile.edge
       args:
         API_BASE_URL: ${APP_BASE_URL}/api/
-    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-traditionaleats}:edge
+    image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:edge
     platform: linux/amd64
     deploy:
       resources:

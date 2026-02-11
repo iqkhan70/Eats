@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-    <title>TraditionalEats - Traditional Food Delivery</title>
+    <title>Kram - Traditional Food Delivery</title>
     <base href="/" />
     <link href="css/app.css" rel="stylesheet" />
     <link href="TraditionalEats.WebApp.styles.css" rel="stylesheet" />
@@ -18,7 +18,7 @@
         <div style="display: flex; align-items: center; justify-content: center; height: 100vh;">
             <div style="text-align: center;">
                 <div class="spinner"></div>
-                <p>Loading TraditionalEats...</p>
+                <p>Loading Kram...</p>
             </div>
         </div>
     </div>
@@ -39,6 +39,7 @@
                 });
             }
         };
+        window.blazorConfirm = function (msg) { return confirm(msg); };
         window.attachChatEnterToSend = function (inputWrapperId, dotNetRef) {
             function tryAttach() {
                 var wrapper = document.getElementById(inputWrapperId);

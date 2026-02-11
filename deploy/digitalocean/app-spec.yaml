@@ -1,9 +1,9 @@
-# TraditionalEats – DigitalOcean App Platform spec
+# Kram – DigitalOcean App Platform spec
 # HTTPS at the edge (App Platform ingress); services use HTTP internally.
 # Before using: run ./deploy.sh build to push images to DOCR, then set REGISTRY below.
 # Replace YOUR_REGISTRY (e.g. registry.digitalocean.com/your-registry-name) and repo/branch.
 
-name: traditionaleats
+name: kram
 region: nyc
 
 # Optional: managed databases (create in DO control panel and set cluster_name, or use env vars for external DB)
@@ -51,7 +51,7 @@ services:
     instance_size_slug: basic-xxs
     envs:
       - key: APP_BASE_URL
-        value: ""  # Set in DO dashboard or here, e.g. https://traditionaleats-xxx.ondigitalocean.app
+        value: ""  # Set in DO dashboard or here, e.g. https://kram-xxx.ondigitalocean.app
         type: GENERAL
         scope: RUN_AND_BUILD_TIME
 
@@ -111,11 +111,11 @@ services:
         type: SECRET
         scope: RUN_TIME
       - key: Jwt__Issuer
-        value: TraditionalEats
+        value: Kram
         type: GENERAL
         scope: RUN_TIME
       - key: Jwt__Audience
-        value: TraditionalEats
+        value: Kram
         type: GENERAL
         scope: RUN_TIME
 
@@ -159,11 +159,11 @@ services:
         type: SECRET
         scope: RUN_TIME
       - key: Jwt__Issuer
-        value: TraditionalEats
+        value: Kram
         type: GENERAL
         scope: RUN_TIME
       - key: Jwt__Audience
-        value: TraditionalEats
+        value: Kram
         type: GENERAL
         scope: RUN_TIME
 
