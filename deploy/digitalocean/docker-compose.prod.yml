@@ -1,5 +1,6 @@
 # Kram – Compose for both staging and production
 # Single registry repo (DOCR 1-repo limit): REGISTRY/REPO_NAME:service-tag (e.g. registry.digitalocean.com/cha-registry/kram:identity-service)
+# REPO_NAME must be kram – same as deploy.sh and .github/workflows/deploy-staging.yml (IMAGE_REPOSITORY: kram).
 # Set REGISTRY=registry.digitalocean.com/cha-registry, REPO_NAME=kram in .env
 # Run: docker compose -f docker-compose.prod.yml --env-file .env up -d
 # name: ensures project/volume names are "kram_*" (used by setup-https.sh)

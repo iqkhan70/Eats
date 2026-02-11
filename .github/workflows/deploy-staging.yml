@@ -11,10 +11,10 @@ on:
   workflow_dispatch:
 
 env:
-  # Docker / Registry config
+  # Docker / Registry config (must match deploy/digitalocean: REGISTRY/REPO_NAME in .env = REGISTRY/REGISTRY_NAMESPACE/IMAGE_REPOSITORY)
   REGISTRY: registry.digitalocean.com
   REGISTRY_NAMESPACE: cha-registry
-  IMAGE_REPOSITORY: kram
+  IMAGE_REPOSITORY: kram   # Same as REPO_NAME in deploy.sh and server .env
   IMAGE_TAG: staging
 
   # SSH / server config
