@@ -8,13 +8,14 @@
 @inject CartService CartService
 
 <RadzenLayout>
+    <RadzenDialog />
     <RadzenHeader>
         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
             AlignItems="AlignItems.Center" Gap="0px" Style="width: 100%; padding: 0.75rem 1rem;"
             Class="header-container">
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center"
                 Class="logo-container">
-                <RadzenIcon Icon="restaurant_menu" Style="font-size: 24px;" />
+                <img src="images/logo.png" alt="Kram Logo" style="height: 40px; width: auto;" />
                 <RadzenText TextStyle="TextStyle.H4" Style="font-weight: bold;">Kram</RadzenText>
             </RadzenStack>
             <div class="nav-container">

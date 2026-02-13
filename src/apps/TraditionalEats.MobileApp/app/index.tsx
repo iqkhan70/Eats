@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,7 +9,7 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Ionicons name="restaurant" size={80} color="#6200ee" />
+        <Image source={require('../assets/logo.png')} style={styles.logo} />
         <Text style={styles.title}>Kram</Text>
         <Text style={styles.subtitle}>
           Discover authentic traditional food from local vendors
@@ -46,6 +46,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
+    marginBottom: 20,
   },
   title: {
     fontSize: 32,

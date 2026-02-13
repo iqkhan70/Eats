@@ -1,4 +1,4 @@
-name: Deploy TraditionalEats to Staging
+name: Deploy Kram to Staging
 
 on:
   push:
@@ -11,15 +11,15 @@ on:
   workflow_dispatch:
 
 env:
-  # Docker / Registry config
+  # Docker / Registry config (must match deploy/digitalocean: REGISTRY/REPO_NAME in .env = REGISTRY/REGISTRY_NAMESPACE/IMAGE_REPOSITORY)
   REGISTRY: registry.digitalocean.com
   REGISTRY_NAMESPACE: cha-registry
-  IMAGE_REPOSITORY: traditionaleats
+  IMAGE_REPOSITORY: kram   # Same as REPO_NAME in deploy.sh and server .env
   IMAGE_TAG: staging
 
   # SSH / server config
   SSH_USER: root
-  APP_DIR: /opt/traditionaleats
+  APP_DIR: /opt/kram
   ENVIRONMENT: Staging
 
 jobs:
@@ -299,7 +299,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST_STG }} << 'EOF'
             set -e
-            cd /opt/traditionaleats
+            cd /opt/kram
 
             if [ ! -f .env ]; then
               echo "❌ ERROR: .env file not found!"

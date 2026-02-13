@@ -74,7 +74,8 @@ cmd_build() {
   if [ -f "$ENV_FILE" ]; then
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
   else
-    REGISTRY="${REGISTRY:-kram}" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" build
+    # Must match .github/workflows/deploy-staging.yml (REGISTRY + IMAGE_REPOSITORY = kram)
+    REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}" REPO_NAME="${REPO_NAME:-kram}" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" build
   fi
   if [ -n "$REGISTRY" ] && [ -n "$DIGITALOCEAN_ACCESS_TOKEN" ]; then
     echo "Logging in to $REGISTRY..."
@@ -88,7 +89,7 @@ cmd_build() {
       if [ -f "$ENV_FILE" ]; then
         PUSH_OUTPUT=$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" push 2>&1 || echo "PUSH_FAILED")
       else
-        PUSH_OUTPUT=$(REGISTRY="$REGISTRY" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" push 2>&1 || echo "PUSH_FAILED")
+        PUSH_OUTPUT=$(REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}" REPO_NAME="${REPO_NAME:-kram}" IMAGE_TAG="${IMAGE_TAG:-latest}" docker compose -f "$COMPOSE_FILE" push 2>&1 || echo "PUSH_FAILED")
       fi
       if echo "$PUSH_OUTPUT" | grep -qE "(520|503|502|504|5[0-9]{2})"; then
         RETRY=$((RETRY + 1))
@@ -204,6 +205,7 @@ ENDSWAP
     [ "$ENV_ARG" = "staging" ] && APP_BASE_URL="${STAGING_BASE_URL:-https://www.caseflowstage.store}" || APP_BASE_URL="${PRODUCTION_BASE_URL:-http://$DROPLET_IP}"
   fi
   APP_BASE_URL="${APP_BASE_URL%/}"
+  # REPO_NAME must be kram to match .github/workflows/deploy-staging.yml IMAGE_REPOSITORY (same DOCR repo).
   REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}"
   REPO_NAME="${REPO_NAME:-kram}"
   [ "$ENV_ARG" = "staging" ] && ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Staging}" || ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
@@ -520,7 +522,7 @@ ENDSWAP
   STRIPE_CONNECT_RETURN_URL="${STRIPE_CONNECT_RETURN_URL:-$APP_BASE_URL}"
   OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://ollama:11434}"
   OPENAI_API_KEY="${OPENAI_API_KEY:-}"
-  # Single repo (DOCR 1-repo limit): registry.digitalocean.com/cha-registry/kram:service-name
+  # Single repo (DOCR 1-repo limit). REPO_NAME must be kram to match .github/workflows/deploy-staging.yml IMAGE_REPOSITORY.
   REGISTRY="${REGISTRY:-registry.digitalocean.com/cha-registry}"
   REPO_NAME="${REPO_NAME:-kram}"
   # DocumentService: DigitalOcean Spaces (S3-compatible); set in secrets.env for vendor document uploads

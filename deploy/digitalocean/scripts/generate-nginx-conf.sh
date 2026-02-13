@@ -65,9 +65,13 @@ else
             root /var/www/certbot;
             try_files $uri =404;
         }
+        location /_framework/ {
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
+            try_files \$uri =404;
+        }
         location / {
             try_files $uri $uri/ /index.html;
-            add_header Cache-Control "no-cache";
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
         }
         location /api/WebBff/ {
             proxy_pass http://web_bff/api/WebBff/;
@@ -105,9 +109,13 @@ if [ -n "$DOMAIN" ] && [ "${CERTS_READY:-0}" = "1" ]; then
         ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
         root /usr/share/nginx/html;
         index index.html;
+        location /_framework/ {
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
+            try_files \$uri =404;
+        }
         location / {
             try_files \$uri \$uri/ /index.html;
-            add_header Cache-Control "no-cache";
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
         }
         location /api/WebBff/ {
             proxy_pass http://web_bff/api/WebBff/;
