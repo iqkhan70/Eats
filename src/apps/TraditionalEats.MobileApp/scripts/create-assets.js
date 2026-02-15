@@ -18,8 +18,17 @@ if (!fs.existsSync(assetsDir)) {
   fs.mkdirSync(assetsDir, { recursive: true });
 }
 
-// Create placeholder files
+// Try to copy Kram logo from WebApp (single source of truth for icon/splash)
+const webAppLogo = path.join(__dirname, '..', '..', 'TraditionalEats.WebApp', 'wwwroot', 'images', 'logo.png');
+if (fs.existsSync(webAppLogo)) {
+  const dest = path.join(assetsDir, 'logo.png');
+  fs.copyFileSync(webAppLogo, dest);
+  console.log('✅ Copied logo.png from WebApp (Kram logo → app icon)');
+}
+
+// Create placeholder files (only if missing; logo.png used for icon, splash, adaptive-icon, favicon)
 const assets = [
+  { name: 'logo.png', size: '1024x1024' },
   { name: 'icon.png', size: '1024x1024' },
   { name: 'splash.png', size: '2048x2048' },
   { name: 'adaptive-icon.png', size: '1024x1024' },
@@ -30,17 +39,14 @@ console.log('Creating placeholder assets...');
 
 assets.forEach(asset => {
   const filePath = path.join(assetsDir, asset.name);
-  
-  // For now, create a minimal PNG
-  // Note: These will be very small (1x1) but valid PNGs
-  // Expo will handle resizing, or you can replace them with proper images later
+  if (fs.existsSync(filePath)) {
+    console.log(`⏭️  ${asset.name} already exists, skipping`);
+    return;
+  }
   fs.writeFileSync(filePath, minimalPNG);
   console.log(`✅ Created ${asset.name} (${asset.size} - placeholder)`);
 });
 
-console.log('\n📝 Note: These are minimal placeholder PNGs.');
-console.log('   Replace them with proper images before production:');
-console.log('   - icon.png: 1024x1024px');
-console.log('   - splash.png: 2048x2048px (or larger)');
-console.log('   - adaptive-icon.png: 1024x1024px');
-console.log('   - favicon.png: 48x48px (or 16x16, 32x32)');
+console.log('\n📝 App icon/splash use assets/logo.png (Kram logo).');
+console.log('   Use a 1024x1024px logo for best results. If you have the logo in');
+console.log('   WebApp wwwroot/images/logo.png, run this script to copy it.');
