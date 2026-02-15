@@ -624,8 +624,15 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
   # Step 3: Copy compose, nginx (generated), scripts
   echo -e "${GREEN}Step 3: Copying files to server${NC}"
   $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram/nginx /opt/kram/deploy/digitalocean/scripts"
+  # Production with HTTPS: ensure self-signed cert exists so 443 works before Let's Encrypt (same idea as staging)
+  if [ "$ENV_ARG" = "production" ] && [ "$HTTPS_ONLY" = "true" ] && [ -n "$DOMAIN" ]; then
+    $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram/nginx/ssl && if ! [ -f /opt/kram/nginx/ssl/cert.pem ]; then openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /opt/kram/nginx/ssl/key.pem -out /opt/kram/nginx/ssl/cert.pem -subj \"/CN=$DOMAIN\" 2>/dev/null && echo 'Self-signed cert created'; fi"
+  fi
   $SCP_CMD "$COMPOSE_FILE" "$DROPLET_USER@$DROPLET_IP:/opt/kram/docker-compose.prod.yml"
-  DOMAIN="$DOMAIN" HTTPS_ONLY="$HTTPS_ONLY" bash "$SCRIPT_DIR/scripts/generate-nginx-conf.sh" > "$SCRIPT_DIR/nginx/nginx.generated.conf" 2>/dev/null || true
+  # Production with HTTPS: include 443 block using self-signed cert so the app is served (browser will show cert warning until you run setup-https)
+  USE_SELF_SIGNED="0"
+  [ "$ENV_ARG" = "production" ] && [ "$HTTPS_ONLY" = "true" ] && [ -n "$DOMAIN" ] && USE_SELF_SIGNED="1"
+  DOMAIN="$DOMAIN" HTTPS_ONLY="$HTTPS_ONLY" USE_SELF_SIGNED_CERT="$USE_SELF_SIGNED" bash "$SCRIPT_DIR/scripts/generate-nginx-conf.sh" > "$SCRIPT_DIR/nginx/nginx.generated.conf" 2>/dev/null || true
   if [ -f "$SCRIPT_DIR/nginx/nginx.generated.conf" ] && [ -s "$SCRIPT_DIR/nginx/nginx.generated.conf" ]; then
     $SCP_CMD "$SCRIPT_DIR/nginx/nginx.generated.conf" "$DROPLET_USER@$DROPLET_IP:/opt/kram/nginx/nginx.conf"
   else

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Generate nginx.conf from DOMAIN, HTTPS_ONLY, and CERTS_READY (env vars).
-# When DOMAIN is set but CERTS_READY is not 1, only HTTP (port 80) is generated so Nginx can start without certs.
-# After running setup-https.sh, regenerate with CERTS_READY=1 to include the 443 SSL block.
+# Generate nginx.conf from DOMAIN, HTTPS_ONLY, CERTS_READY, USE_SELF_SIGNED_CERT (env vars).
+# When DOMAIN is set but no certs: use USE_SELF_SIGNED_CERT=1 to enable 443 with self-signed cert (e.g. production before Let's Encrypt).
+# After running setup-https.sh, regenerate with CERTS_READY=1 to use Let's Encrypt in the 443 block.
 # Staging: HTTPS_ONLY=false → HTTP + HTTPS. Production: HTTPS_ONLY=true → redirect HTTP to HTTPS only.
 
 DOMAIN="${DOMAIN:-}"
 HTTPS_ONLY="${HTTPS_ONLY:-false}"
 CERTS_READY="${CERTS_READY:-0}"
+USE_SELF_SIGNED_CERT="${USE_SELF_SIGNED_CERT:-0}"
 
 # Only use DOMAIN for SSL when it looks like a hostname (has a dot); "http"/"https" are invalid
 if [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [ -z "$DOMAIN" ] || [[ "$DOMAIN" != *.* ]]; then
@@ -98,15 +99,22 @@ else
 NGINX_80_SERVE
 fi
 
-# Server 443: only when DOMAIN is set AND certs exist (CERTS_READY=1).
-# Deploy generates HTTP-only so Nginx can start; run setup-https.sh to get certs then regenerate with CERTS_READY=1.
-if [ -n "$DOMAIN" ] && [ "${CERTS_READY:-0}" = "1" ]; then
+# Server 443: when DOMAIN is set AND (Let's Encrypt certs ready OR self-signed cert enabled).
+# USE_SELF_SIGNED_CERT=1: use /etc/nginx/ssl (same as staging); deploy creates these on production so HTTPS works before Let's Encrypt.
+if [ -n "$DOMAIN" ] && { [ "${CERTS_READY:-0}" = "1" ] || [ "$USE_SELF_SIGNED_CERT" = "1" ]; }; then
+  if [ "${CERTS_READY:-0}" = "1" ]; then
+    SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+  else
+    SSL_CERT="/etc/nginx/ssl/cert.pem"
+    SSL_KEY="/etc/nginx/ssl/key.pem"
+  fi
   cat << NGINX_443
     server {
         listen 443 ssl;
         server_name $DOMAIN;
-        ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+        ssl_certificate     $SSL_CERT;
+        ssl_certificate_key $SSL_KEY;
         root /usr/share/nginx/html;
         index index.html;
         location /_framework/ {

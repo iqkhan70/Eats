@@ -168,6 +168,25 @@ jobs:
             deploy/digitalocean/ \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.APP_DIR }}/deploy/digitalocean/
 
+      - name: Ensure nginx config and self-signed cert (production HTTPS)
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/kram
+            mkdir -p nginx/ssl
+            DOMAIN=$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- || true)
+            if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "http" ] && [ "$DOMAIN" != "https" ] && [[ "$DOMAIN" == *.* ]]; then
+              if [ ! -f nginx/ssl/cert.pem ]; then
+                echo "🔐 Creating self-signed cert for $DOMAIN (browser will show warning until you run setup-https)"
+                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                  -keyout nginx/ssl/key.pem -out nginx/ssl/cert.pem -subj "/CN=$DOMAIN" 2>/dev/null || true
+              fi
+              source .env 2>/dev/null
+              export USE_SELF_SIGNED_CERT=1
+              bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf 2>/dev/null || true
+            fi
+          EOF
+
       - name: Update docker-compose.prod.yml with production image tags
         run: |
           TAG="${{ env.IMAGE_TAG }}"

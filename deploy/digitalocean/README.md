@@ -97,7 +97,9 @@ If you ever want to build **on your Mac** and push (e.g. for CI): copy `secrets.
 - **Staging** (`./deploy.sh staging`): Nginx serves **both HTTP (80) and HTTPS (443)**. Use HTTPS when you have a domain and certs; HTTP remains available (e.g. `http://165.227.182.46`).
 - **Production** (`./deploy.sh production`): **HTTPS only**. HTTP (80) redirects to HTTPS; the front end is served only over HTTPS.
 
-To enable HTTPS you need a **domain** (Let's Encrypt does not issue certs for raw IPs) and **certificates**:
+**Production and self-signed cert:** So that the app works as soon as you deploy (and to avoid 404s when no Let's Encrypt cert exists yet), production deploy creates a **self-signed certificate** in `nginx/ssl/` and configures Nginx to serve HTTPS with it. The browser will show a security warning (e.g. "Your connection is not private"); you can proceed to the site. To get a trusted cert and remove the warning, run **`./deploy.sh setup-https production www.kram.tech`** (or your domain), then regenerate nginx with `CERTS_READY=1` as in the setup-https instructions.
+
+To enable **trusted** HTTPS (Let's Encrypt) you need a **domain** (Let's Encrypt does not issue certs for raw IPs) and **certificates**:
 
 1. **Point a domain at your Droplet** (e.g. staging: `staging.yourdomain.com` or `www.caseflowstage.store` → staging IP; production: `yourdomain.com` → production IP).
 2. **Get a certificate** on the server (once Nginx and the stack are running with HTTP):
