@@ -174,16 +174,24 @@ jobs:
             set -e
             cd /opt/kram
             mkdir -p nginx/ssl
-            DOMAIN=$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- || true)
-            if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "http" ] && [ "$DOMAIN" != "https" ] && [[ "$DOMAIN" == *.* ]]; then
+            source .env 2>/dev/null || true
+            DOMAIN="${DOMAIN:-}"
+            if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ]; then
+              DOMAIN=$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- | tr -d '"'"' \r' || true)
+            fi
+            if [ -n "$DOMAIN" ] && [[ "$DOMAIN" == *.* ]]; then
               if [ ! -f nginx/ssl/cert.pem ]; then
-                echo "🔐 Creating self-signed cert for $DOMAIN (browser will show warning until you run setup-https)"
+                echo "🔐 Creating self-signed cert for $DOMAIN"
                 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
                   -keyout nginx/ssl/key.pem -out nginx/ssl/cert.pem -subj "/CN=$DOMAIN" 2>/dev/null || true
               fi
-              source .env 2>/dev/null
-              export USE_SELF_SIGNED_CERT=1
-              bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf 2>/dev/null || true
+              export DOMAIN HTTPS_ONLY USE_SELF_SIGNED_CERT=1
+              bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf || true
+            fi
+            if [ ! -s nginx/nginx.conf ]; then
+              echo "⚠️ nginx.conf empty or missing; generating HTTP-only fallback"
+              export DOMAIN= HTTPS_ONLY=true USE_SELF_SIGNED_CERT=0
+              bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf 2>/dev/null || cp deploy/digitalocean/nginx/nginx.conf nginx/nginx.conf
             fi
           EOF
 

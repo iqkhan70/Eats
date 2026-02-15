@@ -31,6 +31,9 @@ RUN mkdir -p /nginx-html && \
     fi && \
     if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] && [ -d /app/publish/_framework ]; then \
       cp -r /app/publish/_framework /nginx-html/; \
+    fi && \
+    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] || [ ! -f /nginx-html/index.html ]; then \
+      echo "ERROR: Blazor publish missing _framework or index.html. Contents of /app/publish:"; ls -laR /app/publish; exit 1; \
     fi
 
 FROM nginx:alpine AS runtime

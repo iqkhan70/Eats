@@ -111,8 +111,8 @@ if [ -n "$DOMAIN" ] && { [ "${CERTS_READY:-0}" = "1" ] || [ "$USE_SELF_SIGNED_CE
   fi
   cat << NGINX_443
     server {
-        listen 443 ssl;
-        server_name $DOMAIN;
+        listen 443 ssl default_server;
+        server_name $DOMAIN _;
         ssl_certificate     $SSL_CERT;
         ssl_certificate_key $SSL_KEY;
         root /usr/share/nginx/html;
