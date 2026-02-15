@@ -31,6 +31,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kram.mobile",
+      "buildNumber": "2",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
