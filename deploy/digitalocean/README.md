@@ -44,8 +44,8 @@ The same **docker-compose.prod.yml** is used for both; the deploy script sets **
 Example for production:
 
 ```bash
-PRODUCTION_BASE_URL=https://www.kram.com
-PRODUCTION_DOMAIN=www.kram.com
+PRODUCTION_BASE_URL=https://www.kram.tech
+PRODUCTION_DOMAIN=www.kram.tech
 ```
 
 ## Prerequisites
@@ -74,7 +74,7 @@ If the Droplet still locks up (SSH stops responding, deploy hangs):
 - **`./deploy.sh staging`** / **`./deploy.sh production`**: Same as above using `DROPLET_IP_STAGING` or `DROPLET_IP_PRODUCTION`.
 - **`./deploy.sh build-on-server`**: Sync repo to Droplet, build **on the server**, push to DOCR (if REGISTRY+token set), then pull and up. Like mental health app; ~15–30 min. No build on your Mac.
 - **`./deploy.sh staging`** / **`./deploy.sh production`**: Deploy only – copy files, DOCR login, pull, up. **~5 min.** Images must already be in the registry (from a previous build-on-server or CI).
-- **`./deploy.sh setup-https [staging|production] [domain]`**: Get Let's Encrypt certificates and enable HTTPS. Example: `./deploy.sh setup-https staging www.caseflowstage.store`. Domain is auto-detected from server `.env` if not provided.
+- **`./deploy.sh setup-https [staging|production] [domain]`**: Get Let's Encrypt certificates and enable HTTPS. Examples: `./deploy.sh setup-https staging www.caseflowstage.store`, `./deploy.sh setup-https production www.kram.tech`. If you pass `<domain>`, it is used; otherwise domain is read from server `.env`.
 - **`./deploy.sh build`**: Build and push **on your Mac** (slow on Apple Silicon). Use only for CI or one-off; prefer build-on-server.
 - **`./deploy.sh app-platform`**: Create/update App Platform app from `app-spec.yaml` (requires doctl and `APP_ID`).
 
@@ -285,6 +285,33 @@ After a **fresh deploy**, the generated nginx is already HTTP-only until you run
 See [HTTPS not working? (step-by-step)](#https-not-working-step-by-step) above: use a domain (not IP), deploy with HTTP first, then run `setup-https.sh <domain>` on the server. Ensure DNS points to the Droplet.
 
 **If your server `.env` has `DOMAIN=https`:** That is wrong and breaks HTTPS (Nginx looks for certs at `/etc/letsencrypt/live/https/`). `DOMAIN` must be the **hostname only**, e.g. `www.caseflowstage.store`. Fix: in `secrets.env` set **`STAGING_DOMAIN=www.caseflowstage.store`** (not `https`), then redeploy so the server `.env` gets the correct DOMAIN. Or on the server: edit `/opt/kram/.env` and change `DOMAIN=https` to `DOMAIN=www.caseflowstage.store`, then run `bash deploy/digitalocean/scripts/setup-https.sh www.caseflowstage.store` (or regenerate nginx and restart edge).
+
+### Wrong .env on production (e.g. Staging values causing edge to restart)
+
+If the production server `.env` has staging values (e.g. `ASPNETCORE_ENVIRONMENT=Staging`, `APP_BASE_URL=https://www.caseflowstage.store`, `DOMAIN=www.caseflowstage.store`), nginx may look for the wrong certs and edge can restart in a loop.
+
+**Fix on the server (no full deploy):**
+
+1. SSH in and edit `/opt/kram/.env`. Set production values, for example:
+   ```bash
+   ASPNETCORE_ENVIRONMENT=Production
+   APP_BASE_URL=https://www.kram.tech
+   DOMAIN=www.kram.tech
+   ```
+2. Regenerate nginx (so it uses the correct DOMAIN/cert paths) and restart edge:
+   ```bash
+   cd /opt/kram
+   source .env 2>/dev/null; export DOMAIN HTTPS_ONLY CERTS_READY=1
+   bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf
+   docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --force-recreate edge
+   ```
+3. If you only changed non-DOMAIN vars and don’t need to regenerate nginx, just restart so containers pick up the new `.env`:
+   ```bash
+   cd /opt/kram
+   docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d
+   ```
+
+Future runs of `./deploy.sh production` will write production values into `.env` (see deploy script).
 
 ### 502 Bad Gateway (after some time)
 

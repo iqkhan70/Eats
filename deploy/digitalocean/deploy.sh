@@ -484,16 +484,16 @@ ENDSWAP
   [ -z "$JWT_SECRET" ] && JWT_SECRET=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-48)
   [ -z "$RABBITMQ_PASSWORD" ] && RABBITMQ_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-24)
   [ -z "$ENCRYPTION_MASTER_KEY" ] && ENCRYPTION_MASTER_KEY=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
-  # APP_BASE_URL = public URL (DROPLET_IP or domain); port 80/443 used by Nginx
-  # APP_BASE_URL: staging defaults to domain (https://www.caseflowstage.store), prod/default to IP; override in secrets.env
-  if [ -z "$APP_BASE_URL" ]; then
-    if [ "$ENV_ARG" = "staging" ]; then
-      APP_BASE_URL="${STAGING_BASE_URL:-https://www.caseflowstage.store}"
-    else
-      APP_BASE_URL="${PRODUCTION_BASE_URL:-http://$DROPLET_IP}"
-    fi
+  # APP_BASE_URL and DOMAIN: for production always use production values (never inherit staging from existing .env)
+  if [ "$ENV_ARG" = "production" ]; then
+    APP_BASE_URL="${PRODUCTION_BASE_URL:-https://www.kram.tech}"
+    APP_BASE_URL="${APP_BASE_URL%/}"
+  elif [ -z "$APP_BASE_URL" ]; then
+    APP_BASE_URL="${STAGING_BASE_URL:-https://www.caseflowstage.store}"
+    APP_BASE_URL="${APP_BASE_URL%/}"
+  else
+    APP_BASE_URL="${APP_BASE_URL%/}"
   fi
-  APP_BASE_URL="${APP_BASE_URL%/}"
   # STRIPE_CONNECT_RETURN_URL = where Stripe redirects after vendor onboarding; default = APP_BASE_URL
   [ -z "$STRIPE_CONNECT_RETURN_URL" ] && STRIPE_CONNECT_RETURN_URL="$APP_BASE_URL"
 
@@ -543,21 +543,16 @@ ENDSWAP
     fi
   fi
 
-  # Staging vs production: set ASPNETCORE_ENVIRONMENT
+  # Staging vs production: always set from environment (never inherit staging on production server)
   if [ "$ENV_ARG" = "staging" ]; then
     ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Staging}"
-  else
-    ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
-  fi
-
-  # HTTPS: staging = HTTP + HTTPS, production = HTTPS only. DOMAIN required for HTTPS (Let's Encrypt).
-  if [ "$ENV_ARG" = "production" ]; then
-    HTTPS_ONLY="true"
-    DOMAIN="${PRODUCTION_DOMAIN:-}"
-    [ -z "$DOMAIN" ] && [[ "$APP_BASE_URL" =~ ^https:// ]] && DOMAIN=$(echo "$APP_BASE_URL" | sed -e 's|https\?://||' -e 's|/.*||' -e 's|:.*||')
-  else
     HTTPS_ONLY="false"
     DOMAIN="${STAGING_DOMAIN:-}"
+    [ -z "$DOMAIN" ] && [[ "$APP_BASE_URL" =~ ^https:// ]] && DOMAIN=$(echo "$APP_BASE_URL" | sed -e 's|https\?://||' -e 's|/.*||' -e 's|:.*||')
+  else
+    ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Production}"
+    HTTPS_ONLY="true"
+    DOMAIN="${PRODUCTION_DOMAIN:-www.kram.tech}"
     [ -z "$DOMAIN" ] && [[ "$APP_BASE_URL" =~ ^https:// ]] && DOMAIN=$(echo "$APP_BASE_URL" | sed -e 's|https\?://||' -e 's|/.*||' -e 's|:.*||')
   fi
   # DOMAIN must be a real hostname (has a dot); "http"/"https" from bad APP_BASE_URL would break nginx
@@ -743,17 +738,18 @@ cmd_setup_https() {
     SSH_CMD="ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=accept-new"
   fi
 
-  # Get DOMAIN from server .env or ask user
-  DOMAIN=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-" || true)
-  
-  if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [[ "$DOMAIN" != *.* ]]; then
-    if [ -z "$2" ]; then
-      echo -e "${RED}DOMAIN not set in server .env or invalid.${NC}"
+  # Prefer explicit domain argument (e.g. production → www.kram.tech); else use server .env
+  if [ -n "$2" ] && [[ "$2" == *.* ]] && [ "$2" != "http" ] && [ "$2" != "https" ]; then
+    DOMAIN="$2"
+  else
+    DOMAIN=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-" || true)
+    if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ] || [[ "$DOMAIN" != *.* ]]; then
+      echo -e "${RED}DOMAIN not set in server .env or invalid. Pass domain as third argument.${NC}"
       echo "Usage: $0 setup-https [staging|production] <domain>"
-      echo "Example: $0 setup-https staging www.caseflowstage.store"
+      echo "  staging:    $0 setup-https staging www.caseflowstage.store"
+      echo "  production: $0 setup-https production www.kram.tech"
       exit 1
     fi
-    DOMAIN="$2"
   fi
 
   echo -e "${GREEN}Setting up HTTPS for $DOMAIN...${NC}"

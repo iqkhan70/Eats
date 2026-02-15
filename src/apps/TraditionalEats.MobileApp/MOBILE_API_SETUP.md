@@ -84,6 +84,50 @@ Make sure your firewall allows connections on port 5102:
 - Phone and computer must be on the **same WiFi network**
 - Some corporate/public networks block device-to-device communication
 
+## TestFlight / External testers: ngrok
+
+For **TestFlight** (or any tester not on your LAN), the phone cannot reach your machine by IP. Use **ngrok** to expose your local backend over a public HTTPS URL.
+
+### Services to expose
+
+| Service        | Port | Purpose              |
+|----------------|------|----------------------|
+| **Mobile BFF** | 5102 | All app API calls    |
+| **ChatService**| 5012 | Order chat (SignalR) |
+
+### Steps
+
+1. **Install ngrok** (e.g. `brew install ngrok` or from [ngrok.com](https://ngrok.com)).
+
+2. **Start your local stack** (e.g. `./start-all.sh` or at least Mobile BFF on 5102 and ChatService on 5012).
+
+3. **Run two ngrok tunnels** (two terminals):
+   ```bash
+   # Terminal 1 – Mobile BFF (required for all API)
+   ngrok http 5102
+   ```
+   Copy the **https** URL (e.g. `https://abc123.ngrok-free.app`).
+
+   ```bash
+   # Terminal 2 – Chat (required for order chat)
+   ngrok http 5012
+   ```
+   Copy the **https** URL (e.g. `https://def456.ngrok-free.app`).
+
+4. **Set env and build for TestFlight** (use the URLs from step 3, no trailing slash):
+   ```bash
+   export EXPO_PUBLIC_ENV=ngrok
+   export EXPO_PUBLIC_NGROK_API_URL=https://abc123.ngrok-free.app
+   export EXPO_PUBLIC_NGROK_CHAT_URL=https://def456.ngrok-free.app
+   npx expo prebuild
+   # then build for iOS and upload to TestFlight
+   ```
+   Or put the same in `.env` before building.
+
+5. **Keep ngrok and your backend running** while testers use the app. If you stop ngrok or restart it, the URL changes and you must rebuild the app with the new URLs (or use ngrok’s reserved domains if you have a paid plan).
+
+**Note:** With only one tunnel (BFF), the app works except **order chat**; set `EXPO_PUBLIC_NGROK_CHAT_URL` for chat.
+
 ## Alternative: Use Environment Variable
 
 You can also set the IP address via environment variable:

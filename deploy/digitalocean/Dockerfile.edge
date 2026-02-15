@@ -22,8 +22,19 @@ RUN if [ -n "$API_BASE_URL" ]; then \
       done; \
     fi
 
+# Collect nginx html: Blazor usually puts _framework under publish/wwwroot; on some targets it can be at publish root
+RUN mkdir -p /nginx-html && \
+    if [ -d /app/publish/wwwroot ] && [ -n "$(ls -A /app/publish/wwwroot 2>/dev/null)" ]; then \
+      cp -r /app/publish/wwwroot/. /nginx-html/; \
+    else \
+      cp -r /app/publish/. /nginx-html/; \
+    fi && \
+    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] && [ -d /app/publish/_framework ]; then \
+      cp -r /app/publish/_framework /nginx-html/; \
+    fi
+
 FROM nginx:alpine AS runtime
-COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
+COPY --from=build /nginx-html /usr/share/nginx/html
 COPY deploy/digitalocean/nginx/nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80 443
 CMD ["nginx", "-g", "daemon off;"]

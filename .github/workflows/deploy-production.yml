@@ -1,0 +1,246 @@
+name: Deploy Kram to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'deploy/digitalocean/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: registry.digitalocean.com
+  REGISTRY_NAMESPACE: cha-registry
+  IMAGE_REPOSITORY: kram
+  IMAGE_TAG: production
+
+  SSH_USER: root
+  APP_DIR: /opt/kram
+  ENVIRONMENT: Production
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate branch and load PRODUCTION server IP
+        env:
+          PRODUCTION_IP_SECRET: ${{ secrets.PRODUCTION_SERVER_IP }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" != "main" ]; then
+            echo "❌ ERROR: Production workflow runs on push to 'main' only (current: ${{ github.ref_name }})"
+            exit 1
+          fi
+          echo "📦 Deploying from branch: ${{ github.ref_name }}"
+
+          SSH_HOST=""
+          echo "🔍 Checking for DROPLET_IP_PRODUCTION file..."
+          if [ -f "deploy/digitalocean/DROPLET_IP_PRODUCTION" ]; then
+            echo "📄 Found DROPLET_IP_PRODUCTION, reading from it..."
+            SSH_HOST=$(grep -v '^#' deploy/digitalocean/DROPLET_IP_PRODUCTION | grep -v '^$' | head -1 | tr -d '[:space:]')
+          elif [ -n "$PRODUCTION_IP_SECRET" ]; then
+            echo "🔐 Using PRODUCTION_SERVER_IP secret..."
+            SSH_HOST="$PRODUCTION_IP_SECRET"
+          else
+            echo "❌ ERROR: Production server IP not found!"
+            echo "  1. Commit deploy/digitalocean/DROPLET_IP_PRODUCTION, OR"
+            echo "  2. Set PRODUCTION_SERVER_IP in GitHub Actions secrets"
+            exit 1
+          fi
+
+          if [ -z "$SSH_HOST" ]; then
+            echo "❌ ERROR: Production IP is empty!"
+            exit 1
+          fi
+
+          echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
+          echo "✅ PRODUCTION Environment"
+          echo "🌐 Production Server IP: $SSH_HOST"
+          echo "📦 Branch: ${{ github.ref_name }}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DigitalOcean Container Registry
+        env:
+          DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
+        run: |
+          if [ -z "$DOCR_TOKEN" ]; then
+            echo "❌ ERROR: DOCR_TOKEN secret is not configured!"
+            exit 1
+          fi
+          echo "$DOCR_TOKEN" | docker login $REGISTRY -u doctl --password-stdin
+          echo "✅ Logged into DigitalOcean Container Registry"
+
+      - name: Build and push API service images
+        run: |
+          REGISTRY_FULL="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+
+          declare -A SERVICES=(
+            ["identity-service"]="src/services/TraditionalEats.IdentityService/TraditionalEats.IdentityService.csproj:TraditionalEats.IdentityService"
+            ["customer-service"]="src/services/TraditionalEats.CustomerService/TraditionalEats.CustomerService.csproj:TraditionalEats.CustomerService"
+            ["order-service"]="src/services/TraditionalEats.OrderService/TraditionalEats.OrderService.csproj:TraditionalEats.OrderService"
+            ["catalog-service"]="src/services/TraditionalEats.CatalogService/TraditionalEats.CatalogService.csproj:TraditionalEats.CatalogService"
+            ["notification-service"]="src/services/TraditionalEats.NotificationService/TraditionalEats.NotificationService.csproj:TraditionalEats.NotificationService"
+            ["restaurant-service"]="src/services/TraditionalEats.RestaurantService/TraditionalEats.RestaurantService.csproj:TraditionalEats.RestaurantService"
+            ["payment-service"]="src/services/TraditionalEats.PaymentService/TraditionalEats.PaymentService.csproj:TraditionalEats.PaymentService"
+            ["chat-service"]="src/services/TraditionalEats.ChatService/TraditionalEats.ChatService.csproj:TraditionalEats.ChatService"
+            ["ai-service"]="src/services/TraditionalEats.AIService/TraditionalEats.AIService.csproj:TraditionalEats.AIService"
+            ["web-bff"]="src/bff/TraditionalEats.Web.Bff/TraditionalEats.Web.Bff.csproj:TraditionalEats.Web.Bff"
+            ["mobile-bff"]="src/bff/TraditionalEats.Mobile.Bff/TraditionalEats.Mobile.Bff.csproj:TraditionalEats.Mobile.Bff"
+          )
+
+          for SERVICE_NAME in "${!SERVICES[@]}"; do
+            IFS=':' read -r PROJECT_PATH PROJECT_NAME <<< "${SERVICES[$SERVICE_NAME]}"
+            IMAGE_VERSIONED="$REGISTRY_FULL:$SERVICE_NAME-$TAG-$SHORT_SHA"
+            IMAGE_PROD="$REGISTRY_FULL:$SERVICE_NAME-$TAG"
+            echo "🔨 Building $SERVICE_NAME..."
+            docker buildx build \
+              --platform linux/amd64 \
+              --file deploy/digitalocean/Dockerfile.api \
+              --build-arg PROJECT_PATH="$PROJECT_PATH" \
+              --build-arg PROJECT_NAME="$PROJECT_NAME" \
+              --tag "$IMAGE_VERSIONED" \
+              --tag "$IMAGE_PROD" \
+              --push \
+              .
+            echo "✅ Pushed $SERVICE_NAME: $IMAGE_PROD"
+          done
+
+      - name: Build and push Edge image
+        env:
+          PRODUCTION_BASE_URL: ${{ secrets.PRODUCTION_BASE_URL }}
+        run: |
+          REGISTRY_FULL="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          EDGE_IMAGE_VERSIONED="$REGISTRY_FULL:edge-$TAG-$SHORT_SHA"
+          EDGE_IMAGE_PROD="$REGISTRY_FULL:edge-$TAG"
+          APP_BASE_URL="${PRODUCTION_BASE_URL:-https://www.kram.tech}"
+          API_BASE_URL="$APP_BASE_URL/api/"
+          echo "🔨 Building edge (API_BASE_URL=$API_BASE_URL)..."
+          docker buildx build \
+            --platform linux/amd64 \
+            --file deploy/digitalocean/Dockerfile.edge \
+            --build-arg API_BASE_URL="$API_BASE_URL" \
+            --tag "$EDGE_IMAGE_VERSIONED" \
+            --tag "$EDGE_IMAGE_PROD" \
+            --push \
+            .
+          echo "✅ Pushed edge: $EDGE_IMAGE_PROD"
+
+      - name: Validate SSH secret
+        run: |
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ ERROR: SSH_PRIVATE_KEY secret is not configured!"
+            exit 1
+          fi
+          echo "✅ SSH_PRIVATE_KEY secret is configured"
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sync deployment files to server
+        run: |
+          echo "📦 Syncing deployment files to production server..."
+          rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='bin' \
+            --exclude='obj' \
+            --exclude='.env' \
+            --exclude='.vs' \
+            --exclude='*.user' \
+            deploy/digitalocean/ \
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.APP_DIR }}/deploy/digitalocean/
+
+      - name: Update docker-compose.prod.yml with production image tags
+        run: |
+          TAG="${{ env.IMAGE_TAG }}"
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+            set -e
+            cd ${{ env.APP_DIR }}
+            if [ ! -f deploy/digitalocean/docker-compose.prod.yml ]; then
+              echo "❌ ERROR: docker-compose.prod.yml not found!"
+              exit 1
+            fi
+            echo "📝 Updating image tags to production (-$TAG)..."
+            sed -i "s|:\\(identity-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(customer-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(order-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(catalog-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(notification-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(restaurant-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(payment-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(chat-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(ai-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(web-bff\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(mobile-bff\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(edge\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            echo "✅ Updated docker-compose.prod.yml with production tags"
+          EOF
+
+      - name: Login to DOCR on server and pull images
+        env:
+          DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << EOF
+            set -e
+            cd ${{ env.APP_DIR }}
+            echo "🔐 Logging into DigitalOcean Container Registry..."
+            echo "$DOCR_TOKEN" | docker login ${{ env.REGISTRY }} -u doctl --password-stdin
+            echo "📥 Pulling images..."
+            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull || true
+          EOF
+
+      - name: Restart containers on droplet
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/kram
+            if [ ! -f .env ]; then
+              echo "❌ ERROR: .env not found! Run deploy script first: ./deploy/digitalocean/deploy.sh production"
+              exit 1
+            fi
+            echo "🔄 Recreating containers with new images..."
+            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --remove-orphans
+            echo "📊 Current containers:"
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          EOF
+
+      - name: Health check
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 15
+          set +e
+          HEALTH_URL="https://${{ env.SSH_HOST }}/api/WebBff/health"
+          curl -k -f "$HEALTH_URL" || {
+            echo "⚠️  Health check failed; deployment may still be in progress"
+            echo "   Check: $HEALTH_URL"
+          }
+          set -e
+
+      - name: Deployment summary
+        run: |
+          REGISTRY_FULL="${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          echo "✅ Production deployment completed!"
+          echo "🌐 Server: ${{ env.SSH_HOST }}"
+          echo "📦 Branch: ${{ github.ref_name }}"
+          echo "🔨 Commit: ${{ github.sha }}"
+          echo ""
+          echo "🐳 Images: $REGISTRY_FULL:*-$TAG"

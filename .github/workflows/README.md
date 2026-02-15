@@ -1,12 +1,21 @@
-# GitHub Actions Workflows for TraditionalEats
+# GitHub Actions Workflows for Kram
 
-This directory contains CI/CD workflows for automated deployment of TraditionalEats.
+CI/CD workflows for automated deployment.
+
+## Branch → Environment
+
+| Branch | Workflow | Environment |
+|--------|----------|-------------|
+| **dev** | `deploy-staging.yml` | Staging |
+| **main** | `deploy-production.yml` | Production |
+
+Merge **dev → main** to deploy to production (push to `main` triggers production deploy).
 
 ## Workflows
 
 ### `deploy-staging.yml`
 
-Automatically deploys TraditionalEats to staging when code is pushed to the `dev` branch.
+Deploys to **staging** when code is pushed to the `dev` branch.
 
 **What it does:**
 
@@ -48,12 +57,21 @@ Automatically deploys TraditionalEats to staging when code is pushed to the `dev
 
    Note: The workflow will use the file if it exists, otherwise it will use the secret.
 
-**Workflow Triggers:**
+**Triggers:** Push to `dev` (with path filters) or `workflow_dispatch`.
 
-- Push to `dev` branch (when files in `src/**`, `deploy/digitalocean/**`, or `.github/workflows/**` change)
-- Manual trigger via `workflow_dispatch`
+---
 
-**Future: Production Workflow**
+### `deploy-production.yml`
 
-- A production workflow (`deploy-production.yml`) will be created for the `main` branch
-- It will follow the same pattern but deploy to production servers
+Deploys to **production** when code is pushed to the `main` branch (e.g. after merging dev → main).
+
+**What it does:** Same as staging but targets production server and uses `IMAGE_TAG: production` and `DROPLET_IP_PRODUCTION`.
+
+**Required GitHub Secrets:**
+
+- `DOCR_TOKEN` – same as staging
+- `SSH_PRIVATE_KEY` – private key for the **production** server
+- `PRODUCTION_SERVER_IP` – (optional) production server IP if `DROPLET_IP_PRODUCTION` is not committed
+- `PRODUCTION_BASE_URL` – (optional) e.g. `https://www.kram.tech` for Edge image `API_BASE_URL`; defaults to `https://www.kram.tech`
+
+**Triggers:** Push to `main` (with path filters) or `workflow_dispatch`.
