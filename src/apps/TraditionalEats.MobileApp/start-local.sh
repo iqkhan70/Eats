@@ -23,7 +23,7 @@ echo -e "${YELLOW}This mode requires your phone to be on the same WiFi network${
 echo ""
 echo -e "${BLUE}📡 API Configuration:${NC}"
 echo -e "${BLUE}   Using EXPO_PUBLIC_ENV=ip${NC}"
-echo -e "${BLUE}   API will use your local IP from config/app.config.ts${NC}"
+echo -e "${BLUE}   API will use your local IP from config/api.config.ts${NC}"
 echo ""
 echo -e "${BLUE}For remote access, use: ./start-expo-tunnel.sh${NC}"
 echo ""

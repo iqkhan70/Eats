@@ -5,7 +5,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SignalR from '@microsoft/signalr';
 import { api } from './api';
-import { APP_CONFIG } from '../config/app.config';
+import { APP_CONFIG } from '../config/api.config';
 
 export interface ChatMessage {
   messageId: string;

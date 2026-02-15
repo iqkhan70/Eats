@@ -199,7 +199,7 @@ export default function RestaurantsScreen() {
           ? "No vendors found for this area. Try another location or browse all vendors."
           : (bodyMessage ?? error?.message ?? "Request failed");
       setLoadError(
-        `Could not load vendors. ${friendlyMessage}${status && status !== 404 ? ` Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/app.config.ts.` : ""}`,
+        `Could not load vendors. ${friendlyMessage}${status && status !== 404 ? ` Make sure the Mobile BFF is running (port 5102). On a real device, set your computer's IP in config/api.config.ts.` : ""}`,
       );
     } finally {
       setLoading(false);

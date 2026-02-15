@@ -33,7 +33,8 @@
       "bundleIdentifier": "com.kram.mobile",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -44,8 +45,16 @@
       "package": "com.kram.mobile",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "da0aad44-a024-472c-b2a4-48f749db25d1"
+      }
     }
   }
 }

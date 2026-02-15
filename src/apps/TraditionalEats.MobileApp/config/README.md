@@ -4,17 +4,17 @@
 
 1. **Copy the example config:**
    ```bash
-   cp config/app.config.example.ts config/app.config.ts
+   cp config/api.config.example.ts config/api.config.ts
    ```
 
-2. **Update `app.config.ts` with your settings:**
-   - For phone testing: Set `DEV_IP` to your computer's IP address
-   - For production: Update the production API URL
+2. **Update `api.config.ts` with your settings (or use env vars):**
+   - For phone testing: Set `DEV_IP` or `EXPO_PUBLIC_DEV_IP` to your computer's IP
+   - For production: Uses `www.kram.tech`; override with `EXPO_PUBLIC_PRODUCTION_URL` if needed
 
 ## Files
 
-- `app.config.example.ts` - Example configuration (committed to git)
-- `app.config.ts` - Your actual configuration (gitignored, customize as needed)
+- `api.config.ts` - API/base URL config (committed with defaults)
+- `api.config.example.ts` - Example/template (copy to api.config.ts to override)
 
 ## Environment Variables
 

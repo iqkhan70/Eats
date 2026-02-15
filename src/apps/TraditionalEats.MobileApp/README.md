@@ -52,7 +52,7 @@ npx expo install --fix
    # or
    npm start
    ```
-   This uses your local IP address for the API (configured in `config/app.config.ts`).
+   This uses your local IP address for the API (configured in `config/api.config.ts`).
 
    **For remote access (away from home or different network):**
    ```bash
@@ -82,7 +82,11 @@ npm run web
 
 **Note**: 
 - Make sure the Mobile BFF is running on port 5102 for the app to connect to the backend.
-- If you encounter dependency issues, run `npx expo-doctor` to diagnose problems.
+- If you encounter dependency issues, run `npx expo-doctor` to diagnose problems. If the only failure is "packages match versions required by installed Expo SDK", run `npx expo install --fix` first; or use `EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=true npx expo-doctor` to skip that check (e.g. in CI).
+
+### TestFlight / App Store
+
+To build and ship the app to TestFlight (using the production API at **https://www.kram.tech**), see **[TESTFLIGHT.md](./TESTFLIGHT.md)** for step-by-step instructions (Expo account, EAS Build, Apple credentials, submit).
 
 ## Project Structure
 
@@ -115,7 +119,7 @@ types/
 
 ## Configuration
 
-The API base URL is configured in `config/app.config.ts` and can be controlled via environment variables:
+The API base URL is configured in `config/api.config.ts` and can be controlled via environment variables:
 
 - **Local development (same WiFi)**: Uses your computer's IP address
   - Set `EXPO_PUBLIC_ENV=ip` or use `./start-local.sh`

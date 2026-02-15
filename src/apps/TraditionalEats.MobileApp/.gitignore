@@ -76,8 +76,8 @@ yarn-error.*
 .env*.local
 .env
 
-# Config files (user-specific, keep example in repo)
-config/app.config.ts
+# Config files (optional override; api.config.ts is committed with defaults, override via env or local copy)
+# config/api.config.ts
 
 # typescript
 *.tsbuildinfo

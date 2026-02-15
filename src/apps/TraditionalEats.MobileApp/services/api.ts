@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_CONFIG } from '../config/app.config';
+import { APP_CONFIG } from '../config/api.config';
 import { cartSessionService } from './cartSession';
 
 class ApiClient {
@@ -51,7 +51,7 @@ class ApiClient {
             code: error.code,
             baseURL: this.client.defaults.baseURL,
             url: error.config?.url,
-            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/app.config.ts with your computer's IP address.`,
+            hint: `Make sure Mobile BFF is running and accessible. Current API URL: ${APP_CONFIG.API_BASE_URL}. For phone testing, update config/api.config.ts with your computer's IP address.`,
           });
         } else if (error.response) {
           const url = error.config?.url || '';

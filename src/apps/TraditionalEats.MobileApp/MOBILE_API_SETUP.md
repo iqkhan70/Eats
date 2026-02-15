@@ -6,16 +6,16 @@ When running the mobile app on a physical device, `localhost` won't work because
 
 ## Solution: Configure API URL via Config File
 
-The API URL is now configured via `config/app.config.ts` instead of being hardcoded.
+The API URL is now configured via `config/api.config.ts` instead of being hardcoded.
 
 ### Step 1: Set Up Configuration File
 
 1. **Copy the example config:**
    ```bash
-   cp config/app.config.example.ts config/app.config.ts
+   cp config/api.config.example.ts config/api.config.ts
    ```
 
-2. **Or create `config/app.config.ts` manually** (it's gitignored, so you can customize it)
+2. **Or create `config/api.config.ts` manually** (optional override; defaults are in the committed file)
 
 ### Step 2: Find Your Computer's IP Address
 
@@ -39,7 +39,7 @@ hostname -I
 
 ### Step 3: Update API Base URL in Config
 
-Edit `config/app.config.ts` and update the `DEV_IP` constant:
+Edit `config/api.config.ts` and update the `DEV_IP` constant:
 
 ```typescript
 // Replace '192.168.1.100' with your computer's IP
@@ -48,7 +48,7 @@ const DEV_IP = '192.168.1.100';
 
 The config file will automatically use this IP to build the API URL:
 - Development: `http://${DEV_IP}:5102/api`
-- Production: `https://api.traditionaleats.com/api`
+- Production (TestFlight/App Store): `https://www.kram.tech/api`
 
 ### Step 4: Make Sure Mobile BFF is Running
 
@@ -84,9 +84,24 @@ Make sure your firewall allows connections on port 5102:
 - Phone and computer must be on the **same WiFi network**
 - Some corporate/public networks block device-to-device communication
 
-## TestFlight / External testers: ngrok
+## TestFlight with production backend (www.kram.tech)
 
-For **TestFlight** (or any tester not on your LAN), the phone cannot reach your machine by IP. Use **ngrok** to expose your local backend over a public HTTPS URL.
+To ship a build that uses the live API at **https://www.kram.tech** (no ngrok, no local backend):
+
+1. Build with production env so the app uses `https://www.kram.tech/api` and `https://www.kram.tech/chatHub`:
+   ```bash
+   EXPO_PUBLIC_ENV=production npx expo prebuild
+   # Then build for iOS (EAS or Xcode) and upload to TestFlight
+   ```
+   Or in EAS Build: set environment variable **EXPO_PUBLIC_ENV** = **production** for the production profile.
+
+2. No need to run a local BFF or ngrok; TestFlight testers will hit www.kram.tech directly.
+
+3. Optional: override the production host with **EXPO_PUBLIC_PRODUCTION_URL** (e.g. `www.kram.tech`) if you use a different domain.
+
+## TestFlight / External testers: ngrok (local backend)
+
+For **TestFlight** while still using your **local** backend (e.g. for quick iteration), the phone cannot reach your machine by IP. Use **ngrok** to expose your local backend over a public HTTPS URL.
 
 ### Services to expose
 
@@ -137,7 +152,7 @@ You can also set the IP address via environment variable:
 EXPO_PUBLIC_DEV_IP=192.168.1.100
 ```
 
-2. The config file will automatically use this (see `config/app.config.ts`)
+2. The config file will automatically use this (see `config/api.config.ts`)
 
 **Note:** The `.env` file should be gitignored (already configured)
 

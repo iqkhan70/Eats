@@ -48,6 +48,13 @@ PRODUCTION_BASE_URL=https://www.kram.tech
 PRODUCTION_DOMAIN=www.kram.tech
 ```
 
+**If https://&lt;droplet-ip&gt; works but http://www.kram.tech or https://www.kram.tech shows nginx 404 or an error:** the domain is almost certainly pointing at a different server. Fix DNS first:
+
+- **A record for `www.kram.tech`** → your production droplet IP (e.g. `104.236.116.189`)
+- **A record for `kram.tech`** (optional but recommended) → same IP
+
+Check from your machine: `dig www.kram.tech +short` (or `nslookup www.kram.tech`). The result must be your production droplet IP. Until DNS points to the same box, the domain will hit another host (e.g. old droplet or parked page) and show nginx errors there. After updating DNS, wait for TTL (a few minutes to an hour) and try again.
+
 ## Prerequisites
 
 - DigitalOcean account: a Droplet (and optionally Container Registry)
