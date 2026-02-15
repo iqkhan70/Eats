@@ -177,7 +177,7 @@ jobs:
             source .env 2>/dev/null || true
             DOMAIN="${DOMAIN:-}"
             if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "http" ] || [ "$DOMAIN" = "https" ]; then
-              DOMAIN=$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- | tr -d '"'"' \r' || true)
+              DOMAIN=$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- | tr -d ' \r' || true)
             fi
             if [ -n "$DOMAIN" ] && [[ "$DOMAIN" == *.* ]]; then
               if [ ! -f nginx/ssl/cert.pem ]; then
