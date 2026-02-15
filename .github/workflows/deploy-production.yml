@@ -128,6 +128,7 @@ jobs:
           echo "🔨 Building edge (API_BASE_URL=$API_BASE_URL)..."
           docker buildx build \
             --platform linux/amd64 \
+            --no-cache \
             --file deploy/digitalocean/Dockerfile.edge \
             --build-arg API_BASE_URL="$API_BASE_URL" \
             --tag "$EDGE_IMAGE_VERSIONED" \

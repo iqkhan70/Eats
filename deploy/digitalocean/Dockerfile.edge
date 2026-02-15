@@ -22,19 +22,13 @@ RUN if [ -n "$API_BASE_URL" ]; then \
       done; \
     fi
 
-# Collect nginx html: Blazor usually puts _framework under publish/wwwroot; on some targets it can be at publish root
+# Collect nginx html: prefer wwwroot, then add _framework/index.html from publish root only if missing
 RUN mkdir -p /nginx-html && \
-    if [ -d /app/publish/wwwroot ] && [ -n "$(ls -A /app/publish/wwwroot 2>/dev/null)" ]; then \
-      cp -r /app/publish/wwwroot/. /nginx-html/; \
-    else \
-      cp -r /app/publish/. /nginx-html/; \
-    fi && \
-    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] && [ -d /app/publish/_framework ]; then \
-      cp -r /app/publish/_framework /nginx-html/; \
-    fi && \
-    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] || [ ! -f /nginx-html/index.html ]; then \
-      echo "ERROR: Blazor publish missing _framework or index.html. Contents of /app/publish:"; ls -laR /app/publish; exit 1; \
-    fi
+    if [ -d /app/publish/wwwroot ] && [ -n "$(ls -A /app/publish/wwwroot 2>/dev/null)" ]; then cp -r /app/publish/wwwroot/. /nginx-html/; else cp -r /app/publish/. /nginx-html/; fi && \
+    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] && [ -d /app/publish/_framework ]; then cp -r /app/publish/_framework /nginx-html/; fi && \
+    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] && [ -d /app/publish/wwwroot/_framework ]; then cp -r /app/publish/wwwroot/_framework /nginx-html/; fi && \
+    if [ ! -f /nginx-html/index.html ] && [ -f /app/publish/index.html ]; then cp /app/publish/index.html /nginx-html/; fi && \
+    if [ ! -f /nginx-html/_framework/blazor.webassembly.js ] || [ ! -f /nginx-html/index.html ]; then echo "ERROR: Blazor publish missing _framework or index.html. Contents of /app/publish:"; ls -laR /app/publish; exit 1; fi
 
 FROM nginx:alpine AS runtime
 COPY --from=build /nginx-html /usr/share/nginx/html
