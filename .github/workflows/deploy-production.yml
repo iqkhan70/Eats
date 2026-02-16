@@ -181,13 +181,29 @@ jobs:
               DOMAIN=$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- | tr -d ' \r' || true)
             fi
             if [ -n "$DOMAIN" ] && [[ "$DOMAIN" == *.* ]]; then
-              if [ ! -f nginx/ssl/cert.pem ]; then
-                echo "🔐 Creating self-signed cert for $DOMAIN"
-                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-                  -keyout nginx/ssl/key.pem -out nginx/ssl/cert.pem -subj "/CN=$DOMAIN" 2>/dev/null || true
+              COMPOSE_PROJECT="${COMPOSE_PROJECT:-kram}"
+              VOLUME_CERTS="${COMPOSE_PROJECT}_certbot_certs"
+              USE_LETSENCRYPT=0
+              if docker run --rm -v "${VOLUME_CERTS}:/certs:ro" alpine test -f "/certs/live/${DOMAIN}/fullchain.pem" 2>/dev/null; then
+                echo "🔐 Using existing Let'\''s Encrypt cert for $DOMAIN"
+                USE_LETSENCRYPT=1
               fi
-              export DOMAIN HTTPS_ONLY USE_SELF_SIGNED_CERT=1
-              bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf || true
+              if [ "$USE_LETSENCRYPT" = "1" ]; then
+                export DOMAIN HTTPS_ONLY CERTS_READY=1
+                unset USE_SELF_SIGNED_CERT
+                bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf || true
+              else
+                if [ ! -f nginx/ssl/cert.pem ]; then
+                  echo "🔐 Creating self-signed cert for $DOMAIN"
+                  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                    -keyout nginx/ssl/key.pem -out nginx/ssl/cert.pem -subj "/CN=$DOMAIN" 2>/dev/null || true
+                fi
+                export DOMAIN HTTPS_ONLY USE_SELF_SIGNED_CERT=1
+                bash deploy/digitalocean/scripts/generate-nginx-conf.sh > nginx/nginx.conf || true
+              fi
+              if [ -s nginx/nginx.conf ]; then
+                cp nginx/nginx.conf deploy/digitalocean/nginx/nginx.conf
+              fi
             fi
             if [ ! -s nginx/nginx.conf ]; then
               echo "⚠️ nginx.conf empty or missing; generating HTTP-only fallback"
