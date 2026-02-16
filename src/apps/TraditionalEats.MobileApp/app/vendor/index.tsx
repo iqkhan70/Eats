@@ -43,11 +43,16 @@ export default function VendorDashboardScreen() {
     checkAuthAndLoad();
   }, []);
 
-  // Reload restaurants when screen gains focus (e.g. after creating a new restaurant)
+  // Reload restaurants and sync Stripe status when screen gains focus (e.g. after creating a restaurant or returning from Stripe onboarding)
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated && isVendor) {
         loadRestaurants();
+        // Sync onboarding status from Stripe so we show Complete when user just finished in browser (webhook may be missed)
+        api
+          .post<{ status?: string }>("/MobileBff/payments/vendor/refresh-onboarding-status")
+          .then((res) => setStripeOnboardingStatus(res.data?.status ?? "Pending"))
+          .catch(() => loadStripeOnboardingStatus());
       }
     }, [isAuthenticated, isVendor]),
   );
@@ -113,7 +118,19 @@ export default function VendorDashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadRestaurants(), loadStripeOnboardingStatus()]);
+    try {
+      await loadRestaurants();
+      try {
+        const res = await api.post<{ status?: string }>(
+          "/MobileBff/payments/vendor/refresh-onboarding-status",
+        );
+        setStripeOnboardingStatus(res.data?.status ?? "Pending");
+      } catch {
+        await loadStripeOnboardingStatus();
+      }
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const loadStripeOnboardingStatus = async () => {

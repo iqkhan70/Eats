@@ -86,6 +86,39 @@ public class PaymentController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Sync onboarding status from Stripe (details_submitted, charges_enabled, payouts_enabled) and return updated status.
+    /// Call this after the user returns from Stripe Connect onboarding (return or refresh URL) so the app reflects completion
+    /// even if the account.updated webhook was missed (e.g. wrong mode or webhook not configured for Connect).
+    /// </summary>
+    [HttpPost("vendor/refresh-onboarding-status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RefreshVendorOnboardingStatus()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { message = "User ID claim is missing" });
+        try
+        {
+            var (stripeAccountId, _) = await _paymentService.GetVendorOnboardingStatusAsync(userId);
+            if (string.IsNullOrEmpty(stripeAccountId))
+                return BadRequest(new { message = "No Stripe account linked. Use 'Finish Stripe setup' to start onboarding." });
+            await _paymentService.UpdateVendorOnboardingFromStripeAsync(stripeAccountId);
+            var (_, status) = await _paymentService.GetVendorOnboardingStatusAsync(userId);
+            return Ok(new { stripeAccountId, status });
+        }
+        catch (Stripe.StripeException ex)
+        {
+            _logger.LogWarning(ex, "Stripe API error refreshing onboarding for user {UserId}: {Message}", userId, ex.Message);
+            return BadRequest(new { message = "Stripe error: " + ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refresh vendor onboarding status");
+            return StatusCode(500, new { message = "Failed to refresh onboarding status" });
+        }
+    }
+
     [HttpGet("restaurant/{restaurantId}/payment-ready")]
     [AllowAnonymous]
     public async Task<IActionResult> CheckRestaurantPaymentReady(Guid restaurantId)

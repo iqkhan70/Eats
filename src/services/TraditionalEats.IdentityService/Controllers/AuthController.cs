@@ -5,6 +5,7 @@ namespace TraditionalEats.IdentityService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Microsoft.AspNetCore.Authorization.AllowAnonymous] // Login, Register, Refresh, Logout must work without a token; Admin actions override with [Authorize(Roles = "Admin")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -16,6 +17,7 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -44,6 +46,7 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -73,6 +76,7 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
     {
@@ -98,6 +102,7 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request)
     {

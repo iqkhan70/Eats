@@ -460,7 +460,29 @@
         {
             await Task.WhenAll(LoadRestaurants(), LoadCategories());
             if (isVendor)
+            {
                 await LoadStripeOnboardingStatus();
+                // After return from Stripe Connect (return or refresh URL), sync status from Stripe so we show Complete even if webhook was missed
+                var uri = Navigation.Uri;
+                if (uri.Contains("stripe=return", StringComparison.OrdinalIgnoreCase) || uri.Contains("stripe=refresh", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var refreshResponse = await Http.PostAsync("WebBff/payments/vendor/refresh-onboarding-status", null);
+                        if (refreshResponse.IsSuccessStatusCode)
+                            await LoadStripeOnboardingStatus();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to refresh Stripe onboarding status on return");
+                    }
+                    // Clean URL so we don't re-trigger on next load
+                    var cleanUri = new Uri(uri);
+                    var path = cleanUri.GetLeftPart(UriPartial.Path);
+                    if (path != uri)
+                        Navigation.NavigateTo(path, replace: true);
+                }
+            }
         }
 
         isLoading = false;

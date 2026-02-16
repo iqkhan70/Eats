@@ -507,6 +507,25 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("payments/vendor/refresh-onboarding-status")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RefreshVendorStripeOnboardingStatus()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync("/api/payment/vendor/refresh-onboarding-status", null);
+            var content = await response.Content.ReadAsStringAsync();
+            return new ContentResult { Content = content, ContentType = "application/json", StatusCode = (int)response.StatusCode };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refreshing vendor Stripe onboarding status");
+            return StatusCode(500, new { error = "Failed to refresh onboarding status" });
+        }
+    }
+
     [HttpGet("payments/restaurant/{restaurantId}/payment-ready")]
     [AllowAnonymous]
     public async Task<IActionResult> CheckRestaurantPaymentReady(Guid restaurantId)
