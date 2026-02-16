@@ -244,9 +244,10 @@ public class RestaurantService : IRestaurantService
         if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
         if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
 
-        // Re-geocode when coordinates are 0,0 but we have an address (from dto or existing) - fixes existing rows with bad lat/lon
+        // Re-geocode when address is present and either (coordinates are 0,0) or (address was just updated)
         var addressToUse = !string.IsNullOrWhiteSpace(restaurant.Address) ? restaurant.Address : null;
-        var shouldRegeocode = addressToUse != null && restaurant.Latitude == 0 && restaurant.Longitude == 0;
+        var addressWasUpdated = dto.Address != null;
+        var shouldRegeocode = addressToUse != null && (restaurant.Latitude == 0 && restaurant.Longitude == 0 || addressWasUpdated);
         if (shouldRegeocode)
         {
             var geo = await _geocoding.GeocodeAddressAsync(addressToUse);
@@ -511,9 +512,10 @@ public class RestaurantService : IRestaurantService
         if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
         if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
 
-        // Re-geocode when coordinates are 0,0 but we have an address (from dto or existing)
+        // Re-geocode when address is present and either (coordinates are 0,0) or (address was just updated)
         var addressToUseAdmin = !string.IsNullOrWhiteSpace(restaurant.Address) ? restaurant.Address : null;
-        var shouldRegeocodeAdmin = addressToUseAdmin != null && restaurant.Latitude == 0 && restaurant.Longitude == 0;
+        var addressWasUpdatedAdmin = dto.Address != null;
+        var shouldRegeocodeAdmin = addressToUseAdmin != null && (restaurant.Latitude == 0 && restaurant.Longitude == 0 || addressWasUpdatedAdmin);
         if (shouldRegeocodeAdmin)
         {
             var geo = await _geocoding.GeocodeAddressAsync(addressToUseAdmin);
