@@ -84,11 +84,23 @@ Use the build ID from the EAS build page or from `eas build:list`.
 
 For a new TestFlight build after code changes:
 
+> Note: App Store Connect requires every uploaded build to have a unique iOS build number (`CFBundleVersion`).
+> This repo is configured to auto-increment iOS build numbers on every **production** EAS build (see `eas.json` → `cli.appVersionSource=remote` and `build.production.autoIncrement=true`),
+> so you should not need to manually edit `app.json` → `expo.ios.buildNumber`.
+
 ```bash
 cd src/apps/TraditionalEats.MobileApp
 eas build --platform ios --profile production
 # when build completes:
 eas submit --platform ios --latest --profile production
+```
+
+If you still see: **"You've already submitted this build of the app"**, sync/init the remote build number to match whatever the latest build number is in App Store Connect, then rebuild:
+
+```bash
+cd src/apps/TraditionalEats.MobileApp
+eas build:version:set
+eas build --platform ios --profile production
 ```
 
 ---
