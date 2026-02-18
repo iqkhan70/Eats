@@ -12,11 +12,13 @@ public class OrderController : ControllerBase
 {
     private readonly IOrderService _orderService;
     private readonly ILogger<OrderController> _logger;
+    private readonly IConfiguration _configuration;
 
-    public OrderController(IOrderService orderService, ILogger<OrderController> logger)
+    public OrderController(IOrderService orderService, ILogger<OrderController> logger, IConfiguration configuration)
     {
         _orderService = orderService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     // ----------------------------
@@ -485,6 +487,33 @@ public class OrderController : ControllerBase
         {
             _logger.LogError(ex, "Failed to cancel order {OrderId}", orderId);
             return StatusCode(500, new { message = "Failed to cancel order" });
+        }
+    }
+
+    /// <summary>
+    /// Internal: get order status by order id. Used by other services (e.g. PaymentService) to enforce policies.
+    /// </summary>
+    [HttpGet("internal/{orderId}/status")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalGetOrderStatus(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal order status rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        try
+        {
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null) return NotFound(new { message = "Order not found" });
+            return Ok(new { orderId, status = order.Status });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalGetOrderStatus failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to get order status" });
         }
     }
 

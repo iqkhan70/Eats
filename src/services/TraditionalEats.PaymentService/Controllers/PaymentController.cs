@@ -298,8 +298,49 @@ public class PaymentController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Internal: refund by order id. If payment isn't captured yet, this will void the authorization instead.
+    /// Called by internal services (e.g. OrderService) when a refund is needed after capture.
+    /// </summary>
+    [HttpPost("internal/refund-by-order")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalRefundByOrder([FromBody] RefundByOrderRequest request, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:PaymentService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal refund-by-order rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+        return await DoRefundByOrder(request);
+    }
+
+    [HttpPost("refund-by-order")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RefundByOrder([FromBody] RefundByOrderRequest request) => await DoRefundByOrder(request);
+
+    private async Task<IActionResult> DoRefundByOrder(RefundByOrderRequest request)
+    {
+        try
+        {
+            var result = await _paymentService.RefundOrVoidPaymentByOrderIdAsync(request.OrderId, request.Reason);
+            if (result.Action == "not_found")
+                return NotFound(new { message = result.Message });
+
+            if (result.Action is "refund_failed" or "not_refundable")
+                return BadRequest(new { message = result.Message, action = result.Action, refundId = result.RefundId });
+
+            return Ok(new { action = result.Action, refundId = result.RefundId, message = result.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refund payment by order {OrderId}", request.OrderId);
+            return StatusCode(500, new { message = "Failed to refund payment" });
+        }
+    }
+
     [HttpPost("refund")]
-    [Authorize]
+    [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> CreateRefund([FromBody] CreateRefundRequest request)
     {
         try
@@ -327,3 +368,4 @@ public record CapturePaymentRequest(Guid PaymentIntentId);
 public record CapturePaymentByOrderRequest(Guid OrderId);
 public record CancelPaymentByOrderRequest(Guid OrderId);
 public record CreateRefundRequest(Guid PaymentIntentId, Guid OrderId, decimal Amount, string Reason);
+public record RefundByOrderRequest(Guid OrderId, string? Reason = null);

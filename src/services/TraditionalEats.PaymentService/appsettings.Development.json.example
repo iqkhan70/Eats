@@ -9,6 +9,10 @@
     "ConnectReturnUrl": "https://localhost:5301"
   },
   "Services": {
+    "OrderService": {
+      "BaseUrl": "http://localhost:5002",
+      "InternalApiKey": ""
+    },
     "RestaurantService": {
       "BaseUrl": "http://localhost:5007"
     }

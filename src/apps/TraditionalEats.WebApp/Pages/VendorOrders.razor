@@ -7,6 +7,7 @@
 @inject AuthService AuthService
 @inject ILogger<VendorOrders> Logger
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 
 <PageTitle>@PageTitleText</PageTitle>
 
@@ -237,6 +238,13 @@
                                     <RadzenButton Icon="chat" Text="Open order & chat" Variant="Variant.Outlined"
                                         Size="ButtonSize.Small"
                                         Click="@(() => Navigation.NavigateTo($"/orders/{o.OrderId}/chat"))" />
+
+                                    @if (string.Equals(o.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <RadzenButton Icon="currency_exchange" Text="Refund" Variant="Variant.Outlined"
+                                            ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                            Click="@(() => RefundOrder(o.OrderId))" />
+                                    }
                                 </RadzenStack>
 
                             </RadzenStack>
@@ -687,6 +695,56 @@
                 Summary = "Error",
                 Detail = "Failed to update order status",
                 Duration = 4500
+            });
+        }
+    }
+
+    private async Task RefundOrder(Guid orderId)
+    {
+        try
+        {
+            var ok = await DialogService.Confirm(
+                "Issue a refund for this completed order? This will create a Stripe refund (or return an error if the payment was not captured).",
+                "Confirm refund",
+                new ConfirmOptions { OkButtonText = "Refund", CancelButtonText = "Cancel" });
+
+            if (ok != true)
+                return;
+
+            var response = await Http.PostAsync($"WebBff/orders/{orderId}/refund", null);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Refund initiated",
+                    Detail = "Refund request sent successfully.",
+                    Duration = 3000
+                });
+                await RefreshGrid();
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Refund failed",
+                    Detail = string.IsNullOrWhiteSpace(content) ? "Failed to refund order." : content,
+                    Duration = 5500
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error refunding order {OrderId}", orderId);
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Refund failed",
+                Detail = "Failed to refund order.",
+                Duration = 5500
             });
         }
     }

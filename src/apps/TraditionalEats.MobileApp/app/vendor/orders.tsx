@@ -193,6 +193,7 @@ export default function VendorOrdersScreen() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [refundingOrderId, setRefundingOrderId] = useState<string | null>(null);
 
   // ✅ SEARCH
   const [searchText, setSearchText] = useState("");
@@ -254,6 +255,40 @@ export default function VendorOrdersScreen() {
   const activeRestaurants = useMemo(() => {
     return restaurants.filter((r) => r.isActive);
   }, [restaurants]);
+
+  const canRefund = useCallback((status: string) => status === "Completed", []);
+
+  const refundOrder = useCallback(
+    async (orderId: string) => {
+      if (refundingOrderId) return;
+
+      Alert.alert(
+        "Refund order?",
+        "Refunds are allowed only for Completed orders. This will trigger a Stripe refund (if payment was captured).",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Refund",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                setRefundingOrderId(orderId);
+                await api.post(`/MobileBff/orders/${orderId}/refund`);
+                Alert.alert("Refund initiated", "Refund request sent successfully.");
+                await loadOrders();
+              } catch (err) {
+                const msg = normalizeErrorMessage(err);
+                Alert.alert("Refund failed", msg);
+              } finally {
+                setRefundingOrderId(null);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [refundingOrderId],
+  );
 
   const loadRestaurants = async () => {
     try {
@@ -675,25 +710,46 @@ export default function VendorOrdersScreen() {
                         Total: ${order.total.toFixed(2)}
                       </Text>
 
-                      <TouchableOpacity
-                        style={[
-                          styles.statusButton,
-                          { backgroundColor: getStatusColor(order.status) },
-                          updatingStatus === order.orderId &&
-                            styles.statusButtonDisabled,
-                        ]}
-                        onPress={() => showStatusPicker(order)}
-                        disabled={updatingStatus === order.orderId}
-                        activeOpacity={0.8}
-                      >
-                        {updatingStatus === order.orderId ? (
-                          <ActivityIndicator size="small" color="white" />
-                        ) : (
-                          <Text style={styles.statusButtonText}>
-                            Update Status
-                          </Text>
+                      <View style={styles.footerActions}>
+                        {canRefund(order.status) && (
+                          <TouchableOpacity
+                            style={[
+                              styles.refundButton,
+                              refundingOrderId === order.orderId &&
+                                styles.statusButtonDisabled,
+                            ]}
+                            onPress={() => refundOrder(order.orderId)}
+                            disabled={refundingOrderId === order.orderId}
+                            activeOpacity={0.85}
+                          >
+                            {refundingOrderId === order.orderId ? (
+                              <ActivityIndicator size="small" color="white" />
+                            ) : (
+                              <Text style={styles.refundButtonText}>Refund</Text>
+                            )}
+                          </TouchableOpacity>
                         )}
-                      </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.statusButton,
+                            { backgroundColor: getStatusColor(order.status) },
+                            updatingStatus === order.orderId &&
+                              styles.statusButtonDisabled,
+                          ]}
+                          onPress={() => showStatusPicker(order)}
+                          disabled={updatingStatus === order.orderId}
+                          activeOpacity={0.8}
+                        >
+                          {updatingStatus === order.orderId ? (
+                            <ActivityIndicator size="small" color="white" />
+                          ) : (
+                            <Text style={styles.statusButtonText}>
+                              Update Status
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -952,6 +1008,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E0E0E0",
   },
+  footerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   orderTotal: {
     fontSize: 16,
     fontWeight: "bold",
@@ -966,6 +1027,17 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   statusButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  refundButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#dc3545",
+  },
+  refundButtonText: {
     color: "white",
     fontSize: 12,
     fontWeight: "600",

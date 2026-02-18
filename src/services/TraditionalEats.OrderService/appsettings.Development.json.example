@@ -2,6 +2,7 @@
   "ConnectionStrings": {
     "OrderDb": "server=localhost;port=3306;database=traditional_eats_order;user=root;password=YOUR_PASSWORD_HERE"
   },
+  "InternalApiKey": "",
   "Kestrel": {
     "Endpoints": {
       "Http": {

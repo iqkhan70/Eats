@@ -591,6 +591,27 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("orders/{orderId}/refund")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RefundOrder(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsJsonAsync("/api/payment/refund-by-order", new { orderId });
+            var content = await response.Content.ReadAsStringAsync();
+
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refunding order {OrderId}", orderId);
+            return StatusCode(500, new { error = "Failed to refund order" });
+        }
+    }
+
     // ----------------------------
     // Auth
     // ----------------------------

@@ -1481,6 +1481,30 @@ public class WebBffController : ControllerBase
         }
     }
 
+    [HttpPost("orders/{orderId}/refund")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RefundOrder(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+
+            var payload = new { orderId };
+            var json = JsonSerializer.Serialize(payload, JsonOptions);
+            var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("/api/payment/refund-by-order", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refunding order {OrderId}", orderId);
+            return StatusCode(500, new { error = "Failed to refund order" });
+        }
+    }
+
     [HttpGet("health")]
     public IActionResult Health()
     {
