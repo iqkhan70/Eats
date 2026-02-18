@@ -244,9 +244,27 @@ public class PaymentController : ControllerBase
         return await DoCapturePaymentByOrder(request);
     }
 
+    /// <summary>Internal: cancel (void authorization) payment by order id. Called by OrderService on customer cancellation before capture.</summary>
+    [HttpPost("internal/cancel-by-order")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalCancelPaymentByOrder([FromBody] CancelPaymentByOrderRequest request, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:PaymentService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal cancel-by-order rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+        return await DoCancelPaymentByOrder(request);
+    }
+
     [HttpPost("capture-by-order")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> CapturePaymentByOrder([FromBody] CapturePaymentByOrderRequest request) => await DoCapturePaymentByOrder(request);
+
+    [HttpPost("cancel-by-order")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> CancelPaymentByOrder([FromBody] CancelPaymentByOrderRequest request) => await DoCancelPaymentByOrder(request);
 
     private async Task<IActionResult> DoCapturePaymentByOrder(CapturePaymentByOrderRequest request)
     {
@@ -261,6 +279,22 @@ public class PaymentController : ControllerBase
         {
             _logger.LogError(ex, "Failed to capture payment by order {OrderId}", request.OrderId);
             return StatusCode(500, new { message = "Failed to capture payment" });
+        }
+    }
+
+    private async Task<IActionResult> DoCancelPaymentByOrder(CancelPaymentByOrderRequest request)
+    {
+        try
+        {
+            var success = await _paymentService.CancelPaymentByOrderIdAsync(request.OrderId);
+            if (!success)
+                return BadRequest(new { message = "No cancellable authorization found for this order or cancel failed" });
+            return Ok(new { message = "Payment cancelled successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to cancel payment by order {OrderId}", request.OrderId);
+            return StatusCode(500, new { message = "Failed to cancel payment" });
         }
     }
 
@@ -291,4 +325,5 @@ public record CreatePaymentIntentRequest(Guid OrderId, decimal Amount, string? C
 public record AuthorizePaymentRequest(Guid PaymentIntentId, string PaymentMethodId);
 public record CapturePaymentRequest(Guid PaymentIntentId);
 public record CapturePaymentByOrderRequest(Guid OrderId);
+public record CancelPaymentByOrderRequest(Guid OrderId);
 public record CreateRefundRequest(Guid PaymentIntentId, Guid OrderId, decimal Amount, string Reason);

@@ -15,6 +15,12 @@ fi
 tmux new-session -d -s $SESSION
 
 BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ARTIFACTS_BASE="$BASE_DIR/.artifacts"
+
+mkdir -p "$ARTIFACTS_BASE"
+
+echo "🔧 Restoring once (prevents parallel restore/build locks)..."
+dotnet restore "$BASE_DIR/TraditionalEats.sln" >/dev/null || dotnet restore "$BASE_DIR/TraditionalEats.sln"
 
 start_service () {
   NAME=$1
@@ -23,7 +29,9 @@ start_service () {
   echo "▶ $NAME"
 
   tmux new-window -t $SESSION -n $NAME
-  tmux send-keys -t $SESSION:$NAME "cd $BASE_DIR/$PATH_TO_PROJECT && dotnet watch run" C-m
+  # NOTE: Running many `dotnet watch` processes in parallel can fight over shared project outputs (e.g. BuildingBlocks.pdb).
+  # `--artifacts-path` isolates build outputs per service, avoiding CS2012 file-lock errors.
+  tmux send-keys -t $SESSION:$NAME "cd $BASE_DIR/$PATH_TO_PROJECT && dotnet watch --no-restore --disable-build-servers --artifacts-path \"$ARTIFACTS_BASE/$NAME\" run" C-m
 }
 
 # ---------------- SERVICES ----------------

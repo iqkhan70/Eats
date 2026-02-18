@@ -14,6 +14,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   Keyboard,
+  Pressable,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
@@ -61,6 +63,9 @@ export default function OrdersScreen() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [filter, setFilter] = useState<OrderFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(
+    null,
+  );
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -140,6 +145,45 @@ export default function OrdersScreen() {
       setOrders([]);
     }
   }, [isAuthenticated, router]);
+
+  const canCancel = useCallback((status: string) => {
+    return status === "Pending" || status === "Accepted";
+  }, []);
+
+  const cancelOrder = useCallback(
+    async (orderId: string) => {
+      if (cancellingOrderId) return;
+
+      Alert.alert(
+        "Cancel order?",
+        "You can only cancel while the order is Pending or Accepted.",
+        [
+          { text: "No", style: "cancel" },
+          {
+            text: "Yes, cancel",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                setCancellingOrderId(orderId);
+                await api.post(`/MobileBff/orders/${orderId}/cancel`);
+                Alert.alert("Cancelled", "Your order has been cancelled.");
+                await loadOrders();
+              } catch (e: any) {
+                const msg =
+                  e?.response?.data?.message ||
+                  e?.message ||
+                  "Failed to cancel order";
+                Alert.alert("Cancel failed", String(msg));
+              } finally {
+                setCancellingOrderId(null);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [cancellingOrderId, loadOrders],
+  );
 
   // ✅ Initial load (show full-screen loader only once)
   useEffect(() => {
@@ -431,10 +475,9 @@ export default function OrdersScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           renderItem={({ item }) => (
-            <TouchableOpacity
+            <Pressable
               style={styles.orderCardWrapper}
               onPress={() => router.push(`/orders/${item.orderId}`)}
-              activeOpacity={0.85}
             >
               <BlurView intensity={80} tint="light" style={styles.orderCard}>
                 <View style={styles.orderHeader}>
@@ -481,8 +524,35 @@ export default function OrdersScreen() {
                     ${item.total.toFixed(2)}
                   </Text>
                 </View>
+
+                {canCancel(item.status) && (
+                  <View style={styles.cancelRow}>
+                    <Pressable
+                      onPress={(ev) => {
+                        // Prevent the card press from triggering navigation
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (ev as any)?.stopPropagation?.();
+                        cancelOrder(item.orderId);
+                      }}
+                      disabled={!!cancellingOrderId}
+                      style={[
+                        styles.cancelButton,
+                        cancellingOrderId && styles.cancelButtonDisabled,
+                      ]}
+                    >
+                      {cancellingOrderId === item.orderId ? (
+                        <ActivityIndicator size="small" color="#dc3545" />
+                      ) : (
+                        <>
+                          <Ionicons name="close-circle-outline" size={18} color="#dc3545" />
+                          <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
               </BlurView>
-            </TouchableOpacity>
+            </Pressable>
           )}
         />
       )}
@@ -629,6 +699,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+
+  cancelRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "flex-start",
+  },
+  cancelButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#dc3545",
+    backgroundColor: "rgba(220, 53, 69, 0.06)",
+  },
+  cancelButtonDisabled: {
+    opacity: 0.6,
+  },
+  cancelButtonText: {
+    color: "#dc3545",
+    fontWeight: "600",
+    fontSize: 14,
   },
 
   // keep your existing look (purple text)

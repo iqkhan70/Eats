@@ -567,6 +567,30 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("orders/{orderId}/cancel")]
+    [Authorize]
+    public async Task<IActionResult> CancelOrder(Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, $"/api/order/{orderId}/cancel");
+
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                httpRequestMessage.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+
+            var response = await client.SendAsync(httpRequestMessage);
+            var content = await response.Content.ReadAsStringAsync();
+
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling order {OrderId}", orderId);
+            return StatusCode(500, new { error = "Failed to cancel order" });
+        }
+    }
+
     // ----------------------------
     // Auth
     // ----------------------------

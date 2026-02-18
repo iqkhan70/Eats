@@ -55,7 +55,20 @@
                                 Placed on @order.CreatedAt.ToString("MMM dd, yyyy 'at' HH:mm")
                             </RadzenText>
                         </RadzenStack>
-                        <RadzenBadge Text="@order.Status" Style="@GetStatusStyle(order.Status)" />
+                        <RadzenStack Gap="0.5rem" AlignItems="AlignItems.End">
+                            <RadzenBadge Text="@order.Status" Style="@GetStatusStyle(order.Status)" />
+                            @if (CanCancelOrder)
+                            {
+                                <RadzenButton Text="Cancel Order"
+                                              Icon="cancel"
+                                              Variant="Variant.Outlined"
+                                              Size="ButtonSize.Small"
+                                              IsBusy="@cancelling"
+                                              Disabled="@cancelling"
+                                              Click="@CancelOrder"
+                                              Style="border-color: #dc3545; color: #dc3545;" />
+                            }
+                        </RadzenStack>
                     </RadzenStack>
 
                     @if (order.EstimatedDeliveryAt.HasValue)
@@ -273,6 +286,11 @@
     private bool hasReview = false;
     private ReviewDto? existingReview;
     private bool showEditForm = false;
+    private bool cancelling = false;
+
+    private bool CanCancelOrder =>
+        order != null &&
+        (order.Status == "Pending" || order.Status == "Accepted");
 
     protected override async Task OnInitializedAsync()
     {
@@ -306,6 +324,55 @@
         finally
         {
             loading = false;
+        }
+    }
+
+    private async Task CancelOrder()
+    {
+        if (order == null) return;
+        if (!Guid.TryParse(OrderId, out var orderIdGuid)) return;
+        if (cancelling) return;
+
+        try
+        {
+            cancelling = true;
+            var response = await Http.PostAsync($"WebBff/orders/{orderIdGuid}/cancel", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Cancel failed",
+                    Detail = string.IsNullOrWhiteSpace(body) ? "Could not cancel this order." : body,
+                    Duration = 5000
+                });
+                return;
+            }
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Order cancelled",
+                Detail = "Your order has been cancelled.",
+                Duration = 4000
+            });
+
+            await LoadOrder();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Cancel failed",
+                Detail = ex.Message,
+                Duration = 5000
+            });
+        }
+        finally
+        {
+            cancelling = false;
         }
     }
 

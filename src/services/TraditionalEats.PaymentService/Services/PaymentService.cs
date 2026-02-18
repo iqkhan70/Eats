@@ -21,6 +21,8 @@ public interface IPaymentService
     Task<bool> AuthorizePaymentAsync(Guid paymentIntentId, string paymentMethodId);
     Task<bool> CapturePaymentAsync(Guid paymentIntentId);
     Task<bool> CapturePaymentByOrderIdAsync(Guid orderId);
+    /// <summary>Void authorization (cancel Stripe PaymentIntent) by order id. For customer cancellations before capture.</summary>
+    Task<bool> CancelPaymentByOrderIdAsync(Guid orderId);
     Task<Guid> CreateRefundAsync(Guid paymentIntentId, Guid orderId, decimal amount, string reason);
     /// <summary>Called from Stripe webhook: update our PaymentIntent by Stripe PI id.</summary>
     Task UpdatePaymentIntentStatusFromStripeAsync(string stripePaymentIntentId, string status, string? failureReason);
@@ -542,6 +544,64 @@ public class PaymentService : IPaymentService
         {
             _logger.LogError(ex, "Failed to create refund for payment {PaymentIntentId}", paymentIntentId);
             throw;
+        }
+    }
+
+    public async Task<bool> CancelPaymentByOrderIdAsync(Guid orderId)
+    {
+        // Find latest Stripe PI for this order
+        var pi = await _context.PaymentIntents
+            .Where(p => p.OrderId == orderId && p.Provider == "Stripe" && p.ProviderIntentId != null)
+            .OrderByDescending(p => p.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (pi == null || string.IsNullOrWhiteSpace(pi.ProviderIntentId))
+            return false;
+
+        // If already captured/refunded, cancellation isn't applicable
+        if (string.Equals(pi.Status, "Captured", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(pi.Status, "Refunded", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // If already cancelled, idempotent success
+        if (string.Equals(pi.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(pi.Status, "Canceled", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        try
+        {
+            var service = new PaymentIntentService();
+            var options = new PaymentIntentCancelOptions
+            {
+                CancellationReason = "requested_by_customer"
+            };
+
+            var stripePi = await service.CancelAsync(pi.ProviderIntentId, options);
+
+            pi.Status = string.Equals(stripePi.Status, "canceled", StringComparison.OrdinalIgnoreCase)
+                ? "Cancelled"
+                : (stripePi.Status ?? "Cancelled");
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Cancelled Stripe PaymentIntent {StripePiId} for OrderId={OrderId} (our PI={PaymentIntentId})",
+                pi.ProviderIntentId, orderId, pi.PaymentIntentId);
+
+            return true;
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogWarning(ex, "Stripe cancel failed for OrderId={OrderId}, Stripe PI={StripePiId}", orderId, pi.ProviderIntentId);
+            pi.FailureReason = ex.Message;
+            try { await _context.SaveChangesAsync(); } catch { /* ignore */ }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CancelPaymentByOrderIdAsync failed for OrderId={OrderId}", orderId);
+            pi.FailureReason = ex.Message;
+            try { await _context.SaveChangesAsync(); } catch { /* ignore */ }
+            return false;
         }
     }
 }

@@ -22,6 +22,8 @@ public interface IOrderService
     Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId);
     Task<List<Order>> GetOrdersByRestaurantAsync(Guid restaurantId);
     Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null);
+    /// <summary>Customer self-cancel. Allowed only while Pending or Accepted.</summary>
+    Task<bool> CancelOrderByCustomerAsync(Guid orderId, Guid customerId);
 }
 
 public class OrderService : IOrderService
@@ -1408,5 +1410,72 @@ public class OrderService : IOrderService
 
         _logger.LogInformation("RecalculateCartTotals: Final totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, Total={Total}",
             cart.Subtotal, cart.Tax, cart.DeliveryFee, cart.Total);
+    }
+
+    public async Task<bool> CancelOrderByCustomerAsync(Guid orderId, Guid customerId)
+    {
+        // Load current status + ownership
+        var order = await _context.Orders
+            .AsNoTracking()
+            .FirstOrDefaultAsync(o => o.OrderId == orderId);
+
+        if (order == null)
+            return false;
+
+        if (order.CustomerId != customerId)
+            throw new UnauthorizedAccessException("Order does not belong to this customer.");
+
+        // Idempotent: if already cancelled, treat as success
+        if (string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Simple policy: allow cancel only while Pending or Accepted
+        if (!string.Equals(order.Status, "Pending", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(order.Status, "Accepted", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Order cannot be cancelled once it is {order.Status}.");
+
+        // Reuse existing status transition logic (history + event publishing)
+        var ok = await UpdateOrderStatusAsync(orderId, "Cancelled", "Cancelled by customer");
+        if (!ok)
+            return false;
+
+        // Best-effort: void Stripe authorization so funds are released sooner.
+        // Even if this fails, the order will not be captured (capture only happens on Completed).
+        try
+        {
+            var paymentBaseUrl = _configuration["Services:PaymentService:BaseUrl"] ?? "http://localhost:5004";
+            var internalApiKey = _configuration["Services:PaymentService:InternalApiKey"];
+
+            using var http = _httpClientFactory.CreateClient();
+            var payload = new { orderId };
+            var content = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(payload),
+                System.Text.Encoding.UTF8,
+                "application/json");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{paymentBaseUrl.TrimEnd('/')}/api/payment/internal/cancel-by-order")
+            {
+                Content = content
+            };
+            if (!string.IsNullOrEmpty(internalApiKey))
+                request.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+
+            var response = await http.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("CancelOrderByCustomerAsync: Payment void failed for OrderId={OrderId}, StatusCode={StatusCode}",
+                    orderId, response.StatusCode);
+            }
+            else
+            {
+                _logger.LogInformation("CancelOrderByCustomerAsync: Payment voided for OrderId={OrderId}", orderId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CancelOrderByCustomerAsync: Failed to void payment for OrderId={OrderId} (continuing)", orderId);
+        }
+
+        return true;
     }
 }

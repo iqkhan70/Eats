@@ -30,13 +30,33 @@ fi
 
 # 2. Kill any leftover dotnet processes running TraditionalEats services
 if command -v pkill &>/dev/null; then
-    # dotnet watch can occasionally leave child processes around even after tmux is killed
-    if pgrep -f "dotnet\\s+watch\\s+run" >/dev/null 2>&1; then
+    # dotnet watch can run either as `dotnet watch run` OR as `dotnet .../dotnet-watch.dll run`
+    if pgrep -f "dotnet\\s+watch\\s+run|dotnet-watch\\.dll\\s+run" >/dev/null 2>&1; then
         echo "   Killing leftover dotnet watch processes..."
         pkill -f "dotnet\\s+watch\\s+run" 2>/dev/null || true
+        pkill -f "dotnet-watch\\.dll\\s+run" 2>/dev/null || true
         sleep 1
         pkill -9 -f "dotnet\\s+watch\\s+run" 2>/dev/null || true
+        pkill -9 -f "dotnet-watch\\.dll\\s+run" 2>/dev/null || true
         echo "   ✓ Dotnet watch processes killed"
+    fi
+
+    # Blazor WASM dev server can keep shared assemblies locked
+    if pgrep -f "blazor-devserver\\.dll" >/dev/null 2>&1; then
+        echo "   Killing leftover blazor-devserver processes..."
+        pkill -f "blazor-devserver\\.dll" 2>/dev/null || true
+        sleep 1
+        pkill -9 -f "blazor-devserver\\.dll" 2>/dev/null || true
+        echo "   ✓ Blazor dev server processes killed"
+    fi
+
+    # MSBuild servers spawned by dotnet watch can linger and contribute to file locks
+    if pgrep -f "MSBuild\\.dll" >/dev/null 2>&1; then
+        echo "   Killing leftover MSBuild server processes..."
+        pkill -f "MSBuild\\.dll" 2>/dev/null || true
+        sleep 1
+        pkill -9 -f "MSBuild\\.dll" 2>/dev/null || true
+        echo "   ✓ MSBuild server processes killed"
     fi
 
     if pgrep -f "dotnet.*TraditionalEats" >/dev/null 2>&1; then

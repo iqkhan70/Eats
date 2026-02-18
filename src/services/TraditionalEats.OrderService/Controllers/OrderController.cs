@@ -431,13 +431,22 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("{orderId}")]
+    [Authorize]
     public async Task<IActionResult> GetOrder(Guid orderId)
     {
         try
         {
+            // Ensure customers can only fetch their own orders (vendors/admin have separate endpoints)
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var customerId))
+                return Unauthorized(new { message = "User ID claim is missing" });
+
             var order = await _orderService.GetOrderAsync(orderId);
             if (order == null)
                 return NotFound();
+
+            if (order.CustomerId != customerId)
+                return Forbid();
 
             return Ok(order);
         }
@@ -445,6 +454,37 @@ public class OrderController : ControllerBase
         {
             _logger.LogError(ex, "Failed to get order");
             return StatusCode(500, new { message = "Failed to get order" });
+        }
+    }
+
+    [HttpPost("{orderId}/cancel")]
+    [Authorize]
+    public async Task<IActionResult> CancelOrder(Guid orderId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var customerId))
+                return Unauthorized(new { message = "User ID claim is missing" });
+
+            var success = await _orderService.CancelOrderByCustomerAsync(orderId, customerId);
+            if (!success)
+                return NotFound(new { message = "Order not found" });
+
+            return Ok(new { message = "Order cancelled" });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to cancel order {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to cancel order" });
         }
     }
 
