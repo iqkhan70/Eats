@@ -18,6 +18,7 @@ import { BlurView } from "expo-blur";
 import { cartService, Cart, CartItem } from "../services/cart";
 import { authService } from "../services/auth";
 import { api } from "../services/api";
+import AppHeader from "../components/AppHeader";
 
 export default function CartScreen() {
   const router = useRouter();
@@ -323,15 +324,7 @@ export default function CartScreen() {
   if (!cart || !cart.items || cart.items.length === 0) {
     return (
       <View style={styles.container}>
-        <BlurView intensity={80} tint="light" style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={28} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Cart</Text>
-        </BlurView>
+        <AppHeader title="Cart" />
 
         <ScrollView
           contentContainerStyle={styles.centerContainer}
@@ -360,15 +353,7 @@ export default function CartScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Shopping Cart</Text>
-      </View>
+      <AppHeader title="Shopping Cart" />
 
       <ScrollView
         style={styles.content}

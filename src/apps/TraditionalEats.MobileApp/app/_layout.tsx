@@ -7,13 +7,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <Stack
         screenOptions={{
-          headerStyle: {
-            backgroundColor: "#6200ee",
-          },
-          headerTintColor: "#fff",
-          headerTitleStyle: {
-            fontWeight: "bold",
-          },
+          // We render a consistent in-app header in screens (SafeAreaView)
+          // to avoid duplicate headers and to keep back button behavior
+          // consistent across screens.
+          headerShown: false,
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
