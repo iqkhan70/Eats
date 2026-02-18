@@ -131,6 +131,12 @@
                         <div class="tile-sub">Manage vendors, menus, vendor access</div>
                     </button>
 
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/categories"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-category"></i></div>
+                        <div class="tile-title">Category Management</div>
+                        <div class="tile-sub">Add and organize platform categories</div>
+                    </button>
+
                     <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/users"))">
                         <div class="tile-icon"><i class="rz-icon rz-icon-people"></i></div>
                         <div class="tile-title">User Management</div>

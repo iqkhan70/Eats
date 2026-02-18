@@ -55,6 +55,13 @@ export default function AdminDashboardScreen() {
       color: '#6200ee',
     },
     {
+      icon: 'pricetags-outline',
+      label: 'Manage Categories',
+      description: 'Add and organize platform categories',
+      route: '/admin/categories',
+      color: '#0097a7',
+    },
+    {
       icon: 'people-outline',
       label: 'Manage Users',
       description: 'View and manage user accounts',

@@ -1,0 +1,413 @@
+@page "/admin/categories"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@using System.Net.Http.Json
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject ILogger<AdminCategories> Logger
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<PageTitle>Category Management - Kram</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; max-width: 1200px; margin: 0 auto;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => Navigation.NavigateTo("/admin"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H2">Category Management</RadzenText>
+        <RadzenButton Icon="refresh" Text="Refresh" Click="@LoadCategories" ButtonStyle="ButtonStyle.Light"
+                      Disabled="@(!isAuthenticated || !isAdmin || isLoading)" Style="margin-left: auto;" />
+    </RadzenStack>
+
+    @if (!isAuthChecked)
+    {
+        <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText>Loading...</RadzenText>
+        </RadzenStack>
+    }
+    else if (!isAuthenticated)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to access this page." />
+    }
+    else if (!isAdmin)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Access Denied" Text="Admin role required." />
+    }
+    else
+    {
+        <RadzenRow Gap="16px">
+            <RadzenColumn Size="12" SizeMD="5">
+                <RadzenStack Gap="1rem">
+                    <RadzenCard>
+                        <RadzenStack Gap="0.75rem">
+                            <RadzenText TextStyle="TextStyle.H5" Style="margin: 0;">Add Category</RadzenText>
+
+                            <RadzenFormField Text="Name">
+                                <RadzenTextBox @bind-Value="createModel.Name" Placeholder="e.g. Grocery" />
+                            </RadzenFormField>
+
+                            <RadzenFormField Text="Description (optional)">
+                                <RadzenTextBox @bind-Value="createModel.Description" Placeholder="Short description" />
+                            </RadzenFormField>
+
+                            <RadzenFormField Text="Image URL (optional)">
+                                <RadzenTextBox @bind-Value="createModel.ImageUrl" Placeholder="https://..." />
+                            </RadzenFormField>
+
+                            <RadzenFormField Text="Display Order">
+                                <RadzenNumeric @bind-Value="createModel.DisplayOrder" TValue="int" Min="0" Step="1" />
+                            </RadzenFormField>
+
+                            <RadzenButton Text="Create Category"
+                                          Icon="add"
+                                          Click="@CreateCategory"
+                                          IsLoading="@isCreating"
+                                          Disabled="@isCreating" />
+                        </RadzenStack>
+                    </RadzenCard>
+
+                    @if (editingCategory != null)
+                    {
+                        <RadzenCard>
+                            <RadzenStack Gap="0.75rem">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                                    <RadzenText TextStyle="TextStyle.H5" Style="margin: 0;">Edit Category</RadzenText>
+                                    <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                                  Click="@CancelEdit" />
+                                </RadzenStack>
+
+                                <RadzenFormField Text="Name">
+                                    <RadzenTextBox @bind-Value="editModel.Name" />
+                                </RadzenFormField>
+
+                                <RadzenFormField Text="Description (optional)">
+                                    <RadzenTextBox @bind-Value="editModel.Description" />
+                                </RadzenFormField>
+
+                                <RadzenFormField Text="Image URL (optional)">
+                                    <RadzenTextBox @bind-Value="editModel.ImageUrl" />
+                                </RadzenFormField>
+
+                                <RadzenFormField Text="Display Order">
+                                    <RadzenNumeric @bind-Value="editModel.DisplayOrder" TValue="int" Min="0" Step="1" />
+                                </RadzenFormField>
+
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Text="Save"
+                                                  Icon="save"
+                                                  Click="@SaveEdit"
+                                                  IsLoading="@isSaving"
+                                                  Disabled="@isSaving" />
+                                    <RadzenButton Text="Delete"
+                                                  Icon="delete"
+                                                  ButtonStyle="ButtonStyle.Danger"
+                                                  Variant="Variant.Flat"
+                                                  Click="@(() => DeleteCategory(editingCategory))"
+                                                  Disabled="@isSaving" />
+                                </RadzenStack>
+                            </RadzenStack>
+                        </RadzenCard>
+                    }
+                </RadzenStack>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeMD="7">
+                <RadzenCard>
+                    <RadzenStack Gap="0.75rem">
+                        <RadzenText TextStyle="TextStyle.H5" Style="margin: 0;">Existing Categories</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                            @categories.Count category(s)
+                        </RadzenText>
+
+                        <RadzenDataGrid Data="@categories"
+                                        TItem="CategoryDto"
+                                        AllowPaging="true"
+                                        PageSize="15"
+                                        AllowSorting="true"
+                                        Responsive="true">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="CategoryDto" Property="Name" Title="Name" />
+                                <RadzenDataGridColumn TItem="CategoryDto" Property="DisplayOrder" Title="Order" Width="110px" />
+                                <RadzenDataGridColumn TItem="CategoryDto" Property="MenuItemCount" Title="Items" Width="110px" />
+                                <RadzenDataGridColumn TItem="CategoryDto" Title="Created" Width="170px" Sortable="true">
+                                    <Template Context="c">
+                                        <RadzenText>@c.CreatedAt.ToLocalTime().ToString("g")</RadzenText>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="CategoryDto" Title="Actions" Width="140px" Sortable="false" Filterable="false">
+                                    <Template Context="c">
+                                        <div @onclick:stopPropagation="true">
+                                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.35rem">
+                                                <RadzenButton Icon="edit" Size="ButtonSize.Small" Variant="Variant.Outlined" Click="@(() => StartEdit(c))" />
+                                                <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Danger"
+                                                              Click="@(() => DeleteCategory(c))" />
+                                            </RadzenStack>
+                                        </div>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenColumn>
+        </RadzenRow>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Error" Text="@errorMessage" />
+        }
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private bool isAuthChecked = false;
+    private bool isLoading = true;
+    private bool isCreating = false;
+    private bool isSaving = false;
+    private string errorMessage = string.Empty;
+
+    private List<CategoryDto> categories = new();
+    private CreateCategoryModel createModel = new();
+    private CategoryDto? editingCategory = null;
+    private EditCategoryModel editModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+            isAdmin = await AuthService.IsAdminAsync();
+
+        isAuthChecked = true;
+
+        if (isAuthenticated && isAdmin)
+            await LoadCategories();
+    }
+
+    private async Task LoadCategories()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<CategoryDto>>("WebBff/admin/categories");
+            categories = (result ?? new()).OrderBy(c => c.DisplayOrder).ThenBy(c => c.Name).ToList();
+
+            if (createModel.DisplayOrder == 0 && categories.Count > 0)
+                createModel.DisplayOrder = categories.Max(c => c.DisplayOrder) + 1;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load categories");
+            errorMessage = "Failed to load categories.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CreateCategory()
+    {
+        errorMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(createModel.Name))
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "Validation",
+                Detail = "Name is required."
+            });
+            return;
+        }
+
+        isCreating = true;
+        try
+        {
+            var payload = new
+            {
+                name = createModel.Name.Trim(),
+                description = string.IsNullOrWhiteSpace(createModel.Description) ? null : createModel.Description.Trim(),
+                imageUrl = string.IsNullOrWhiteSpace(createModel.ImageUrl) ? null : createModel.ImageUrl.Trim(),
+                displayOrder = createModel.DisplayOrder
+            };
+
+            var res = await Http.PostAsJsonAsync("WebBff/admin/categories", payload);
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to create category ({(int)res.StatusCode}). {body}";
+                return;
+            }
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Created",
+                Detail = "Category created successfully."
+            });
+
+            createModel = new CreateCategoryModel { DisplayOrder = createModel.DisplayOrder + 1 };
+            await LoadCategories();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to create category");
+            errorMessage = "Failed to create category.";
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private void StartEdit(CategoryDto category)
+    {
+        editingCategory = category;
+        editModel = new EditCategoryModel
+        {
+            Name = category.Name,
+            Description = category.Description ?? string.Empty,
+            ImageUrl = category.ImageUrl ?? string.Empty,
+            DisplayOrder = category.DisplayOrder
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editingCategory = null;
+        editModel = new EditCategoryModel();
+    }
+
+    private async Task SaveEdit()
+    {
+        errorMessage = string.Empty;
+
+        if (editingCategory == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(editModel.Name))
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "Validation",
+                Detail = "Name is required."
+            });
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var payload = new
+            {
+                name = editModel.Name.Trim(),
+                description = editModel.Description ?? string.Empty,
+                imageUrl = editModel.ImageUrl ?? string.Empty,
+                displayOrder = editModel.DisplayOrder
+            };
+
+            var res = await Http.PutAsJsonAsync($"WebBff/admin/categories/{editingCategory.CategoryId}", payload);
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to update category ({(int)res.StatusCode}). {body}";
+                return;
+            }
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Saved",
+                Detail = "Category updated successfully."
+            });
+
+            await LoadCategories();
+            editingCategory = categories.FirstOrDefault(c => c.CategoryId == editingCategory.CategoryId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update category");
+            errorMessage = "Failed to update category.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteCategory(CategoryDto category)
+    {
+        errorMessage = string.Empty;
+
+        var confirm = await DialogService.Confirm(
+            $"Delete category '{category.Name}'?",
+            "Confirm delete",
+            new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
+
+        if (confirm != true)
+            return;
+
+        try
+        {
+            var res = await Http.DeleteAsync($"WebBff/admin/categories/{category.CategoryId}");
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to delete category ({(int)res.StatusCode}). {body}";
+                return;
+            }
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Deleted",
+                Detail = "Category deleted successfully."
+            });
+
+            if (editingCategory?.CategoryId == category.CategoryId)
+                CancelEdit();
+
+            await LoadCategories();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete category");
+            errorMessage = "Failed to delete category.";
+        }
+    }
+
+    private sealed class CreateCategoryModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public int DisplayOrder { get; set; } = 0;
+    }
+
+    private sealed class EditCategoryModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public int DisplayOrder { get; set; } = 0;
+    }
+
+    private sealed class CategoryDto
+    {
+        public Guid CategoryId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public int DisplayOrder { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public int MenuItemCount { get; set; }
+    }
+}
+

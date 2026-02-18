@@ -12,6 +12,7 @@ public interface ICatalogService
     Task<List<CategoryDto>> GetCategoriesAsync();
     Task<CategoryDto?> GetCategoryAsync(Guid categoryId);
     Task<bool> UpdateCategoryAsync(Guid categoryId, UpdateCategoryDto dto);
+    Task<bool> DeleteCategoryAsync(Guid categoryId);
     Task<Guid> CreateMenuItemAsync(Guid restaurantId, CreateMenuItemDto dto);
     Task<MenuItemDto?> GetMenuItemAsync(Guid menuItemId);
     Task<List<MenuItemDto>> GetMenuItemsByRestaurantAsync(Guid restaurantId, Guid? categoryId = null);
@@ -112,6 +113,27 @@ public class CatalogService : ICatalogService
         await _context.SaveChangesAsync();
 
         // Invalidate cache
+        await _redis.DeleteAsync("categories:all");
+        await _redis.DeleteAsync($"category:{categoryId}");
+
+        return true;
+    }
+
+    public async Task<bool> DeleteCategoryAsync(Guid categoryId)
+    {
+        var category = await _context.Categories
+            .Include(c => c.MenuItems)
+            .FirstOrDefaultAsync(c => c.CategoryId == categoryId);
+
+        if (category == null)
+            return false;
+
+        if (category.MenuItems.Count > 0)
+            throw new InvalidOperationException("Cannot delete a category that still has menu items. Move those items to another category first.");
+
+        _context.Categories.Remove(category);
+        await _context.SaveChangesAsync();
+
         await _redis.DeleteAsync("categories:all");
         await _redis.DeleteAsync($"category:{categoryId}");
 

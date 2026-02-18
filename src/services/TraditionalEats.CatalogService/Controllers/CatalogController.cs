@@ -20,7 +20,7 @@ public class CatalogController : ControllerBase
 
     // Categories
     [HttpPost("categories")]
-    [Authorize(Roles = "Admin,Vendor")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryDto dto)
     {
         try
@@ -70,7 +70,7 @@ public class CatalogController : ControllerBase
     }
 
     [HttpPut("categories/{categoryId}")]
-    [Authorize(Roles = "Admin,Vendor")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateCategory(Guid categoryId, [FromBody] UpdateCategoryDto dto)
     {
         try
@@ -86,6 +86,29 @@ public class CatalogController : ControllerBase
         {
             _logger.LogError(ex, "Failed to update category");
             return StatusCode(500, new { message = "Failed to update category" });
+        }
+    }
+
+    [HttpDelete("categories/{categoryId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteCategory(Guid categoryId)
+    {
+        try
+        {
+            var success = await _catalogService.DeleteCategoryAsync(categoryId);
+            if (!success)
+                return NotFound(new { message = "Category not found" });
+
+            return Ok(new { message = "Category deleted successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete category");
+            return StatusCode(500, new { message = "Failed to delete category" });
         }
     }
 

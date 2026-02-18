@@ -1723,6 +1723,102 @@ public class WebBffController : ControllerBase
     }
 
     // ----------------------------
+    // Admin catalog (categories)
+    // ----------------------------
+
+    [HttpGet("admin/categories")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminGetCategories()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync("/api/catalog/categories");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching categories (admin)");
+            return StatusCode(500, new { error = "Failed to fetch categories" });
+        }
+    }
+
+    [HttpPost("admin/categories")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminCreateCategory([FromBody] object? request)
+    {
+        if (request == null)
+            return BadRequest(new { message = "Request body is required" });
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/catalog/categories", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating category (admin)");
+            return StatusCode(500, new { error = "Failed to create category" });
+        }
+    }
+
+    [HttpPut("admin/categories/{categoryId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminUpdateCategory(Guid categoryId, [FromBody] object? request)
+    {
+        if (request == null)
+            return BadRequest(new { message = "Request body is required" });
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var json = JsonSerializer.Serialize(request, JsonOptions);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PutAsync($"/api/catalog/categories/{categoryId}", content);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating category (admin)");
+            return StatusCode(500, new { error = "Failed to update category" });
+        }
+    }
+
+    [HttpDelete("admin/categories/{categoryId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminDeleteCategory(Guid categoryId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(client);
+
+            var response = await client.DeleteAsync($"/api/catalog/categories/{categoryId}");
+            var responseContent = await response.Content.ReadAsStringAsync();
+            return JsonContent(responseContent, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting category (admin)");
+            return StatusCode(500, new { error = "Failed to delete category" });
+        }
+    }
+
+    // ----------------------------
     // Admin roles
     // ----------------------------
 
