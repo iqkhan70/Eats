@@ -3,6 +3,7 @@
 @using Radzen.Blazor
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
+@using System.Net.Http.Json
 @inject NavigationManager NavigationManager
 @inject HttpClient Http
 
@@ -65,7 +66,7 @@
                     <RadzenCard Style="cursor: pointer;" Class="category-card">
                         <div @onclick="@(() => NavigateToCategory(category))" style="width: 100%; height: 100%;">
                             <RadzenStack Gap="0.5rem" Style="align-items: center; text-align: center;">
-                                <RadzenIcon Icon="@category.Icon" Style="font-size: 48px; color: var(--rz-primary);" />
+                                <RadzenIcon Icon="@GetCategoryIcon(category.Name)" Style="font-size: 48px; color: var(--rz-primary);" />
                                 <RadzenText TextStyle="TextStyle.Body1">@category.Name</RadzenText>
                             </RadzenStack>
                         </div>
@@ -95,6 +96,11 @@
     private const int initialCategoryCount = 6;
     private System.Threading.CancellationTokenSource? _debounceCts;
     private double distanceMiles = 25;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMenuCategoriesAsync();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -157,23 +163,28 @@
         StateHasChanged();
     }
 
-    private List<CategoryItem> categories = new()
-{
-new CategoryItem { Name = "Traditional", Icon = "restaurant" },
-new CategoryItem { Name = "Fast Food", Icon = "fastfood" },
-new CategoryItem { Name = "Desserts", Icon = "cake" },
-new CategoryItem { Name = "Beverages", Icon = "local_drink" },
-new CategoryItem { Name = "Vegetarian", Icon = "eco" },
-new CategoryItem { Name = "Vegan", Icon = "spa" },
-new CategoryItem { Name = "Seafood", Icon = "set_meal" },
-new CategoryItem { Name = "BBQ", Icon = "outdoor_grill" },
-new CategoryItem { Name = "Italian", Icon = "dinner_dining" },
-new CategoryItem { Name = "Asian", Icon = "ramen_dining" }
-};
+    private List<MenuCategoryDto> categories = new();
 
-    private List<CategoryItem> displayedCategories => showAllCategories
+    private List<MenuCategoryDto> displayedCategories => showAllCategories
     ? categories
     : categories.Take(initialCategoryCount).ToList();
+
+    private async Task LoadMenuCategoriesAsync()
+    {
+        try
+        {
+            var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var result = await Http.GetFromJsonAsync<List<MenuCategoryDto>>($"WebBff/categories?__ts={ts}");
+            categories = (result ?? new())
+                .OrderBy(c => c.DisplayOrder)
+                .ThenBy(c => c.Name)
+                .ToList();
+        }
+        catch
+        {
+            categories = new();
+        }
+    }
 
     private async Task SearchRestaurants()
     {
@@ -213,9 +224,23 @@ new CategoryItem { Name = "Asian", Icon = "ramen_dining" }
         }
     }
 
-    private void NavigateToCategory(CategoryItem category)
+    private void NavigateToCategory(MenuCategoryDto category)
     {
-        NavigationManager.NavigateTo($"/restaurants?category={Uri.EscapeDataString(category.Name)}");
+        NavigationManager.NavigateTo($"/restaurants?menuCategoryId={Uri.EscapeDataString(category.CategoryId)}");
+    }
+
+    private static string GetCategoryIcon(string name)
+    {
+        var n = (name ?? "").Trim().ToLowerInvariant();
+        if (n.Contains("drink") || n.Contains("beverage") || n.Contains("coffee") || n.Contains("tea")) return "local_drink";
+        if (n.Contains("dessert") || n.Contains("sweet") || n.Contains("cake")) return "cake";
+        if (n.Contains("grocery") || n.Contains("market")) return "shopping_bag";
+        if (n.Contains("pharmacy") || n.Contains("medicine")) return "local_pharmacy";
+        if (n.Contains("beauty") || n.Contains("salon")) return "spa";
+        if (n.Contains("pet")) return "pets";
+        if (n.Contains("pizza")) return "local_pizza";
+        if (n.Contains("burger") || n.Contains("fast")) return "fastfood";
+        return "category";
     }
 
     private void ToggleCategories()
@@ -223,9 +248,10 @@ new CategoryItem { Name = "Asian", Icon = "ramen_dining" }
         showAllCategories = !showAllCategories;
     }
 
-    private class CategoryItem
+    private sealed class MenuCategoryDto
     {
+        public string CategoryId { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
-        public string Icon { get; set; } = string.Empty;
+        public int DisplayOrder { get; set; }
     }
 }

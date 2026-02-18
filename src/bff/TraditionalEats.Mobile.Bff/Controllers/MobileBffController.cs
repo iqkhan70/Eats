@@ -123,6 +123,7 @@ public class MobileBffController : ControllerBase
     public async Task<IActionResult> GetRestaurants(
         [FromQuery] string? location,
         [FromQuery] string? cuisineType,
+        [FromQuery] Guid? menuCategoryId,
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
         [FromQuery] double? radiusMiles,
@@ -141,15 +142,52 @@ public class MobileBffController : ControllerBase
             if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");
             if (radiusMiles.HasValue) queryParams.Add($"radiusMiles={radiusMiles.Value}");
             if (!string.IsNullOrEmpty(zip)) queryParams.Add($"zip={Uri.EscapeDataString(zip)}");
-            queryParams.Add($"skip={skip}");
-            queryParams.Add($"take={take}");
+            // When filtering by menu category (CatalogService), fetch a larger set then paginate after filtering.
+            var upstreamSkip = menuCategoryId.HasValue ? 0 : skip;
+            var upstreamTake = menuCategoryId.HasValue ? 5000 : take;
+            queryParams.Add($"skip={upstreamSkip}");
+            queryParams.Add($"take={upstreamTake}");
 
             var queryString = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
             var response = await client.GetAsync($"/api/restaurant{queryString}");
 
             var content = await response.Content.ReadAsStringAsync();
             if (response.IsSuccessStatusCode)
-                return JsonString(content);
+            {
+                if (!menuCategoryId.HasValue)
+                    return JsonString(content);
+
+                var catalog = _httpClientFactory.CreateClient("CatalogService");
+                var idsRes = await catalog.GetAsync($"/api/catalog/categories/{menuCategoryId.Value}/restaurants");
+                if (!idsRes.IsSuccessStatusCode)
+                    return JsonString("[]", 200);
+
+                var idsJson = await idsRes.Content.ReadAsStringAsync();
+                var restaurantIds = JsonSerializer.Deserialize<List<Guid>>(idsJson) ?? new();
+                if (restaurantIds.Count == 0)
+                    return JsonString("[]", 200);
+
+                var idSet = restaurantIds.ToHashSet();
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return JsonString("[]", 200);
+
+                var filtered = new List<JsonElement>();
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    if (TryGetRestaurantId(el, out var rid) && idSet.Contains(rid))
+                        filtered.Add(el.Clone());
+                }
+
+                var page = filtered.Skip(Math.Max(0, skip)).Take(Math.Max(0, take)).ToList();
+                var jsonOut = JsonSerializer.Serialize(page, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                });
+
+                return JsonString(jsonOut);
+            }
 
             return StatusCode((int)response.StatusCode, content);
         }
@@ -158,6 +196,30 @@ public class MobileBffController : ControllerBase
             _logger.LogError(ex, "Error fetching restaurants. Ensure RestaurantService is running (e.g. port 5007).");
             return StatusCode(500, new { error = "Failed to fetch restaurants", detail = ex.Message });
         }
+    }
+
+    private static bool TryGetRestaurantId(JsonElement el, out Guid restaurantId)
+    {
+        restaurantId = default;
+
+        if (el.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (el.TryGetProperty("restaurantId", out var p))
+        {
+            if (p.ValueKind == JsonValueKind.String && Guid.TryParse(p.GetString(), out restaurantId))
+                return true;
+            if (p.ValueKind == JsonValueKind.Undefined || p.ValueKind == JsonValueKind.Null)
+                return false;
+        }
+
+        if (el.TryGetProperty("id", out var idp))
+        {
+            if (idp.ValueKind == JsonValueKind.String && Guid.TryParse(idp.GetString(), out restaurantId))
+                return true;
+        }
+
+        return false;
     }
 
     [HttpGet("restaurants/{id}")]

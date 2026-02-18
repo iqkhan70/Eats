@@ -69,6 +69,22 @@ public class CatalogController : ControllerBase
         }
     }
 
+    [HttpGet("categories/{categoryId}/restaurants")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetRestaurantsByCategory(Guid categoryId)
+    {
+        try
+        {
+            var restaurantIds = await _catalogService.GetRestaurantIdsByCategoryAsync(categoryId);
+            return Ok(restaurantIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get restaurants for category {CategoryId}", categoryId);
+            return StatusCode(500, new { message = "Failed to get restaurants for category" });
+        }
+    }
+
     [HttpPut("categories/{categoryId}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateCategory(Guid categoryId, [FromBody] UpdateCategoryDto dto)

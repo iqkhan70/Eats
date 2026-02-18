@@ -12,6 +12,25 @@
     Class="page-container">
     <RadzenText TextStyle="TextStyle.H1">Vendors</RadzenText>
 
+    <RadzenCard>
+        <RadzenStack Gap="0.75rem">
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                Filter vendors by menu category
+            </RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
+                <RadzenDropDown Data="@menuCategories"
+                                @bind-Value="@selectedMenuCategoryId"
+                                TextProperty="Name"
+                                ValueProperty="CategoryId"
+                                Placeholder="All categories"
+                                Style="min-width: 320px;"
+                                Change="@OnMenuCategoryChanged" />
+                <RadzenButton Text="Clear" Icon="close" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                              Click="@ClearMenuCategory" Disabled="@string.IsNullOrEmpty(selectedMenuCategoryId)" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+
     @if (loading)
     {
         <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
@@ -86,12 +105,15 @@
 @code {
     private bool loading = true;
     private List<RestaurantDto> restaurants = new();
+    private List<MenuCategoryDto> menuCategories = new();
+    private string? selectedMenuCategoryId;
     private string? loadError;
     private double? searchCenterLat;
     private double? searchCenterLon;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadMenuCategories();
         await LoadRestaurants();
         NavigationManager.LocationChanged += OnLocationChanged;
     }
@@ -125,6 +147,7 @@
             var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
             string? location = null;
             string? category = null;
+            string? menuCategoryId = null;
             string? zip = null;
             double? latitude = null;
             double? longitude = null;
@@ -143,6 +166,7 @@
                         var value = Uri.UnescapeDataString(parts[1]);
                         if (key == "location") location = value;
                         if (key == "category") category = value;
+                        if (key == "menuCategoryId") menuCategoryId = value;
                         if (key == "zip") zip = value;
                         if (key == "latitude" && double.TryParse(value, System.Globalization.NumberStyles.Any,
                         System.Globalization.CultureInfo.InvariantCulture, out var lat)) latitude = lat;
@@ -160,6 +184,7 @@
             var queryParams = new List<string>();
             if (!string.IsNullOrEmpty(location)) queryParams.Add($"location={Uri.EscapeDataString(location)}");
             if (!string.IsNullOrEmpty(category)) queryParams.Add($"cuisineType={Uri.EscapeDataString(category)}");
+            if (!string.IsNullOrEmpty(menuCategoryId)) queryParams.Add($"menuCategoryId={Uri.EscapeDataString(menuCategoryId)}");
             if (!string.IsNullOrEmpty(zip)) queryParams.Add($"zip={Uri.EscapeDataString(zip)}");
             if (latitude.HasValue) queryParams.Add($"latitude={latitude.Value}");
             if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");
@@ -191,6 +216,64 @@
         {
             loading = false;
         }
+    }
+
+    private async Task LoadMenuCategories()
+    {
+        try
+        {
+            var response = await Http.GetAsync("WebBff/categories?__ts=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            if (!response.IsSuccessStatusCode)
+            {
+                menuCategories = new();
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var list = System.Text.Json.JsonSerializer.Deserialize<List<MenuCategoryDto>>(json, options) ?? new();
+            menuCategories = list.OrderBy(c => c.DisplayOrder).ThenBy(c => c.Name).ToList();
+        }
+        catch
+        {
+            menuCategories = new();
+        }
+    }
+
+    private void OnMenuCategoryChanged(object? value)
+    {
+        selectedMenuCategoryId = value?.ToString();
+        NavigateWithMenuCategory(selectedMenuCategoryId);
+    }
+
+    private void ClearMenuCategory()
+    {
+        selectedMenuCategoryId = null;
+        NavigateWithMenuCategory(null);
+    }
+
+    private void NavigateWithMenuCategory(string? menuCategoryId)
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(uri.Query))
+        {
+            var query = uri.Query.TrimStart('?');
+            foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = pair.Split('=', 2);
+                var key = Uri.UnescapeDataString(parts[0]);
+                var value = parts.Length == 2 ? Uri.UnescapeDataString(parts[1]) : "";
+                if (!string.IsNullOrWhiteSpace(key))
+                    dict[key] = value;
+            }
+        }
+        dict.Remove("menuCategoryId");
+        if (!string.IsNullOrWhiteSpace(menuCategoryId))
+            dict["menuCategoryId"] = menuCategoryId;
+
+        var qs = string.Join("&", dict.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+        NavigationManager.NavigateTo("/restaurants" + (string.IsNullOrEmpty(qs) ? "" : "?" + qs));
     }
 
     private void ViewMenu(Guid restaurantId)
@@ -240,5 +323,12 @@
         public int? ReviewCount { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class MenuCategoryDto
+    {
+        public string CategoryId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int DisplayOrder { get; set; }
     }
 }

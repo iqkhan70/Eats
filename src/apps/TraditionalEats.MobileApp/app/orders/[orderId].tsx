@@ -342,7 +342,7 @@ export default function OrderDetailsScreen() {
             onPress={() => setActiveTab('details')}
           >
             <Ionicons 
-              name="receipt" 
+              name="receipt-outline" 
               size={20} 
               color={activeTab === 'details' ? '#6200ee' : '#666'} 
             />

@@ -22,6 +22,8 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 interface BottomSearchBarProps {
   onSearch: (query: string) => void;
   placeholder?: string;
+  showPillText?: boolean;
+  collapsedText?: string;
   emptyStateTitle?: string;
   emptyStateSubtitle?: string;
   loadSuggestions?: (query: string) => Promise<string[]>;
@@ -33,6 +35,8 @@ interface BottomSearchBarProps {
 export default function BottomSearchBar({
   onSearch,
   placeholder = "Search for vendors, cuisine, or location...",
+  showPillText = true,
+  collapsedText,
   emptyStateTitle = "Search for vendors",
   emptyStateSubtitle = "Enter an address, ZIP code, or vendor name",
   loadSuggestions,
@@ -63,6 +67,14 @@ export default function BottomSearchBar({
       }
     };
   }, []);
+
+  // Keep the input in sync with the caller's value (when not expanded)
+  useEffect(() => {
+    if (!isExpanded) {
+      setSearchText(initialValue ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValue, isExpanded]);
 
   useEffect(() => {
     if (isExpanded) {
@@ -120,7 +132,6 @@ export default function BottomSearchBar({
 
   const handleCollapse = () => {
     setIsExpanded(false);
-    setSearchText("");
     setSuggestions([]);
     // Stop any running animations and immediately reset to collapsed state
     expandAnimation.stopAnimation(() => {
@@ -220,7 +231,11 @@ export default function BottomSearchBar({
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="search" size={22} color="#667eea" />
-          <Text style={styles.pillText}>{placeholder}</Text>
+          {showPillText ? (
+            <Text style={styles.pillText}>
+              {(collapsedText ?? initialValue ?? "").trim() || placeholder}
+            </Text>
+          ) : null}
         </Pressable>
       </Animated.View>
 

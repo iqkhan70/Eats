@@ -163,7 +163,7 @@ export default function AdminDashboardScreen() {
               <Text style={styles.statLabel}>Users</Text>
             </View>
             <View style={styles.statCard}>
-              <Ionicons name="receipt" size={24} color="#388e3c" />
+              <Ionicons name="receipt-outline" size={24} color="#388e3c" />
               <Text style={styles.statValue}>-</Text>
               <Text style={styles.statLabel}>Orders</Text>
             </View>

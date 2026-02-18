@@ -15,7 +15,7 @@ import {
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { api } from "../../services/api";
@@ -35,8 +35,14 @@ interface Restaurant {
   longitude?: number;
 }
 
+interface MenuCategory {
+  categoryId: string;
+  name: string;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -45,12 +51,14 @@ export default function HomeScreen() {
   const [nearbyRestaurants, setNearbyRestaurants] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
 
   const initialCategoryCount = 6;
 
   const navigateToRestaurants = async (
     location?: string,
     category?: string,
+    menuCategoryId?: string,
   ) => {
     Keyboard.dismiss();
 
@@ -58,6 +66,8 @@ export default function HomeScreen() {
     const qs: string[] = [];
     if (category?.trim())
       qs.push(`category=${encodeURIComponent(category.trim())}`);
+    if (menuCategoryId?.trim())
+      qs.push(`menuCategoryId=${encodeURIComponent(menuCategoryId.trim())}`);
 
     const zipMatch = loc.match(ZIP_REGEX);
     if (zipMatch && loc) {
@@ -93,29 +103,77 @@ export default function HomeScreen() {
       }
 
       try {
+        const q = query.trim().toLowerCase();
+        const categorySuggestions =
+          q && menuCategories.length
+            ? menuCategories
+                .filter((c) => (c.name ?? "").toLowerCase().includes(q))
+                .map((c) => c.name)
+            : [];
+
         const response = await api.get<string[]>(
           "/MobileBff/search-suggestions",
           {
             params: { query, maxResults: 10 },
           },
         );
-        return response.data;
+        const apiSuggestions = Array.isArray(response.data) ? response.data : [];
+        const merged = [...categorySuggestions, ...apiSuggestions]
+          .map((s) => (typeof s === "string" ? s.trim() : ""))
+          .filter(Boolean);
+
+        return Array.from(new Set(merged)).slice(0, 10);
       } catch (error: any) {
         console.error("Error loading suggestions:", error);
         return [];
       }
     },
-    [],
+    [menuCategories],
   );
 
   const handleSearch = async (query: string) => {
     Keyboard.dismiss();
+    const trimmed = (query ?? "").trim();
+    if (!trimmed) {
+      await navigateToRestaurants();
+      return;
+    }
+
+    const normalized = trimmed.toLowerCase();
+    const exactCategory = menuCategories.find(
+      (c) => (c.name ?? "").trim().toLowerCase() === normalized,
+    );
+    if (exactCategory?.categoryId) {
+      await navigateToRestaurants(undefined, undefined, exactCategory.categoryId);
+      return;
+    }
+
     await navigateToRestaurants(query);
   };
 
   const handleSuggestionSelect = (suggestion: string) => {
     handleSearch(suggestion);
   };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get<MenuCategory[]>("/MobileBff/categories", {
+          params: { __ts: Date.now() },
+          headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+        });
+        const list = Array.isArray(res.data) ? res.data : [];
+        setMenuCategories(
+          list.map((c: any) => ({
+            categoryId: c.categoryId ?? c.id,
+            name: c.name,
+          })),
+        );
+      } catch {
+        setMenuCategories([]);
+      }
+    })();
+  }, []);
 
   // Get user's current location
   useEffect(() => {
@@ -402,8 +460,13 @@ export default function HomeScreen() {
       <BottomSearchBar
         onSearch={handleSearch}
         placeholder="Search for vendors, cuisine, or location..."
+        collapsedText={
+          typeof params.location === "string" && params.location.trim()
+            ? params.location.trim()
+            : undefined
+        }
         emptyStateTitle="Search for vendors"
-        emptyStateSubtitle="Enter an address, ZIP code, or vendor name"
+        emptyStateSubtitle="Enter a vendor name, cuisine, category, address, or ZIP code"
         loadSuggestions={loadSuggestions}
         onSuggestionSelect={handleSuggestionSelect}
       />

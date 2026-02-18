@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
@@ -27,6 +28,11 @@ interface Restaurant {
   imageUrl?: string;
   latitude?: number;
   longitude?: number;
+}
+
+interface MenuCategory {
+  categoryId: string;
+  name: string;
 }
 
 function haversineMiles(
@@ -70,6 +76,7 @@ export default function RestaurantsScreen() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
 
   // Search
   const [searchText, setSearchText] = useState("");
@@ -80,6 +87,8 @@ export default function RestaurantsScreen() {
     typeof params.category === "string" ? params.category : "";
   const activeLocation =
     typeof params.location === "string" ? params.location : "";
+  const activeMenuCategoryId =
+    typeof params.menuCategoryId === "string" ? params.menuCategoryId : "";
   const zipParam = typeof params.zip === "string" ? params.zip : undefined;
   const centerLat =
     typeof params.latitude === "string"
@@ -96,6 +105,7 @@ export default function RestaurantsScreen() {
   const hasFilters = !!(
     activeCategory ||
     activeLocation ||
+    activeMenuCategoryId ||
     (centerLat != null && centerLon != null)
   );
 
@@ -105,11 +115,50 @@ export default function RestaurantsScreen() {
     return () => clearTimeout(t);
   }, [searchText]);
 
+  const setMenuCategoryFilter = useCallback(
+    (categoryId: string) => {
+      setSearchText("");
+      setDebouncedSearch("");
+      Keyboard.dismiss();
+
+      const nextParams: any = { ...params };
+      if (!categoryId) {
+        delete nextParams.menuCategoryId;
+      } else {
+        nextParams.menuCategoryId = categoryId;
+      }
+
+      router.replace({ pathname: "/restaurants", params: nextParams } as any);
+    },
+    [params, router],
+  );
+
   // Handle search from BottomSearchBar
-  const handleSearch = useCallback((query: string) => {
-    setSearchText(query);
-    setDebouncedSearch(query.trim());
-  }, []);
+  const handleSearch = useCallback(
+    (query: string) => {
+      const trimmed = (query ?? "").trim();
+      if (!trimmed) {
+        setSearchText("");
+        setDebouncedSearch("");
+        return;
+      }
+
+      // If user typed an exact menu category name (e.g., "Jewelry"),
+      // treat it as a category filter rather than a vendor-name search.
+      const normalized = trimmed.toLowerCase();
+      const exactCategory = menuCategories.find(
+        (c) => (c.name ?? "").trim().toLowerCase() === normalized,
+      );
+      if (exactCategory?.categoryId) {
+        setMenuCategoryFilter(exactCategory.categoryId);
+        return;
+      }
+
+      setSearchText(query);
+      setDebouncedSearch(trimmed);
+    },
+    [menuCategories, setMenuCategoryFilter],
+  );
 
   const loadSuggestions = useCallback(
     async (query: string): Promise<string[]> => {
@@ -117,34 +166,68 @@ export default function RestaurantsScreen() {
         return [];
       }
       try {
+        const q = query.trim().toLowerCase();
+        const categorySuggestions =
+          q && menuCategories.length
+            ? menuCategories
+                .filter((c) => (c.name ?? "").toLowerCase().includes(q))
+                .map((c) => c.name)
+            : [];
+
         const response = await api.get<string[]>(
           "/MobileBff/search-suggestions",
           {
             params: { query, maxResults: 10 },
           },
         );
-        return response.data;
+        const apiSuggestions = Array.isArray(response.data) ? response.data : [];
+        const merged = [...categorySuggestions, ...apiSuggestions]
+          .map((s) => (typeof s === "string" ? s.trim() : ""))
+          .filter(Boolean);
+
+        // unique + cap
+        return Array.from(new Set(merged)).slice(0, 10);
       } catch (error: any) {
         console.error("Error loading suggestions:", error);
         return [];
       }
     },
-    [],
+    [menuCategories],
   );
 
   useEffect(() => {
     loadRestaurants();
+    loadMenuCategories();
     // If user changes filters (location/category), usually it’s nicer to clear the search
     setSearchText("");
     setDebouncedSearch("");
   }, [
     params.location,
     params.category,
+    params.menuCategoryId,
     params.zip,
     params.latitude,
     params.longitude,
     params.radiusMiles,
   ]);
+
+  const loadMenuCategories = useCallback(async () => {
+    try {
+      const res = await api.get<MenuCategory[]>("/MobileBff/categories", {
+        params: { __ts: Date.now() },
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      });
+      const list = Array.isArray(res.data) ? res.data : [];
+      setMenuCategories(
+        list.map((c: any) => ({
+          categoryId: c.categoryId ?? c.id,
+          name: c.name,
+        })),
+      );
+    } catch (e) {
+      setMenuCategories([]);
+    }
+  }, []);
 
   const clearFilters = () => {
     setSearchText("");
@@ -159,8 +242,9 @@ export default function RestaurantsScreen() {
       setLoadError(null);
 
       const queryParams: Record<string, string | number> = {};
-      if (params.location) queryParams.location = params.location;
-      if (params.category) queryParams.cuisineType = params.category;
+      if (activeLocation) queryParams.location = activeLocation;
+      if (activeCategory) queryParams.cuisineType = activeCategory;
+      if (activeMenuCategoryId) queryParams.menuCategoryId = activeMenuCategoryId;
       if (zipParam) queryParams.zip = zipParam;
       if (centerLat != null && !Number.isNaN(centerLat))
         queryParams.latitude = centerLat;
@@ -274,6 +358,15 @@ export default function RestaurantsScreen() {
             {activeCategory ? `Category: ${activeCategory}` : ""}
             {activeCategory && activeLocation ? " • " : ""}
             {activeLocation ? `Location: ${activeLocation}` : ""}
+            {(activeCategory || activeLocation) && activeMenuCategoryId
+              ? " • "
+              : ""}
+            {activeMenuCategoryId
+              ? `Category: ${
+                  menuCategories.find((c) => c.categoryId === activeMenuCategoryId)
+                    ?.name ?? "Selected"
+                }`
+              : ""}
             {activeCategory && centerLat != null ? " • " : ""}
             {centerLat != null && radiusMiles != null
               ? `Within ${Math.round(radiusMiles)} mi`
@@ -286,6 +379,56 @@ export default function RestaurantsScreen() {
           >
             <Text style={styles.clearFiltersBtnText}>Clear</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Menu category chips */}
+      {menuCategories.length > 0 && (
+        <View style={styles.menuCategoryRow}>
+          <Text style={styles.menuCategoryLabel}>Categories</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.menuCategoryChips}
+          >
+            <TouchableOpacity
+              style={[
+                styles.menuChip,
+                !activeMenuCategoryId && styles.menuChipActive,
+              ]}
+              onPress={() => setMenuCategoryFilter("")}
+            >
+              <Text
+                style={[
+                  styles.menuChipText,
+                  !activeMenuCategoryId && styles.menuChipTextActive,
+                ]}
+              >
+                All
+              </Text>
+            </TouchableOpacity>
+
+            {menuCategories.map((c) => (
+              <TouchableOpacity
+                key={c.categoryId}
+                style={[
+                  styles.menuChip,
+                  activeMenuCategoryId === c.categoryId && styles.menuChipActive,
+                ]}
+                onPress={() => setMenuCategoryFilter(c.categoryId)}
+              >
+                <Text
+                  style={[
+                    styles.menuChipText,
+                    activeMenuCategoryId === c.categoryId &&
+                      styles.menuChipTextActive,
+                  ]}
+                >
+                  {c.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -361,9 +504,10 @@ export default function RestaurantsScreen() {
           setSearchText("");
           setDebouncedSearch("");
         }}
+        collapsedText={debouncedSearch}
         placeholder="Search vendors..."
         emptyStateTitle="Search vendors"
-        emptyStateSubtitle="Find vendors by name, cuisine, or location"
+        emptyStateSubtitle="Find vendors by name, cuisine, category, or location"
         loadSuggestions={loadSuggestions}
         onSuggestionSelect={handleSearch}
       />
@@ -437,6 +581,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+  },
+
+  menuCategoryRow: {
+    marginTop: 12,
+  },
+  menuCategoryLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  menuCategoryChips: {
+    gap: 8,
+    paddingRight: 12,
+  },
+  menuChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  menuChipActive: {
+    backgroundColor: "#6200ee",
+    borderColor: "#6200ee",
+  },
+  menuChipText: {
+    fontSize: 12,
+    color: "#444",
+    fontWeight: "600",
+  },
+  menuChipTextActive: {
+    color: "#fff",
   },
   clearFiltersBtnText: {
     color: "#fff",

@@ -13,6 +13,7 @@ public interface ICatalogService
     Task<CategoryDto?> GetCategoryAsync(Guid categoryId);
     Task<bool> UpdateCategoryAsync(Guid categoryId, UpdateCategoryDto dto);
     Task<bool> DeleteCategoryAsync(Guid categoryId);
+    Task<List<Guid>> GetRestaurantIdsByCategoryAsync(Guid categoryId);
     Task<Guid> CreateMenuItemAsync(Guid restaurantId, CreateMenuItemDto dto);
     Task<MenuItemDto?> GetMenuItemAsync(Guid menuItemId);
     Task<List<MenuItemDto>> GetMenuItemsByRestaurantAsync(Guid restaurantId, Guid? categoryId = null);
@@ -138,6 +139,15 @@ public class CatalogService : ICatalogService
         await _redis.DeleteAsync($"category:{categoryId}");
 
         return true;
+    }
+
+    public async Task<List<Guid>> GetRestaurantIdsByCategoryAsync(Guid categoryId)
+    {
+        return await _context.MenuItems
+            .Where(m => m.CategoryId == categoryId)
+            .Select(m => m.RestaurantId)
+            .Distinct()
+            .ToListAsync();
     }
 
     public async Task<Guid> CreateMenuItemAsync(Guid restaurantId, CreateMenuItemDto dto)
