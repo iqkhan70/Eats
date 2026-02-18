@@ -1,0 +1,130 @@
+@page "/vendor/messages"
+@using System.Net.Http.Json
+@using Radzen
+@using Radzen.Blazor
+@using TraditionalEats.WebApp.Services
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+
+<PageTitle>Messages - Kram</PageTitle>
+
+<RadzenStack Gap="1rem" Style="padding: 1rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <RadzenText TextStyle="TextStyle.H3">Messages</RadzenText>
+        <RadzenButton Icon="refresh" Text="Refresh" Variant="Variant.Flat" Click="@LoadInbox" Disabled="@loading" />
+    </RadzenStack>
+
+    @if (!isAuthChecked)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (!isAuthenticated)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to view messages." />
+    }
+    else if (!(isVendor || isAdmin))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Title="Access Denied" Text="Vendor or Admin role required." />
+    }
+    else if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (conversations.Count == 0)
+    {
+        <RadzenCard>
+            <RadzenText>No messages yet.</RadzenText>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenDataGrid Data="@conversations" TItem="ConversationDto" AllowPaging="true" PageSize="20" ShowPagingSummary="true">
+            <Columns>
+                <RadzenDataGridColumn TItem="ConversationDto" Property="CustomerDisplayName" Title="Customer" Width="240px" />
+                <RadzenDataGridColumn TItem="ConversationDto" Property="RestaurantId" Title="Restaurant" Width="240px" />
+                <RadzenDataGridColumn TItem="ConversationDto" Property="LastMessageAt" Title="Last message" Width="200px">
+                    <Template Context="c">
+                        <RadzenText>@(c.LastMessageAt?.ToLocalTime().ToString("g") ?? c.UpdatedAt.ToLocalTime().ToString("g"))</RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ConversationDto" Title="Actions" Width="140px" Sortable="false" Filterable="false">
+                    <Template Context="c">
+                        <RadzenButton Text="Open" Icon="forum" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                                      Click="@(() => OpenConversation(c.ConversationId))" />
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthChecked;
+    private bool isAuthenticated;
+    private bool isVendor;
+    private bool isAdmin;
+    private bool loading = true;
+    private List<ConversationDto> conversations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuth();
+        if (isAuthenticated && (isVendor || isAdmin))
+            await LoadInbox();
+        else
+            loading = false;
+    }
+
+    private async Task CheckAuth()
+    {
+        isAuthChecked = false;
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isVendor = await AuthService.IsVendorAsync();
+            isAdmin = await AuthService.IsAdminAsync();
+        }
+        isAuthChecked = true;
+    }
+
+    private async Task LoadInbox()
+    {
+        try
+        {
+            loading = true;
+            conversations = await Http.GetFromJsonAsync<List<ConversationDto>>("WebBff/vendor-chat/inbox") ?? new();
+        }
+        catch (Exception ex)
+        {
+            conversations = new();
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = $"Failed to load messages: {ex.Message}"
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void OpenConversation(Guid conversationId)
+    {
+        Navigation.NavigateTo($"/vendor/messages/{conversationId}");
+    }
+
+    private class ConversationDto
+    {
+        public Guid ConversationId { get; set; }
+        public Guid RestaurantId { get; set; }
+        public Guid CustomerId { get; set; }
+        public string? CustomerDisplayName { get; set; }
+        public DateTime? LastMessageAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+}
+

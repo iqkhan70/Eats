@@ -20,6 +20,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<CartSessionService>();
 builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<VendorChatService>();
 
 // HTTP Client for API calls
 // When app is on HTTPS we must call the BFF over HTTPS to avoid "Failed to fetch" (mixed content).

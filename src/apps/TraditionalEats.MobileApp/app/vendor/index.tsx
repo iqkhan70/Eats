@@ -235,6 +235,12 @@ export default function VendorDashboardScreen() {
         <Text style={styles.headerTitle}>My Vendors</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
+            onPress={() => router.push("/vendor/messages")}
+            style={styles.ordersButton}
+          >
+            <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={() => router.push("/vendor/documents")}
             style={styles.ordersButton}
           >

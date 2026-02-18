@@ -1,0 +1,35 @@
+@page "/vendor/messages/{conversationId:guid}"
+@using Radzen
+@using TraditionalEats.WebApp.Components
+@using TraditionalEats.WebApp.Services
+@inject AuthService AuthService
+
+<PageTitle>Chat - Kram</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+else if (!isAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Title="Authentication Required" Text="Please log in to view this chat." />
+}
+else
+{
+    <VendorChat ConversationId="@ConversationId" FullScreen="true" />
+}
+
+@code {
+    [Parameter] public Guid ConversationId { get; set; }
+
+    private bool isAuthChecked;
+    private bool isAuthenticated;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthChecked = false;
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        isAuthChecked = true;
+    }
+}
+

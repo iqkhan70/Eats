@@ -1236,6 +1236,86 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    // ----- Generic vendor/customer chat -----
+
+    [HttpPost("vendor-chat/conversations")]
+    [Authorize]
+    public async Task<IActionResult> CreateOrGetVendorConversation([FromBody] object request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/Chat/vendor/conversations", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating vendor conversation");
+            return StatusCode(500, new { error = "Failed to create conversation" });
+        }
+    }
+
+    [HttpGet("vendor-chat/conversations/mine")]
+    [Authorize]
+    public async Task<IActionResult> GetMyVendorConversations()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/Chat/vendor/conversations/mine");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting my vendor conversations");
+            return StatusCode(500, new { error = "Failed to get conversations" });
+        }
+    }
+
+    [HttpGet("vendor-chat/inbox")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorInbox([FromQuery] int take = 100)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync($"/api/Chat/vendor/inbox?take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting vendor inbox");
+            return StatusCode(500, new { error = "Failed to get vendor inbox" });
+        }
+    }
+
+    [HttpGet("vendor-chat/conversations/{conversationId}/messages")]
+    [Authorize]
+    public async Task<IActionResult> GetVendorConversationMessages(Guid conversationId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync($"/api/Chat/vendor/conversations/{conversationId}/messages");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting vendor conversation messages");
+            return StatusCode(500, new { error = "Failed to get messages" });
+        }
+    }
+
     // ----------------------------
     // Vendor endpoints
     // ----------------------------

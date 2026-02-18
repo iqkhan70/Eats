@@ -628,6 +628,12 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
   if [ "$ENV_ARG" = "production" ] && [ "$HTTPS_ONLY" = "true" ] && [ -n "$DOMAIN" ]; then
     $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram/nginx/ssl && if ! [ -f /opt/kram/nginx/ssl/cert.pem ]; then openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /opt/kram/nginx/ssl/key.pem -out /opt/kram/nginx/ssl/cert.pem -subj \"/CN=$DOMAIN\" 2>/dev/null && echo 'Self-signed cert created'; fi"
   fi
+  # Copy compose to the same relative path as in the repo so:
+  # - volume mounts (../../nginx/...) resolve correctly
+  # - helper scripts (mysql-init.sh, apply-*-migrations.sh) can run without path mismatches
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "mkdir -p /opt/kram/deploy/digitalocean"
+  $SCP_CMD "$COMPOSE_FILE" "$DROPLET_USER@$DROPLET_IP:/opt/kram/deploy/digitalocean/docker-compose.prod.yml"
+  # Back-compat: also keep a copy at /opt/kram/docker-compose.prod.yml for any older docs/scripts.
   $SCP_CMD "$COMPOSE_FILE" "$DROPLET_USER@$DROPLET_IP:/opt/kram/docker-compose.prod.yml"
   # Production with HTTPS: include 443 block using self-signed cert so the app is served (browser will show cert warning until you run setup-https)
   USE_SELF_SIGNED="0"
@@ -674,7 +680,7 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
     fi
     
     # Try pull, capture output
-    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
     
     # Check if it's a 503 error
     if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
@@ -694,7 +700,7 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
   done
   
   echo -e "${GREEN}Starting containers${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f docker-compose.prod.yml --env-file .env up -d"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
   echo ""
 
   # Step 5: MySQL init (create DBs)

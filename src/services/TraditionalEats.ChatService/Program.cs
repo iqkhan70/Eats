@@ -93,7 +93,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chatHub"))
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    (path.StartsWithSegments("/chatHub") || path.StartsWithSegments("/vendorChatHub")))
                 {
                     context.Token = accessToken;
                 }
@@ -125,6 +126,7 @@ app.MapControllers();
 
 // SignalR Hub
 app.MapHub<OrderChatHub>("/chatHub");
+app.MapHub<VendorChatHub>("/vendorChatHub");
 
 // Run migrations at startup
 using (var scope = app.Services.CreateScope())

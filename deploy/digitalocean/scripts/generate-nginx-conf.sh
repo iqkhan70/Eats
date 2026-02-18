@@ -90,6 +90,41 @@ else
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
+        # SignalR Chat Hub (ChatService) - WebSocket/LongPolling support
+        location /chatHub {
+            proxy_pass http://chat_service/chatHub;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_read_timeout 86400;
+            proxy_send_timeout 86400;
+        }
+        # SignalR Vendor Chat Hub (ChatService)
+        location /vendorChatHub {
+            proxy_pass http://chat_service/vendorChatHub;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_read_timeout 86400;
+            proxy_send_timeout 86400;
+        }
+        # ChatService REST API endpoints
+        location /api/Chat/ {
+            proxy_pass http://chat_service/api/Chat/;
+            proxy_http_version 1.1;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
         location /health {
             access_log off;
             return 200 "ok\n";
@@ -144,6 +179,19 @@ if [ -n "$DOMAIN" ] && { [ "${CERTS_READY:-0}" = "1" ] || [ "$USE_SELF_SIGNED_CE
         # SignalR Chat Hub (ChatService) - WebSocket/LongPolling support
         location /chatHub {
             proxy_pass http://chat_service/chatHub;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_read_timeout 86400;
+            proxy_send_timeout 86400;
+        }
+        # SignalR Vendor Chat Hub (ChatService)
+        location /vendorChatHub {
+            proxy_pass http://chat_service/vendorChatHub;
             proxy_http_version 1.1;
             proxy_set_header Upgrade \$http_upgrade;
             proxy_set_header Connection "upgrade";

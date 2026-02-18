@@ -294,6 +294,14 @@ console.log("FIRST ITEM", response.data?.[0]);
           <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Menu</Text>
+        <TouchableOpacity
+          onPress={() => router.push(`/restaurants/${restaurantId}/chat`)}
+          style={styles.chatButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chatbubbles-outline" size={24} color="#333" />
+        </TouchableOpacity>
       </View>
 
       {/* Tabs */}
@@ -470,7 +478,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
   },
   backButton: { marginRight: 12 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#333' },
+  title: { flex: 1, fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' },
+  chatButton: { marginLeft: 12 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   tabsContainer: {
     flexDirection: 'row',

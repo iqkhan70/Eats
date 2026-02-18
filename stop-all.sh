@@ -3,8 +3,19 @@
 
 SESSION="eats"
 
-# Ports used by start-all.sh services (5000-5009, 5011 AI, 5012 Chat, 5101 WebBff, 5102 MobileBff, 5300 WebApp)
-PORTS="5000 5001 5002 5003 5004 5005 5006 5007 5008 5009 5011 5012 5101 5102 5143 5144 5300 5301"
+# Ports used by start-all.sh services.
+# Note: keep this list in sync with the Kestrel endpoints across services.
+# Common mapping in this repo:
+# - 5000..5009: core microservices
+# - 5010: SupportService
+# - 5011: AIService
+# - 5012: ChatService (SignalR + REST)
+# - 5013: ReviewService
+# - 5014: DocumentService
+# - 5101: WebBff
+# - 5102: MobileBff
+# - 5300: WebApp
+PORTS="5000 5001 5002 5003 5004 5005 5006 5007 5008 5009 5010 5011 5012 5013 5014 5101 5102 5143 5144 5300 5301"
 
 echo "🛑 Stopping all services..."
 
@@ -19,6 +30,15 @@ fi
 
 # 2. Kill any leftover dotnet processes running TraditionalEats services
 if command -v pkill &>/dev/null; then
+    # dotnet watch can occasionally leave child processes around even after tmux is killed
+    if pgrep -f "dotnet\\s+watch\\s+run" >/dev/null 2>&1; then
+        echo "   Killing leftover dotnet watch processes..."
+        pkill -f "dotnet\\s+watch\\s+run" 2>/dev/null || true
+        sleep 1
+        pkill -9 -f "dotnet\\s+watch\\s+run" 2>/dev/null || true
+        echo "   ✓ Dotnet watch processes killed"
+    fi
+
     if pgrep -f "dotnet.*TraditionalEats" >/dev/null 2>&1; then
         echo "   Killing leftover dotnet (TraditionalEats) processes..."
         pkill -f "dotnet.*TraditionalEats" 2>/dev/null || true

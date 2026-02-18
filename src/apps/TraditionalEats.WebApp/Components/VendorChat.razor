@@ -1,0 +1,297 @@
+@using Microsoft.Extensions.Configuration
+@using Microsoft.AspNetCore.Components
+@using Radzen
+@using Radzen.Blazor
+@using TraditionalEats.WebApp.Services
+@inject VendorChatService VendorChatService
+@inject AuthService AuthService
+@inject IConfiguration Configuration
+@inject ILogger<VendorChat> Logger
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+
+<RadzenCard
+    Style="@(FullScreen ? "flex: 1; min-height: 0; display: flex; flex-direction: column; max-height: 100%;" : "max-height: 500px; display: flex; flex-direction: column;")">
+    <RadzenStack Gap="1rem" Style="flex: 1; overflow: hidden; min-height: 0; display: flex; flex-direction: column;">
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+            AlignItems="AlignItems.Center" Style="flex-shrink: 0;">
+            <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">
+                <RadzenIcon Icon="forum" Style="margin-right: 0.5rem;" />
+                Vendor Chat
+            </RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                @if (FullScreen)
+                {
+                    <RadzenButton Icon="refresh" Text="Refresh" Variant="Variant.Flat" Size="ButtonSize.Small"
+                        Click="@OnRefresh" Disabled="@loadingMessages" Title="Reload messages" />
+                }
+                @if (isConnected)
+                {
+                    <RadzenBadge Text="Connected" Variant="Variant.Flat" BadgeStyle="BadgeStyle.Success" Size="BadgeSize.Small" />
+                }
+                else
+                {
+                    <RadzenBadge Text="Disconnected" Variant="Variant.Flat" BadgeStyle="BadgeStyle.Light" Size="BadgeSize.Small" />
+                    @if (!string.IsNullOrEmpty(connectionError))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-danger); margin-left: 0.5rem;">
+                            @connectionError
+                        </RadzenText>
+                    }
+                }
+            </RadzenStack>
+        </RadzenStack>
+
+        <div id="@messagesContainerId"
+            style="flex: 1; min-height: 0; overflow-y: auto; border: 1px solid var(--rz-border-color); border-radius: 4px; padding: 1rem; background-color: var(--rz-base-background-color);"
+            @ref="messagesContainer">
+            @if (loadingMessages)
+            {
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            }
+            else if (!messages.Any())
+            {
+                <RadzenStack Gap="0.5rem" Style="align-items: center; padding: 2rem;">
+                    <RadzenIcon Icon="forum" Style="font-size: 48px; color: var(--rz-text-secondary-color);" />
+                    <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color); text-align: center;">
+                        No messages yet. Ask the vendor a question!
+                    </RadzenText>
+                </RadzenStack>
+            }
+            else
+            {
+                <RadzenStack Gap="1rem">
+                    @foreach (var message in messages)
+                    {
+                        <div style="@GetMessageStyle(message)">
+                            <RadzenStack Gap="0.25rem">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                    <RadzenText TextStyle="TextStyle.Body2" Style="font-weight: bold; color: var(--rz-text-secondary-color);">
+                                        @GetSenderLabel(message)
+                                    </RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); font-size: 0.75rem;">
+                                        @message.SentAt.ToString("HH:mm")
+                                    </RadzenText>
+                                </RadzenStack>
+                                <RadzenText TextStyle="TextStyle.Body1" Style="white-space: pre-wrap; word-wrap: break-word;">
+                                    @message.Message
+                                </RadzenText>
+                            </RadzenStack>
+                        </div>
+                    }
+                </RadzenStack>
+            }
+        </div>
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.End" Style="flex-shrink: 0;">
+            <div id="@inputWrapperId" style="flex: 1;">
+                <RadzenTextArea @bind-Value="@newMessage"
+                    Placeholder="@(isConnected ? "Type your message..." : "Sign in and connect to chat...")" Rows="2"
+                    Style="flex: 1; width: 100%;" Disabled="@sendingMessage" />
+            </div>
+            <RadzenButton Icon="send" Text="Send" Click="@SendMessage"
+                Disabled="@(!isConnected || string.IsNullOrWhiteSpace(newMessage) || sendingMessage)"
+                Variant="Variant.Filled" />
+        </RadzenStack>
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    [Parameter] public Guid ConversationId { get; set; }
+    [Parameter] public bool FullScreen { get; set; }
+
+    private List<VendorChatMessage> messages = new();
+    private string newMessage = string.Empty;
+    private bool loadingMessages = true;
+    private bool sendingMessage = false;
+    private bool isConnected = false;
+    private string connectionError = string.Empty;
+    private ElementReference messagesContainer;
+    private Guid? currentUserId;
+    private string messagesContainerId => $"vendor-chat-messages-{ConversationId:N}";
+    private string inputWrapperId => $"vendor-chat-input-{ConversationId:N}";
+    private int _lastMessageCount;
+    private DotNetObjectReference<VendorChat>? _dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var token = await AuthService.GetAccessTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+            currentUserId = await AuthService.GetUserIdAsync();
+
+        await LoadMessages();
+
+        // Hub URL: configured value, or derive from current origin
+        var configuredHubUrl = Configuration["VendorChatHubUrl"];
+        string hubUrl;
+        if (!string.IsNullOrWhiteSpace(configuredHubUrl) && (configuredHubUrl.StartsWith("http://") || configuredHubUrl.StartsWith("https://")))
+        {
+            hubUrl = configuredHubUrl;
+        }
+        else
+        {
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var isLocalhost = string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase) || baseUri.Host == "127.0.0.1";
+            hubUrl = isLocalhost
+                ? "http://localhost:5012/vendorChatHub"
+                : $"{baseUri.Scheme}://{baseUri.Authority}/vendorChatHub";
+        }
+
+        VendorChatService.MessageReceived += OnMessageReceived;
+        VendorChatService.Error += OnError;
+        VendorChatService.ConnectionStateChanged += OnConnectionStateChanged;
+
+        connectionError = string.Empty;
+        await VendorChatService.ConnectAsync(hubUrl);
+        isConnected = VendorChatService.IsConnected;
+
+        if (isConnected)
+        {
+            await VendorChatService.JoinConversationAsync(ConversationId);
+        }
+        else if (string.IsNullOrEmpty(token))
+        {
+            connectionError = "Sign in to chat.";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("attachChatEnterToSend", inputWrapperId, _dotNetRef);
+            }
+            catch { }
+            await ScrollToBottom();
+        }
+        if (messages.Count != _lastMessageCount)
+        {
+            _lastMessageCount = messages.Count;
+            await ScrollToBottom();
+        }
+    }
+
+    private async Task LoadMessages()
+    {
+        try
+        {
+            loadingMessages = true;
+            StateHasChanged();
+            messages = await VendorChatService.GetMessagesAsync(ConversationId) ?? new List<VendorChatMessage>();
+            await ScrollToBottom();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading vendor chat messages");
+        }
+        finally
+        {
+            loadingMessages = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnRefresh() => await LoadMessages();
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(newMessage) || !isConnected || sendingMessage) return;
+
+        try
+        {
+            sendingMessage = true;
+            var text = newMessage.Trim();
+            newMessage = string.Empty;
+            StateHasChanged();
+            await VendorChatService.SendMessageAsync(ConversationId, text);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error sending vendor chat message");
+        }
+        finally
+        {
+            sendingMessage = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnMessageReceived(VendorChatMessage message)
+    {
+        if (message.ConversationId != ConversationId) return;
+        messages = new List<VendorChatMessage>(messages) { message };
+        InvokeAsync(async () =>
+        {
+            await ScrollToBottom();
+            StateHasChanged();
+        });
+    }
+
+    private void OnError(string error)
+    {
+        isConnected = false;
+        connectionError = error;
+        StateHasChanged();
+    }
+
+    private void OnConnectionStateChanged(bool connected)
+    {
+        isConnected = connected;
+        if (connected) connectionError = string.Empty;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetMessageStyle(VendorChatMessage message)
+    {
+        var isOwn = currentUserId.HasValue && message.SenderId == currentUserId.Value;
+        var bg = isOwn ? "var(--rz-primary-lighter)" : "var(--rz-base-100)";
+        var ml = isOwn ? "auto" : "0";
+        var mr = isOwn ? "0" : "auto";
+        return "padding: 0.75rem; border-radius: 8px; background-color: " + bg + "; " +
+               "margin-left: " + ml + "; margin-right: " + mr + "; " +
+               "max-width: 70%; border: 1px solid var(--rz-border-color);";
+    }
+
+    private string GetSenderLabel(VendorChatMessage message)
+    {
+        if (!string.IsNullOrWhiteSpace(message.SenderDisplayName))
+            return message.SenderDisplayName.Trim();
+        return message.SenderRole;
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await Task.Delay(50);
+            await JSRuntime.InvokeVoidAsync("scrollChatMessagesToBottom", messagesContainerId);
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task SendMessageFromJs(string? textFromTextarea)
+    {
+        if (!string.IsNullOrWhiteSpace(textFromTextarea))
+            newMessage = textFromTextarea;
+        await SendMessage();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
+        if (VendorChatService != null)
+        {
+            VendorChatService.MessageReceived -= OnMessageReceived;
+            VendorChatService.Error -= OnError;
+            VendorChatService.ConnectionStateChanged -= OnConnectionStateChanged;
+            await VendorChatService.LeaveConversationAsync(ConversationId);
+            await VendorChatService.DisconnectAsync();
+        }
+    }
+}
+

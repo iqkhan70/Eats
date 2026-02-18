@@ -15,9 +15,11 @@
 <PageTitle>Menu - Kram</PageTitle>
 
 <RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
-    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Style="width: 100%;">
         <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
-        <RadzenText TextStyle="TextStyle.H1">Menu</RadzenText>
+        <RadzenText TextStyle="TextStyle.H1" Style="flex: 1;">Menu</RadzenText>
+        <RadzenButton Text="Chat" Icon="forum" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                      Click="@GoToVendorChat" Style="margin-left: 0.75rem;" />
     </RadzenStack>
 
     @if (loading)
@@ -196,6 +198,11 @@
     private void GoBack()
     {
         NavigationManager.NavigateTo("/restaurants");
+    }
+
+    private void GoToVendorChat()
+    {
+        NavigationManager.NavigateTo($"/restaurants/{RestaurantId}/chat");
     }
 
     private void ViewItemDetails(MenuItemDto item)

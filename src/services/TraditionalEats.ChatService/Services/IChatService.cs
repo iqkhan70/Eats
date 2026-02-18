@@ -13,4 +13,15 @@ public interface IChatService
     Task MarkMessagesAsReadAsync(Guid orderId, Guid userId);
     Task UpdateLastReadAsync(Guid orderId, Guid userId);
     Task<int> GetUnreadMessageCountAsync(Guid orderId, Guid userId);
+
+    // ----------------------------
+    // Generic vendor/customer chat
+    // ----------------------------
+    Task<VendorConversation> GetOrCreateVendorConversationAsync(Guid restaurantId, Guid customerId, string? customerDisplayName);
+    Task<List<VendorConversation>> GetCustomerVendorConversationsAsync(Guid customerId);
+    Task<List<VendorConversation>> GetVendorInboxAsync(Guid vendorUserId, string? bearerToken);
+    Task<List<VendorConversation>> GetAdminVendorInboxAsync(int take = 100);
+    Task<bool> VerifyVendorConversationAccessAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
+    Task<List<VendorChatMessage>> GetVendorMessagesAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
+    Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message);
 }

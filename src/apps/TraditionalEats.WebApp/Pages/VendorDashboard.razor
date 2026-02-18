@@ -19,6 +19,7 @@
         <RadzenText TextStyle="TextStyle.H2">@HeaderText</RadzenText>
 
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+            <RadzenButton Text="Messages" Icon="forum" Click="@(() => Navigation.NavigateTo("/vendor/messages"))" Variant="Variant.Outlined" />
             <RadzenButton Text="Documents" Icon="description" Click="@(() => Navigation.NavigateTo("/vendor/documents"))" Variant="Variant.Outlined" />
             <RadzenButton Text="View Orders" Icon="shopping_cart" Click="@(() => Navigation.NavigateTo("/vendor/orders"))" Variant="Variant.Outlined" />
             @if (CanCreateRestaurants)

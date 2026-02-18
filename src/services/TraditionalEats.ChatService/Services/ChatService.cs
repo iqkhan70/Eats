@@ -309,4 +309,234 @@ public class ChatService : IChatService
 
         return unreadCount;
     }
+
+    // ----------------------------
+    // Generic vendor/customer chat
+    // ----------------------------
+
+    public async Task<VendorConversation> GetOrCreateVendorConversationAsync(Guid restaurantId, Guid customerId, string? customerDisplayName)
+    {
+        // One conversation per (RestaurantId, CustomerId)
+        var existing = await _context.VendorConversations
+            .FirstOrDefaultAsync(c => c.RestaurantId == restaurantId && c.CustomerId == customerId);
+
+        if (existing != null)
+        {
+            // Refresh cached display name if we have one and it's missing
+            if (!string.IsNullOrWhiteSpace(customerDisplayName) && string.IsNullOrWhiteSpace(existing.CustomerDisplayName))
+            {
+                existing.CustomerDisplayName = customerDisplayName.Trim();
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+            return existing;
+        }
+
+        var conversation = new VendorConversation
+        {
+            ConversationId = Guid.NewGuid(),
+            RestaurantId = restaurantId,
+            CustomerId = customerId,
+            CustomerDisplayName = string.IsNullOrWhiteSpace(customerDisplayName) ? null : customerDisplayName.Trim(),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _context.VendorConversations.Add(conversation);
+
+        try
+        {
+            await _context.SaveChangesAsync();
+            return conversation;
+        }
+        catch (DbUpdateException)
+        {
+            // Unique constraint race: fetch and return the existing record
+            var raced = await _context.VendorConversations
+                .FirstOrDefaultAsync(c => c.RestaurantId == restaurantId && c.CustomerId == customerId);
+            if (raced != null) return raced;
+            throw;
+        }
+    }
+
+    public async Task<List<VendorConversation>> GetCustomerVendorConversationsAsync(Guid customerId)
+    {
+        return await _context.VendorConversations
+            .Where(c => c.CustomerId == customerId)
+            .OrderByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<VendorConversation>> GetVendorInboxAsync(Guid vendorUserId, string? bearerToken)
+    {
+        // Determine restaurants owned by this vendor via RestaurantService (requires vendor JWT)
+        var restaurantClient = _httpClientFactory.CreateClient("RestaurantService");
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            restaurantClient.DefaultRequestHeaders.Remove("Authorization");
+            restaurantClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {bearerToken.Trim()}");
+        }
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await restaurantClient.GetAsync("/api/restaurant/vendor/my-restaurants");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "GetVendorInboxAsync: Failed to call RestaurantService for vendor {VendorUserId}", vendorUserId);
+            return new List<VendorConversation>();
+        }
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogWarning("GetVendorInboxAsync: RestaurantService returned {Status} for vendor {VendorUserId}. Body={Body}",
+                resp.StatusCode, vendorUserId, body);
+            return new List<VendorConversation>();
+        }
+
+        var json = await resp.Content.ReadAsStringAsync();
+        var restaurantIds = new List<Guid>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    // Support both camelCase and PascalCase
+                    if (el.TryGetProperty("restaurantId", out var r) || el.TryGetProperty("RestaurantId", out r))
+                    {
+                        var s = r.ValueKind == System.Text.Json.JsonValueKind.String ? r.GetString() : null;
+                        if (!string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out var id)) restaurantIds.Add(id);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GetVendorInboxAsync: Failed to parse RestaurantService response for vendor {VendorUserId}", vendorUserId);
+            return new List<VendorConversation>();
+        }
+
+        if (restaurantIds.Count == 0) return new List<VendorConversation>();
+
+        return await _context.VendorConversations
+            .Where(c => restaurantIds.Contains(c.RestaurantId))
+            .OrderByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<VendorConversation>> GetAdminVendorInboxAsync(int take = 100)
+    {
+        take = Math.Clamp(take, 1, 500);
+        return await _context.VendorConversations
+            .OrderByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .Take(take)
+            .ToListAsync();
+    }
+
+    public async Task<bool> VerifyVendorConversationAccessAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null)
+    {
+        if (userRoles == null) return false;
+        var roles = userRoles.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
+        if (roles.Count == 0) return false;
+
+        if (roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        var conversation = await _context.VendorConversations.FirstOrDefaultAsync(c => c.ConversationId == conversationId);
+        if (conversation == null) return false;
+
+        if (roles.Any(r => string.Equals(r, "Customer", StringComparison.OrdinalIgnoreCase)))
+        {
+            return conversation.CustomerId == userId;
+        }
+
+        if (roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase)))
+        {
+            return await VerifyRestaurantOwnerAsync(conversation.RestaurantId, userId, bearerToken);
+        }
+
+        return false;
+    }
+
+    public async Task<List<VendorChatMessage>> GetVendorMessagesAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null)
+    {
+        var hasAccess = await VerifyVendorConversationAccessAsync(conversationId, userId, userRoles, bearerToken);
+        if (!hasAccess) return new List<VendorChatMessage>();
+
+        return await _context.VendorMessages
+            .Where(m => m.ConversationId == conversationId)
+            .OrderBy(m => m.SentAt)
+            .ToListAsync();
+    }
+
+    public async Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message)
+    {
+        var vendorMessage = new VendorChatMessage
+        {
+            MessageId = Guid.NewGuid(),
+            ConversationId = conversationId,
+            SenderId = senderId,
+            SenderRole = senderRole,
+            SenderDisplayName = senderDisplayName,
+            Message = message,
+            SentAt = DateTime.UtcNow,
+            IsRead = false
+        };
+
+        _context.VendorMessages.Add(vendorMessage);
+
+        var convo = await _context.VendorConversations.FirstOrDefaultAsync(c => c.ConversationId == conversationId);
+        if (convo != null)
+        {
+            convo.UpdatedAt = DateTime.UtcNow;
+            convo.LastMessageAt = vendorMessage.SentAt;
+        }
+
+        await _context.SaveChangesAsync();
+        return vendorMessage;
+    }
+
+    private async Task<bool> VerifyRestaurantOwnerAsync(Guid restaurantId, Guid vendorUserId, string? bearerToken)
+    {
+        var restaurantClient = _httpClientFactory.CreateClient("RestaurantService");
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            restaurantClient.DefaultRequestHeaders.Remove("Authorization");
+            restaurantClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {bearerToken.Trim()}");
+        }
+
+        HttpResponseMessage resp;
+        try
+        {
+            // Public endpoint; token not strictly required but passing it is fine.
+            resp = await restaurantClient.GetAsync($"/api/restaurant/{restaurantId}");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "VerifyRestaurantOwnerAsync: Failed to call RestaurantService for restaurant {RestaurantId}", restaurantId);
+            return false;
+        }
+
+        if (!resp.IsSuccessStatusCode)
+            return false;
+
+        var json = await resp.Content.ReadAsStringAsync();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (!(root.TryGetProperty("ownerId", out var ownerEl) || root.TryGetProperty("OwnerId", out ownerEl)))
+                return false;
+            var ownerStr = ownerEl.ValueKind == System.Text.Json.JsonValueKind.String ? ownerEl.GetString() : null;
+            return !string.IsNullOrWhiteSpace(ownerStr) && Guid.TryParse(ownerStr, out var ownerId) && ownerId == vendorUserId;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
