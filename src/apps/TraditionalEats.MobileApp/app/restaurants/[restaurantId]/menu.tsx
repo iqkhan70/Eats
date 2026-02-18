@@ -239,7 +239,18 @@ console.log("FIRST ITEM", response.data?.[0]);
       setCurrentCartId(cartIdToUse);
       // Use setTimeout to ensure Alert doesn't block navigation
       setTimeout(() => {
-        Alert.alert('Success', `${item.name} added to cart`);
+        Alert.alert(
+          'Added to cart',
+          `${item.name} added to cart.`,
+          [
+            {
+              text: 'View cart',
+              onPress: () => router.push('/(tabs)/cart'),
+            },
+            { text: 'Continue shopping', style: 'cancel' },
+          ],
+          { cancelable: true }
+        );
       }, 100);
     } catch (error: any) {
       console.error('Error adding to cart:', error);
@@ -294,14 +305,26 @@ console.log("FIRST ITEM", response.data?.[0]);
           <Ionicons name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Menu</Text>
-        <TouchableOpacity
-          onPress={() => router.push(`/restaurants/${restaurantId}/chat`)}
-          style={styles.chatButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chatbubbles-outline" size={24} color="#333" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => router.push(`/restaurants/${restaurantId}/chat`)}
+            style={styles.iconButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chatbubbles-outline" size={24} color="#333" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/cart')}
+            style={styles.iconButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="cart-outline" size={24} color="#333" />
+            {currentCartId ? <View style={styles.cartDot} /> : null}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -479,7 +502,19 @@ const styles = StyleSheet.create({
   },
   backButton: { marginRight: 12 },
   title: { flex: 1, fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' },
-  chatButton: { marginLeft: 12 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
+  iconButton: { padding: 2 },
+  cartDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#6200ee',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   tabsContainer: {
     flexDirection: 'row',
