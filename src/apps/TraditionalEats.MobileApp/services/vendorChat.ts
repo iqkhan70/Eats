@@ -99,6 +99,7 @@ export async function connectVendorChatHub(
             .senderDisplayName,
           message: msg.message ?? "",
           sentAt: msg.sentAt ?? new Date().toISOString(),
+          metadataJson: (msg as { metadataJson?: string }).metadataJson,
         });
       }
     } catch (e) {

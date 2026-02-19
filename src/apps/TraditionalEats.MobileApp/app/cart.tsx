@@ -20,17 +20,23 @@ import { authService } from "../services/auth";
 import { api } from "../services/api";
 import AppHeader from "../components/AppHeader";
 
+// Chat-driven custom requests are not real catalog menu items.
+// We send Guid.Empty + isCustomRequest and let MobileBff normalize it.
+const EMPTY_MENU_ITEM_ID = "00000000-0000-0000-0000-000000000000";
+
 export default function CartScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     customOrderAmount?: string;
     customOrderDescription?: string;
+    restaurantId?: string;
   }>();
 
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [customOrderCreated, setCustomOrderCreated] = useState(false);
+  const customOrderCreatingRef = React.useRef(false);
 
   const [deliveryAddress, setDeliveryAddress] = useState(
     "Delivery is not available yet, might be available later based on customer needs. Pickup only!",
@@ -55,41 +61,128 @@ export default function CartScreen() {
   // Handle custom order from payment request
   React.useEffect(() => {
     const handleCustomOrder = async () => {
-      if (params.customOrderAmount && !customOrderCreated && cart) {
+      if (!params.customOrderAmount || customOrderCreated) return;
+      if (customOrderCreatingRef.current) return;
+
+      const targetRestaurantId =
+        typeof params.restaurantId === "string" && params.restaurantId.trim()
+          ? params.restaurantId.trim()
+          : undefined;
+
+      customOrderCreatingRef.current = true;
+      try {
         const amount = parseFloat(params.customOrderAmount);
         if (!isNaN(amount) && amount > 0) {
+          // Ensure a cart exists for the target restaurant (if provided)
+          let currentCart = cart;
+
+          if (!currentCart) {
+            try {
+              const cartId = await cartService.createCart(targetRestaurantId);
+              const cartData = await cartService.getCart();
+              if (cartData) {
+                setCart(cartData);
+                currentCart = cartData;
+              } else {
+                throw new Error(`Cart created (${cartId}) but could not be loaded`);
+              }
+            } catch (error: any) {
+              console.error("Failed to create cart for custom order:", error);
+              Alert.alert("Error", "Failed to start an order for this payment request.");
+              return;
+            }
+          } else if (
+            targetRestaurantId &&
+            currentCart.restaurantId &&
+            currentCart.restaurantId !== targetRestaurantId
+          ) {
+            // Cart contains items from another vendor; ask user before replacing.
+            Alert.alert(
+              "Replace current cart?",
+              "Your cart has items from another vendor. To accept this payment request, we need to start a new cart for this vendor.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Replace",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await cartService.clearCart(currentCart!.cartId);
+                      await cartService.createCart(targetRestaurantId);
+                      const cartData = await cartService.getCart();
+                      setCart(cartData);
+                      if (cartData) {
+                        await createCustomOrderItem(
+                          cartData.cartId,
+                          amount,
+                          params.customOrderDescription,
+                        );
+                        if (!specialInstructions.trim() && params.customOrderDescription?.trim()) {
+                          setSpecialInstructions(params.customOrderDescription.trim());
+                        }
+                        setCustomOrderCreated(true);
+                      }
+                    } catch (e: any) {
+                      console.error("Failed to replace cart for custom order:", e);
+                      Alert.alert("Error", "Failed to start a new cart for this payment request.");
+                    }
+                  },
+                },
+              ],
+            );
+            return;
+          }
+
           try {
-            await createCustomOrderItem(amount, params.customOrderDescription);
+            await createCustomOrderItem(
+              currentCart.cartId,
+              amount,
+              params.customOrderDescription,
+            );
+            if (!specialInstructions.trim() && params.customOrderDescription?.trim()) {
+              setSpecialInstructions(params.customOrderDescription.trim());
+            }
             setCustomOrderCreated(true);
           } catch (error: any) {
             console.error("Failed to add custom order item:", error);
             Alert.alert("Error", "Failed to add custom order to cart");
           }
         }
+      } finally {
+        customOrderCreatingRef.current = false;
       }
     };
 
     handleCustomOrder();
-  }, [params.customOrderAmount, params.customOrderDescription, customOrderCreated, cart]);
+  }, [
+    params.customOrderAmount,
+    params.customOrderDescription,
+    params.restaurantId,
+    customOrderCreated,
+    cart,
+    specialInstructions,
+  ]);
 
   const checkAuthStatus = async () => {
     const authenticated = await authService.isAuthenticated();
     setIsAuthenticated(authenticated);
   };
 
-  const createCustomOrderItem = async (amount: number, description?: string) => {
-    if (!cart) return;
-
+  const createCustomOrderItem = async (
+    cartId: string,
+    amount: number,
+    description?: string,
+  ) => {
     try {
       const itemName = `Custom Order${description ? ` - ${description}` : ""}`;
 
       await cartService.addItemToCart(
-        cart.cartId,
-        // Use a special UUID for custom items
-        "00000000-0000-0000-0000-000000000000",
+        cartId,
+        EMPTY_MENU_ITEM_ID,
         itemName,
         amount,
         1,
+        true,
       );
 
       // Reload cart to show new item

@@ -13,6 +13,7 @@ namespace TraditionalEats.Mobile.Bff.Controllers;
 [Route("api/[controller]")]
 public class MobileBffController : ControllerBase
 {
+    private static readonly Guid CustomRequestMenuItemId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<MobileBffController> _logger;
     private readonly ICartSessionService _cartSessionService;
@@ -1155,8 +1156,18 @@ public class MobileBffController : ControllerBase
             if (request == null)
                 return BadRequest(new { error = "Request body is required and must be valid JSON" });
 
-            if (request.MenuItemId == Guid.Empty)
+            var effectiveMenuItemId = request.MenuItemId;
+            if (request.IsCustomRequest)
+            {
+                // Custom request items are not tied to catalog menu items.
+                // We map empty Guid to a stable synthetic id for cart storage.
+                if (effectiveMenuItemId == Guid.Empty)
+                    effectiveMenuItemId = CustomRequestMenuItemId;
+            }
+            else if (effectiveMenuItemId == Guid.Empty)
+            {
                 return BadRequest(new { error = "MenuItemId is required and must be a valid GUID" });
+            }
 
             if (string.IsNullOrWhiteSpace(request.Name))
                 return BadRequest(new { error = "Name is required" });
@@ -1167,14 +1178,14 @@ public class MobileBffController : ControllerBase
             if (request.Quantity <= 0)
                 return BadRequest(new { error = "Quantity must be positive" });
 
-            _logger.LogInformation("AddItemToCart: CartId={CartId}, MenuItemId={MenuItemId}, Name={Name}, Price={Price}, Quantity={Quantity}",
-                cartId, request.MenuItemId, request.Name, request.Price, request.Quantity);
+            _logger.LogInformation("AddItemToCart: CartId={CartId}, MenuItemId={MenuItemId}, EffectiveMenuItemId={EffectiveMenuItemId}, IsCustomRequest={IsCustomRequest}, Name={Name}, Price={Price}, Quantity={Quantity}",
+                cartId, request.MenuItemId, effectiveMenuItemId, request.IsCustomRequest, request.Name, request.Price, request.Quantity);
 
             var client = _httpClientFactory.CreateClient("OrderService");
 
             var orderServiceRequest = new
             {
-                MenuItemId = request.MenuItemId,
+                MenuItemId = effectiveMenuItemId,
                 Name = request.Name,
                 Price = request.Price,
                 Quantity = request.Quantity,
@@ -2284,6 +2295,9 @@ public record AddCartItemRequest
 {
     [System.Text.Json.Serialization.JsonPropertyName("menuItemId")]
     public Guid MenuItemId { get; init; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("isCustomRequest")]
+    public bool IsCustomRequest { get; init; }
 
     [System.Text.Json.Serialization.JsonPropertyName("name")]
     public string Name { get; init; } = string.Empty;

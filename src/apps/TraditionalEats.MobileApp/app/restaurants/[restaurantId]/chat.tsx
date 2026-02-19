@@ -100,7 +100,11 @@ export default function RestaurantChatScreen() {
               <Text style={styles.loadingText}>Starting chat...</Text>
             </View>
           ) : conversationId ? (
-            <VendorChat conversationId={conversationId} viewerRole="Customer" />
+            <VendorChat
+              conversationId={conversationId}
+              viewerRole="Customer"
+              restaurantId={restaurantId}
+            />
           ) : (
             <View style={styles.center}>
               <Text style={styles.errorText}>Could not start chat.</Text>

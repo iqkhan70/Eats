@@ -78,6 +78,7 @@ export async function connectChatHub(
           senderDisplayName: (msg as { senderDisplayName?: string }).senderDisplayName,
           message: msg.message ?? '',
           sentAt: msg.sentAt ?? new Date().toISOString(),
+          metadataJson: (msg as { metadataJson?: string }).metadataJson,
         });
       }
     } catch (e) {

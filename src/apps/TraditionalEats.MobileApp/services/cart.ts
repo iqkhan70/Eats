@@ -76,7 +76,8 @@ class CartService {
     menuItemId: string,
     name: string,
     price: number,
-    quantity: number = 1
+    quantity: number = 1,
+    isCustomRequest: boolean = false,
   ): Promise<void> {
     try {
       // Validate cartId
@@ -101,6 +102,7 @@ class CartService {
       
       const requestBody = {
         menuItemId: menuItemId,
+        isCustomRequest: isCustomRequest,
         name: name,
         price: price,
         quantity: quantity,

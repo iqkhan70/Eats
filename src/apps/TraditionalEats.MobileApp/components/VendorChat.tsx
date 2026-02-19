@@ -23,7 +23,12 @@ import {
   sendVendorMessage,
   type VendorChatMessage,
 } from "../services/vendorChat";
-import { createPaymentRequestMetadata } from "../types/paymentRequest";
+import {
+  createPaymentRequestMetadata,
+  isPaymentRequest,
+  parsePaymentRequest,
+  type PaymentRequestMetadata,
+} from "../types/paymentRequest";
 
 function isAuthError(message: string): boolean {
   const lower = (message || "").toLowerCase();
@@ -71,9 +76,12 @@ function formatTime(iso: string): string {
 export default function VendorChat({
   conversationId,
   viewerRole = "Customer",
+  restaurantId,
 }: {
   conversationId: string;
   viewerRole?: "Customer" | "Vendor" | "Admin";
+  /** Optional context for converting payment requests into a cart/order. */
+  restaurantId?: string;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<VendorChatMessage[]>([]);
@@ -230,6 +238,17 @@ export default function VendorChat({
     }
   };
 
+  const handleAcceptPayment = (paymentRequest: PaymentRequestMetadata) => {
+    router.push({
+      pathname: "/cart",
+      params: {
+        customOrderAmount: paymentRequest.amount.toString(),
+        customOrderDescription: paymentRequest.description || "Custom Order",
+        ...(restaurantId ? { restaurantId } : {}),
+      },
+    } as any);
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -280,6 +299,12 @@ export default function VendorChat({
               const isYou =
                 (msg.senderRole || "").trim().toLowerCase() ===
                 viewerRole.toLowerCase();
+
+              const paymentRequest =
+                msg.metadataJson && isPaymentRequest(msg.metadataJson)
+                  ? parsePaymentRequest(msg.metadataJson)
+                  : null;
+
               return (
                 <View
                   key={msg.messageId || `${msg.sentAt}-${msg.message?.slice(0, 10)}`}
@@ -295,6 +320,42 @@ export default function VendorChat({
                     <Text style={styles.messageTime}>{formatTime(msg.sentAt)}</Text>
                   </View>
                   <Text style={styles.messageBody}>{msg.message}</Text>
+
+                  {paymentRequest &&
+                  !isYou &&
+                  paymentRequest.status === "pending" &&
+                  viewerRole.toLowerCase() === "customer" ? (
+                    <View style={styles.paymentRequestContainer}>
+                      <View style={styles.paymentRequestHeader}>
+                        <Ionicons name="cash" size={20} color="#0097a7" />
+                        <Text style={styles.paymentRequestTitle}>
+                          Payment Request
+                        </Text>
+                      </View>
+                      {paymentRequest.description ? (
+                        <Text style={styles.paymentRequestDescription}>
+                          {paymentRequest.description}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.paymentRequestAmount}>
+                        ${paymentRequest.amount.toFixed(2)}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.acceptPaymentButton}
+                        onPress={() => handleAcceptPayment(paymentRequest)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color="#fff"
+                        />
+                        <Text style={styles.acceptPaymentButtonText}>
+                          Create Order
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
@@ -453,6 +514,51 @@ const styles = StyleSheet.create({
   messageSender: { fontSize: 12, fontWeight: "600", color: "#555" },
   messageTime: { fontSize: 11, color: "#888", marginLeft: 8 },
   messageBody: { fontSize: 14, color: "#333" },
+
+  paymentRequestContainer: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: "#e3f2fd",
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#0097a7",
+  },
+  paymentRequestHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  paymentRequestTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0097a7",
+  },
+  paymentRequestDescription: {
+    fontSize: 12,
+    color: "#555",
+    marginBottom: 6,
+  },
+  paymentRequestAmount: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#00796b",
+    marginBottom: 10,
+  },
+  acceptPaymentButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0097a7",
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+  },
+  acceptPaymentButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
 
   inputRow: { flexDirection: "row", alignItems: "flex-end", marginTop: 12, gap: 8, paddingHorizontal: 12 },
   paymentButton: {
