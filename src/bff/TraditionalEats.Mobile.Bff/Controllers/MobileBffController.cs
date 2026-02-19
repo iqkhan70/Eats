@@ -1356,6 +1356,27 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpGet("vendor/restaurants/{restaurantId}/orders/{orderId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorOrder(Guid restaurantId, Guid orderId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
+
+            var response = await client.GetAsync($"/api/Order/vendor/restaurants/{restaurantId}/orders/{orderId}");
+            var content = await response.Content.ReadAsStringAsync();
+
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor order {OrderId} for restaurant {RestaurantId}", orderId, restaurantId);
+            return StatusCode(500, new { error = "Failed to fetch vendor order" });
+        }
+    }
+
     [HttpPut("orders/{orderId}/status")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)

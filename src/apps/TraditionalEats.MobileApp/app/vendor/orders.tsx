@@ -645,7 +645,15 @@ export default function VendorOrdersScreen() {
                 <TouchableOpacity
                   key={order.orderId}
                   style={styles.orderCardWrapper}
-                  onPress={() => router.push(`/orders/${order.orderId}`)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/vendor/orders/[orderId]",
+                      params: {
+                        orderId: order.orderId,
+                        restaurantId: order.restaurantId,
+                      },
+                    } as any)
+                  }
                   activeOpacity={0.85}
                 >
                   <BlurView

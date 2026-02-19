@@ -537,6 +537,29 @@ public class OrderController : ControllerBase
         }
     }
 
+    [HttpGet("vendor/restaurants/{restaurantId}/orders/{orderId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorOrder(Guid restaurantId, Guid orderId)
+    {
+        try
+        {
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null)
+                return NotFound(new { message = "Order not found" });
+
+            // Ensure the requested order belongs to the restaurant scope
+            if (order.RestaurantId != restaurantId)
+                return Forbid();
+
+            return Ok(order);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get vendor order {OrderId} for restaurant {RestaurantId}", orderId, restaurantId);
+            return StatusCode(500, new { message = "Failed to get vendor order" });
+        }
+    }
+
     [HttpGet("vendor/restaurants/{restaurantId}/orders/paged")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> GetVendorOrdersPaged(
