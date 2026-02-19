@@ -8,6 +8,7 @@ import { cartService } from '../../../services/cart';
 import ReviewDisplay, { Review } from '../../../components/ReviewDisplay';
 import ReviewRating from '../../../components/ReviewRating';
 import { authService } from '../../../services/auth';
+import AppHeader from '../../../components/AppHeader';
 
 interface MenuItem {
   menuItemId: string;
@@ -275,17 +276,7 @@ console.log("FIRST ITEM", response.data?.[0]);
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={handleBackPress} 
-            style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="chevron-back" size={28} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Menu</Text>
-        </View>
+        <AppHeader title="Menu" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6200ee" />
         </View>
@@ -295,152 +286,100 @@ console.log("FIRST ITEM", response.data?.[0]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={handleBackPress} 
-          style={styles.backButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chevron-back" size={28} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Menu</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={() => router.push(`/restaurants/${restaurantId}/chat`)}
-            style={styles.iconButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="chatbubbles-outline" size={24} color="#333" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/cart')}
-            style={styles.iconButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="cart-outline" size={24} color="#333" />
-            {currentCartId ? <View style={styles.cartDot} /> : null}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'menu' && styles.tabActive]}
-          onPress={() => setActiveTab('menu')}
-        >
-          <Ionicons 
-            name="restaurant" 
-            size={20} 
-            color={activeTab === 'menu' ? '#6200ee' : '#666'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'menu' && styles.tabTextActive]}>
-            Menu
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'reviews' && styles.tabActive]}
-          onPress={() => setActiveTab('reviews')}
-        >
-          <Ionicons 
-            name="star" 
-            size={20} 
-            color={activeTab === 'reviews' ? '#6200ee' : '#666'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'reviews' && styles.tabTextActive]}>
-            Reviews
-            {restaurantRating && restaurantRating.totalReviews > 0 && (
-              <Text style={styles.tabBadge}> ({restaurantRating.totalReviews})</Text>
-            )}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.scrollView}>
-        {activeTab === 'menu' ? (
-          <>
-        {categories.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryFilter}
-            contentContainerStyle={styles.categoryFilterContent}
-          >
+      <AppHeader
+        title="Menu"
+        right={(
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              style={[styles.categoryChip, selectedCategoryId === null && styles.categoryChipActive]}
-              onPress={() => filterByCategory(null)}
+              onPress={() => router.push(`/restaurants/${restaurantId}/chat`)}
+              style={styles.iconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.categoryChipText, selectedCategoryId === null && styles.categoryChipTextActive]}>
-                All
-              </Text>
+              <Ionicons name="chatbubbles-outline" size={24} color="#333" />
             </TouchableOpacity>
 
-            {categories.map(category => (
-              <TouchableOpacity
-                key={category.categoryId}
-                style={[styles.categoryChip, selectedCategoryId === category.categoryId && styles.categoryChipActive]}
-                onPress={() => filterByCategory(category.categoryId)}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    selectedCategoryId === category.categoryId && styles.categoryChipTextActive,
-                  ]}
-                >
-                  {category.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/cart')}
+              style={styles.iconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="cart-outline" size={24} color="#333" />
+              {currentCartId ? <View style={styles.cartDot} /> : null}
+            </TouchableOpacity>
+          </View>
         )}
+      />
 
-        {Object.entries(menuItemsByCategory).map(([categoryName, items]) => (
-          <View key={categoryName} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>{categoryName}</Text>
+      <ScrollView style={styles.container}>
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'menu' && styles.tabActive]}
+            onPress={() => setActiveTab('menu')}
+          >
+            <Ionicons name="restaurant" size={20} color={activeTab === 'menu' ? '#6200ee' : '#666'} />
+            <Text style={[styles.tabText, activeTab === 'menu' && styles.tabTextActive]}>Menu</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'reviews' && styles.tabActive]}
+            onPress={() => setActiveTab('reviews')}
+          >
+            <Ionicons name="star" size={20} color={activeTab === 'reviews' ? '#6200ee' : '#666'} />
+            <Text style={[styles.tabText, activeTab === 'reviews' && styles.tabTextActive]}>Reviews</Text>
+          </TouchableOpacity>
+        </View>
 
-            {items.map(item => (
-              <TouchableOpacity key={item.menuItemId} style={styles.menuItemCard} activeOpacity={0.8}>
-                <View style={styles.menuItemContent}>
-                  <Ionicons name="restaurant" size={40} color="#6200ee" style={styles.menuItemIcon} />
-                  <View style={styles.menuItemDetails}>
-                    <Text style={styles.menuItemName}>{item.name}</Text>
-                    {item.description && <Text style={styles.menuItemDescription}>{item.description}</Text>}
-                    <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
-                  </View>
+        {activeTab === 'menu' ? (
+          <>
+            {/* Category chips */}
+            <ScrollView horizontal contentContainerStyle={styles.categoriesScroll} showsHorizontalScrollIndicator={false}>
+              <TouchableOpacity style={[styles.categoryChip, selectedCategoryId === null && styles.categoryChipActive]} onPress={() => filterByCategory(null)}>
+                <Text style={[styles.categoryChipText, selectedCategoryId === null && styles.categoryChipTextActive]}>All</Text>
+              </TouchableOpacity>
+              {categories.map(category => (
+                <TouchableOpacity key={category.categoryId} style={[styles.categoryChip, selectedCategoryId === category.categoryId && styles.categoryChipActive]} onPress={() => filterByCategory(category.categoryId)}>
+                  <Text style={[styles.categoryChipText, selectedCategoryId === category.categoryId && styles.categoryChipTextActive]}>{category.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-                  {item.isAvailable ? (
-                    <TouchableOpacity
-                      style={[styles.addButton, addingItemId === item.menuItemId && styles.addButtonDisabled]}
-                      onPress={() => addToCart(item)}
-                      disabled={addingItemId === item.menuItemId}
-                    >
-                      {addingItemId === item.menuItemId ? (
-                        <ActivityIndicator size="small" color="#6200ee" />
+            {/* Menu items by category */}
+            {Object.entries(menuItemsByCategory).map(([categoryName, items]) => (
+              <View key={categoryName} style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>{categoryName}</Text>
+                {items.map(item => (
+                  <TouchableOpacity key={item.menuItemId} style={styles.menuItemCard} activeOpacity={0.8}>
+                    <View style={styles.menuItemContent}>
+                      <Ionicons name="restaurant" size={40} color="#6200ee" style={styles.menuItemIcon} />
+                      <View style={styles.menuItemDetails}>
+                        <Text style={styles.menuItemName}>{item.name}</Text>
+                        {item.description && <Text style={styles.menuItemDescription}>{item.description}</Text>}
+                        <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                      </View>
+
+                      {item.isAvailable ? (
+                        <TouchableOpacity style={[styles.addButton, addingItemId === item.menuItemId && styles.addButtonDisabled]} onPress={() => addToCart(item)} disabled={addingItemId === item.menuItemId}>
+                          {addingItemId === item.menuItemId ? <ActivityIndicator size="small" color="#6200ee" /> : <Ionicons name="add-circle" size={32} color="#6200ee" />}
+                        </TouchableOpacity>
                       ) : (
-                        <Ionicons name="add-circle" size={32} color="#6200ee" />
+                        <View style={styles.unavailableBadge}>
+                          <Text style={styles.unavailableText}>Unavailable</Text>
+                        </View>
                       )}
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.unavailableBadge}>
-                      <Text style={styles.unavailableText}>Unavailable</Text>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </View>
             ))}
-          </View>
-        ))}
 
-        {menuItems.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="restaurant-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No menu items found</Text>
-          </View>
-        )}
+            {menuItems.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="restaurant-outline" size={64} color="#ccc" />
+                <Text style={styles.emptyText}>No menu items found</Text>
+              </View>
+            )}
           </>
         ) : (
           <>
@@ -451,28 +390,18 @@ console.log("FIRST ITEM", response.data?.[0]);
                   <Text style={styles.reviewsTitle}>Reviews</Text>
                   {restaurantRating && restaurantRating.totalReviews > 0 && (
                     <View style={styles.ratingContainer}>
-                      <ReviewRating
-                        value={Math.round(restaurantRating.averageRating)}
-                        editable={false}
-                        showValue={true}
-                        size={24}
-                      />
-                      <Text style={styles.ratingText}>
-                        {restaurantRating.averageRating.toFixed(1)} ({restaurantRating.totalReviews} reviews)
-                      </Text>
+                      <ReviewRating value={Math.round(restaurantRating.averageRating)} editable={false} showValue={true} size={24} />
+                      <Text style={styles.ratingText}>{restaurantRating.averageRating.toFixed(1)} ({restaurantRating.totalReviews} reviews)</Text>
                     </View>
                   )}
                 </View>
                 {userCanReview && (
                   <View style={styles.reviewInfo}>
                     <Ionicons name="information-circle-outline" size={16} color="#666" />
-                    <Text style={styles.reviewInfoText}>
-                      Write reviews from your order history
-                    </Text>
+                    <Text style={styles.reviewInfoText}>Write reviews from your order history</Text>
                   </View>
                 )}
               </View>
-              
 
               {loadingReviews ? (
                 <View style={styles.reviewsLoadingContainer}>
@@ -550,23 +479,41 @@ const styles = StyleSheet.create({
     color: '#6200ee',
     fontWeight: '600',
   },
-  scrollView: { flex: 1 },
-  categoryFilter: { maxHeight: 50, marginVertical: 12 },
-  categoryFilterContent: { paddingHorizontal: 16, gap: 8 },
+  categoriesScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
   categoryChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginRight: 8,
+    backgroundColor: '#f0f0f0',
   },
-  categoryChipActive: { backgroundColor: '#6200ee', borderColor: '#6200ee' },
-  categoryChipText: { fontSize: 14, color: '#666', fontWeight: '500' },
-  categoryChipTextActive: { color: '#fff' },
-  categorySection: { marginBottom: 24, paddingHorizontal: 16 },
-  categoryTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 12 },
+  categoryChipActive: {
+    backgroundColor: '#6200ee',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    color: '#fff',
+  },
+  categorySection: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+  },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  scrollView: { flex: 1 },
+  categoryFilter: { maxHeight: 50, marginVertical: 12 },
+  categoryFilterContent: { paddingHorizontal: 16, gap: 8 },
   menuItemCard: {
     backgroundColor: '#fff',
     borderRadius: 12,

@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import VendorChat from "../../../components/VendorChat";
+import AppHeader from "../../../components/AppHeader";
 
 export default function VendorMessageThreadScreen() {
   const router = useRouter();
@@ -32,21 +33,7 @@ export default function VendorMessageThreadScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="chevron-back" size={28} color="#333" />
-          </TouchableOpacity>
-
-          <Text style={styles.title} numberOfLines={1}>
-            Chat
-          </Text>
-
-          <View style={styles.backButton} />
-        </View>
+        <AppHeader title="Chat" />
 
         <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
           <VendorChat conversationId={conversationId} />

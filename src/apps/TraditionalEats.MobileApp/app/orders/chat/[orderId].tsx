@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import OrderChat from "../../../components/OrderChat";
+import AppHeader from "../../../components/AppHeader";
 
 export default function OrderChatScreen() {
   const router = useRouter();
@@ -38,22 +39,7 @@ export default function OrderChatScreen() {
         // If you use a custom header (like you do), this still works well.
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        {/* Custom header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="chevron-back" size={28} color="#333" />
-          </TouchableOpacity>
-
-          <Text style={styles.title} numberOfLines={1}>
-            Order #{orderId.substring(0, 8)} – Chat
-          </Text>
-
-          <View style={styles.backButton} />
-        </View>
+        <AppHeader title={`Order #${orderId.substring(0, 8)} – Chat`} />
 
         {/* Chat */}
         <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>

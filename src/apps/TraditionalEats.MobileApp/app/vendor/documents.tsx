@@ -18,6 +18,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
+import AppHeader from "../../components/AppHeader";
 
 interface Document {
   documentId: string;
@@ -262,18 +263,11 @@ export default function VendorDocumentsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Documents</Text>
-        <TouchableOpacity
-          onPress={() => setUploadModalVisible(true)}
-          style={styles.uploadButton}
-        >
+      <AppHeader title="My Documents" right={(
+        <TouchableOpacity onPress={() => setUploadModalVisible(true)} style={styles.uploadButton}>
           <Ionicons name="add" size={24} color="#007AFF" />
         </TouchableOpacity>
-      </View>
+      )} />
 
       {/* Filter buttons */}
       <View style={styles.filterContainer}>

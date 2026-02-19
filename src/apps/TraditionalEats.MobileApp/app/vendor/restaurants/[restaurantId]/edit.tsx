@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { api } from "../../../../services/api";
 import { authService } from "../../../../services/auth";
+import AppHeader from "../../../../components/AppHeader";
 
 interface Restaurant {
   restaurantId: string;
@@ -124,16 +125,7 @@ export default function EditRestaurantScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Ionicons name="chevron-back" size={28} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Vendor</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <AppHeader title="Edit Vendor" />
 
       <ScrollView
         style={styles.scrollView}

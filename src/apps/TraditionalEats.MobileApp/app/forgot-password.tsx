@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authService } from "../services/auth";
+import AppHeader from "../components/AppHeader";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -44,15 +45,7 @@ export default function ForgotPasswordScreen() {
   if (sent) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={28} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Forgot Password</Text>
-        </View>
+        <AppHeader title="Forgot Password" />
         <View style={styles.form}>
           <Text style={styles.successText}>
             If an account with that email exists, a password reset link has been
@@ -75,14 +68,8 @@ export default function ForgotPasswordScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
-      <View style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Ionicons name="chevron-back" size={28} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Forgot Password</Text>
+      <View style={{ paddingTop: Math.max(insets.top + 20, 60) }}>
+        <AppHeader title="Forgot Password" />
       </View>
 
       <View style={styles.form}>

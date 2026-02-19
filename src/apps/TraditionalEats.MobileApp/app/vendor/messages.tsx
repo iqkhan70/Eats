@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { authService } from "../../services/auth";
+import AppHeader from "../../components/AppHeader";
 import { getVendorInbox, type VendorConversation } from "../../services/vendorChat";
 
 export default function VendorMessagesScreen() {
@@ -42,15 +43,11 @@ export default function VendorMessagesScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Messages</Text>
+      <AppHeader title="Messages" right={(
         <TouchableOpacity onPress={load} style={styles.backButton}>
           <Ionicons name="refresh" size={22} color="#333" />
         </TouchableOpacity>
-      </View>
+      )} />
 
       {loading ? (
         <View style={styles.center}>

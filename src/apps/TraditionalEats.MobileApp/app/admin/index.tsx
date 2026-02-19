@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import AppHeader from '../../components/AppHeader';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -102,13 +103,7 @@ export default function AdminDashboardScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Admin Dashboard</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <AppHeader title="Admin Dashboard" />
 
       <View style={styles.content}>
         <View style={styles.infoCard}>

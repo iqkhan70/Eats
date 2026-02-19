@@ -232,33 +232,19 @@ export default function VendorDashboardScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Vendors</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            onPress={() => router.push("/vendor/messages")}
-            style={styles.ordersButton}
-          >
-            <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push("/vendor/documents")}
-            style={styles.ordersButton}
-          >
-            <Ionicons name="document-text-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push("/vendor/orders")}
-            style={styles.ordersButton}
-          >
-            <Ionicons name="receipt-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleCreateRestaurant}
-            style={styles.addButton}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
+        <AppHeader title="My Vendors" right={(
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => router.push('/vendor/documents')} style={styles.iconButton}>
+              <Ionicons name="document-text-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/vendor/orders')} style={styles.iconButton}>
+              <Ionicons name="receipt-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/vendor/create-restaurant')} style={styles.iconButton}>
+              <Ionicons name="add" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )} />
       </View>
 
       {stripeOnboardingStatus && stripeOnboardingStatus !== "Complete" && (

@@ -29,12 +29,12 @@ export default function AppHeader({ title, showBack = true, onBack, right }: Pro
         <TouchableOpacity
           onPress={handleBack}
           style={styles.backButton}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{ top: 32, bottom: 32, left: 32, right: 32 }}
           activeOpacity={0.7}
           accessibilityLabel="Back"
         >
           <View style={styles.backCircle}>
-            <Ionicons name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} size={20} color="#333" />
+            <Ionicons name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} size={24} color="#fff" />
           </View>
         </TouchableOpacity>
       ) : (
@@ -55,33 +55,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingTop: 48,
+    backgroundColor: '#0097a7',
+    borderBottomWidth: 0,
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: -8,
   },
   backCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   title: {
     flex: 1,
     textAlign: 'center',
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#fff',
     marginHorizontal: 8,
   },
-  right: { width: 44, alignItems: 'center', justifyContent: 'center' },
+  right: { width: 56, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
 });

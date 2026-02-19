@@ -17,6 +17,7 @@ import { cartService } from "../../services/cart";
 import ReviewForm from "../../components/ReviewForm";
 import ReviewDisplay, { Review } from "../../components/ReviewDisplay";
 import { authService } from "../../services/auth";
+import AppHeader from "../../components/AppHeader";
 
 interface Order {
   orderId: string;
@@ -309,30 +310,7 @@ export default function OrderDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => {
-            try {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/(tabs)/orders');
-              }
-            } catch (error) {
-              console.error('Error navigating back:', error);
-              router.replace('/(tabs)/orders');
-            }
-          }} 
-          style={styles.backIcon}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chevron-back" size={28} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order Details</Text>
-        <View style={styles.backIcon} />
-      </View>
+      <AppHeader title="Order Details" />
 
       {/* Tabs */}
       {canReview && (
