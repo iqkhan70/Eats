@@ -172,7 +172,7 @@ public class ChatService : IChatService
         return false;
     }
 
-    public async Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string? senderDisplayName, string message)
+    public async Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string? senderDisplayName, string message, string? metadataJson = null)
     {
         var chatMessage = new ChatMessage
         {
@@ -183,7 +183,8 @@ public class ChatService : IChatService
             SenderDisplayName = senderDisplayName,
             Message = message,
             SentAt = DateTime.UtcNow,
-            IsRead = false
+            IsRead = false,
+            MetadataJson = metadataJson
         };
 
         _context.Messages.Add(chatMessage);
@@ -473,7 +474,7 @@ public class ChatService : IChatService
             .ToListAsync();
     }
 
-    public async Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message)
+    public async Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message, string? metadataJson = null)
     {
         var vendorMessage = new VendorChatMessage
         {
@@ -484,7 +485,8 @@ public class ChatService : IChatService
             SenderDisplayName = senderDisplayName,
             Message = message,
             SentAt = DateTime.UtcNow,
-            IsRead = false
+            IsRead = false,
+            MetadataJson = metadataJson
         };
 
         _context.VendorMessages.Add(vendorMessage);

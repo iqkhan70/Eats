@@ -6,7 +6,7 @@ public interface IChatService
 {
     Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, string userRole, string? bearerToken = null);
     Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
-    Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string? senderDisplayName, string message);
+    Task<ChatMessage> SaveMessageAsync(Guid orderId, Guid senderId, string senderRole, string? senderDisplayName, string message, string? metadataJson = null);
     Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, string userRole, string? bearerToken = null);
     Task<List<ChatMessage>> GetOrderMessagesAsync(Guid orderId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
     Task EnsureParticipantAsync(Guid orderId, Guid userId, string role);
@@ -23,5 +23,5 @@ public interface IChatService
     Task<List<VendorConversation>> GetAdminVendorInboxAsync(int take = 100);
     Task<bool> VerifyVendorConversationAccessAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
     Task<List<VendorChatMessage>> GetVendorMessagesAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
-    Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message);
+    Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message, string? metadataJson = null);
 }

@@ -12,7 +12,7 @@ import {
   Linking,
   Keyboard,
 } from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { cartService, Cart, CartItem } from "../services/cart";
@@ -22,10 +22,15 @@ import AppHeader from "../components/AppHeader";
 
 export default function CartScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    customOrderAmount?: string;
+    customOrderDescription?: string;
+  }>();
 
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [customOrderCreated, setCustomOrderCreated] = useState(false);
 
   const [deliveryAddress, setDeliveryAddress] = useState(
     "Delivery is not available yet, might be available later based on customer needs. Pickup only!",
@@ -47,9 +52,52 @@ export default function CartScreen() {
     }, []),
   );
 
+  // Handle custom order from payment request
+  React.useEffect(() => {
+    const handleCustomOrder = async () => {
+      if (params.customOrderAmount && !customOrderCreated && cart) {
+        const amount = parseFloat(params.customOrderAmount);
+        if (!isNaN(amount) && amount > 0) {
+          try {
+            await createCustomOrderItem(amount, params.customOrderDescription);
+            setCustomOrderCreated(true);
+          } catch (error: any) {
+            console.error("Failed to add custom order item:", error);
+            Alert.alert("Error", "Failed to add custom order to cart");
+          }
+        }
+      }
+    };
+
+    handleCustomOrder();
+  }, [params.customOrderAmount, params.customOrderDescription, customOrderCreated, cart]);
+
   const checkAuthStatus = async () => {
     const authenticated = await authService.isAuthenticated();
     setIsAuthenticated(authenticated);
+  };
+
+  const createCustomOrderItem = async (amount: number, description?: string) => {
+    if (!cart) return;
+
+    try {
+      const itemName = `Custom Order${description ? ` - ${description}` : ""}`;
+
+      await cartService.addItemToCart(
+        cart.cartId,
+        // Use a special UUID for custom items
+        "00000000-0000-0000-0000-000000000000",
+        itemName,
+        amount,
+        1,
+      );
+
+      // Reload cart to show new item
+      await loadCart();
+    } catch (error: any) {
+      console.error("Failed to add custom order item:", error);
+      throw error;
+    }
   };
 
   const loadCart = async () => {

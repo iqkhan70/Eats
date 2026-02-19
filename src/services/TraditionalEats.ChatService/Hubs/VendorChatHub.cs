@@ -72,7 +72,7 @@ public class VendorChatHub : Hub
         await Clients.Group(groupName).SendAsync("UserLeft", new { UserId = userId, ConversationId = conversationId });
     }
 
-    public async Task SendVendorMessage(Guid conversationId, string message)
+    public async Task SendVendorMessage(Guid conversationId, string message, string? metadataJson = null)
     {
         var userId = GetUserId();
         if (userId == null)
@@ -105,7 +105,7 @@ public class VendorChatHub : Hub
         var senderRole = roles.First();
         var senderDisplayName = GetSenderDisplayName();
 
-        var saved = await _chatService.SaveVendorMessageAsync(conversationId, userId.Value, senderRole, senderDisplayName, message.Trim());
+        var saved = await _chatService.SaveVendorMessageAsync(conversationId, userId.Value, senderRole, senderDisplayName, message.Trim(), metadataJson);
 
         var groupName = GetConversationGroupName(conversationId);
         await Clients.Group(groupName).SendAsync("ReceiveVendorMessage", new
@@ -116,7 +116,8 @@ public class VendorChatHub : Hub
             SenderRole = saved.SenderRole,
             SenderDisplayName = saved.SenderDisplayName,
             Message = saved.Message,
-            SentAt = saved.SentAt
+            SentAt = saved.SentAt,
+            MetadataJson = saved.MetadataJson
         });
     }
 

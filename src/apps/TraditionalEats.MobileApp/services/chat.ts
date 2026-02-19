@@ -16,6 +16,8 @@ export interface ChatMessage {
   senderDisplayName?: string;
   message: string;
   sentAt: string;
+  /** Optional JSON metadata for extensible message types (e.g., payment requests). */
+  metadataJson?: string;
 }
 
 let hubConnection: SignalR.HubConnection | null = null;
@@ -124,11 +126,11 @@ export async function leaveOrderChat(orderId: string): Promise<void> {
   }
 }
 
-export async function sendChatMessage(orderId: string, message: string): Promise<void> {
+export async function sendChatMessage(orderId: string, message: string, metadataJson?: string): Promise<void> {
   if (hubConnection?.state !== SignalR.HubConnectionState.Connected) {
     throw new Error('Not connected to chat');
   }
-  await hubConnection.invoke('SendMessage', orderId, message);
+  await hubConnection.invoke('SendMessage', orderId, message, metadataJson);
 }
 
 export async function markChatMessagesRead(orderId: string): Promise<void> {

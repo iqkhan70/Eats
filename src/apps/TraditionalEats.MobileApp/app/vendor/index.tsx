@@ -232,19 +232,17 @@ export default function VendorDashboardScreen() {
         >
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <AppHeader title="My Vendors" right={(
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => router.push('/vendor/documents')} style={styles.iconButton}>
-              <Ionicons name="document-text-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/vendor/orders')} style={styles.iconButton}>
-              <Ionicons name="receipt-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/vendor/create-restaurant')} style={styles.iconButton}>
-              <Ionicons name="add" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push('/vendor/documents')} style={styles.iconButton}>
+            <Ionicons name="document-text-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/vendor/orders')} style={styles.iconButton}>
+            <Ionicons name="receipt-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/vendor/create-restaurant')} style={styles.iconButton}>
+            <Ionicons name="add" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {stripeOnboardingStatus && stripeOnboardingStatus !== "Complete" && (
@@ -406,6 +404,14 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: "row",
     gap: 8,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  iconButton: {
+    padding: 8,
   },
   ordersButton: {
     padding: 8,

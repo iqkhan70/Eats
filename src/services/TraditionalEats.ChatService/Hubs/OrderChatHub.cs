@@ -131,7 +131,7 @@ public class OrderChatHub : Hub
     /// <summary>
     /// Send a message to the order chat
     /// </summary>
-    public async Task SendMessage(Guid orderId, string message)
+    public async Task SendMessage(Guid orderId, string message, string? metadataJson = null)
     {
         var userId = GetUserId();
         if (userId == null)
@@ -169,7 +169,7 @@ public class OrderChatHub : Hub
         var senderDisplayName = GetSenderDisplayName();
 
         // Save message to database
-        var chatMessage = await _chatService.SaveMessageAsync(orderId, userId.Value, userRole, senderDisplayName, message);
+        var chatMessage = await _chatService.SaveMessageAsync(orderId, userId.Value, userRole, senderDisplayName, message, metadataJson);
 
         // Broadcast to all participants in the order chat group
         var groupName = GetOrderGroupName(orderId);
@@ -181,7 +181,8 @@ public class OrderChatHub : Hub
             SenderRole = chatMessage.SenderRole,
             SenderDisplayName = chatMessage.SenderDisplayName,
             Message = chatMessage.Message,
-            SentAt = chatMessage.SentAt
+            SentAt = chatMessage.SentAt,
+            MetadataJson = chatMessage.MetadataJson
         });
 
         _logger.LogInformation("User {UserId} sent message to order {OrderId} chat", userId, orderId);

@@ -32,6 +32,7 @@ public class ChatDbContext : DbContext
             entity.Property(e => e.SentAt).HasColumnName("sent_at").IsRequired();
             entity.Property(e => e.IsRead).HasColumnName("is_read").HasDefaultValue(false);
             entity.Property(e => e.ReadAt).HasColumnName("read_at");
+            entity.Property(e => e.MetadataJson).HasColumnName("metadata_json").HasColumnType("JSON");
 
             entity.HasIndex(e => e.OrderId);
             entity.HasIndex(e => e.SenderId);
@@ -86,6 +87,7 @@ public class ChatDbContext : DbContext
             entity.Property(e => e.SentAt).HasColumnName("sent_at").IsRequired();
             entity.Property(e => e.IsRead).HasColumnName("is_read").HasDefaultValue(false);
             entity.Property(e => e.ReadAt).HasColumnName("read_at");
+            entity.Property(e => e.MetadataJson).HasColumnName("metadata_json").HasColumnType("JSON");
 
             entity.HasIndex(e => e.ConversationId);
             entity.HasIndex(e => e.SenderId);

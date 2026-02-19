@@ -7,6 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -19,6 +23,7 @@ import {
   sendVendorMessage,
   type VendorChatMessage,
 } from "../services/vendorChat";
+import { createPaymentRequestMetadata } from "../types/paymentRequest";
 
 function isAuthError(message: string): boolean {
   const lower = (message || "").toLowerCase();
@@ -66,6 +71,10 @@ export default function VendorChat({
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDescription, setPaymentDescription] = useState("");
+  const [sendingPaymentRequest, setSendingPaymentRequest] = useState(false);
 
   const scrollRef = useRef<ScrollView | null>(null);
   const hasRedirectedRef = useRef(false);
@@ -151,6 +160,42 @@ export default function VendorChat({
       disconnectVendorChatHub().catch(() => {});
     };
   }, [conversationId, router]);
+
+  const handleSendPaymentRequest = async () => {
+    if (!paymentAmount.trim()) {
+      Alert.alert("Error", "Please enter an amount");
+      return;
+    }
+
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Error", "Please enter a valid amount");
+      return;
+    }
+
+    setSendingPaymentRequest(true);
+    try {
+      const metadata = createPaymentRequestMetadata(amount, paymentDescription);
+      const message = `Payment request: $${amount.toFixed(2)}${paymentDescription ? ` for ${paymentDescription}` : ""}`;
+      
+      await sendVendorMessage(
+        conversationId,
+        message,
+        JSON.stringify(metadata)
+      );
+
+      // Reset form
+      setPaymentAmount("");
+      setPaymentDescription("");
+      setShowPaymentModal(false);
+      scrollToBottom(true);
+    } catch (e: any) {
+      const msg = e?.message || "Failed to send payment request";
+      Alert.alert("Error", msg);
+    } finally {
+      setSendingPaymentRequest(false);
+    }
+  };
 
   const handleSend = async () => {
     const text = input.trim();
@@ -243,6 +288,14 @@ export default function VendorChat({
       </View>
 
       <View style={styles.inputRow}>
+        <TouchableOpacity
+          style={[styles.paymentButton, !connected && styles.sendButtonDisabled]}
+          onPress={() => setShowPaymentModal(true)}
+          disabled={!connected}
+        >
+          <Ionicons name="cash" size={20} color="#fff" />
+        </TouchableOpacity>
+
         <TextInput
           style={styles.input}
           placeholder={
@@ -271,6 +324,71 @@ export default function VendorChat({
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Payment Request Modal */}
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <ScrollView
+            style={styles.modalScrollView}
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={true}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Request Custom Payment</Text>
+                <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
+                  <Ionicons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalLabel}>Amount ($)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g., 25.00"
+                keyboardType="decimal-pad"
+                value={paymentAmount}
+                onChangeText={setPaymentAmount}
+                editable={!sendingPaymentRequest}
+              />
+
+              <Text style={styles.modalLabel}>Description (optional)</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalInputLarge]}
+                placeholder="e.g., Custom dessert platter"
+                value={paymentDescription}
+                onChangeText={setPaymentDescription}
+                multiline
+                maxLength={200}
+                editable={!sendingPaymentRequest}
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  (!paymentAmount.trim() || sendingPaymentRequest) && styles.modalButtonDisabled,
+                ]}
+                onPress={handleSendPaymentRequest}
+                disabled={!paymentAmount.trim() || sendingPaymentRequest}
+              >
+                {sendingPaymentRequest ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Send Payment Request</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -320,7 +438,16 @@ const styles = StyleSheet.create({
   messageSender: { fontSize: 12, fontWeight: "600", color: "#555" },
   messageTime: { fontSize: 11, color: "#888", marginLeft: 8 },
   messageBody: { fontSize: 14, color: "#333" },
-  inputRow: { flexDirection: "row", alignItems: "flex-end", marginTop: 12, gap: 8 },
+
+  inputRow: { flexDirection: "row", alignItems: "flex-end", marginTop: 12, gap: 8, paddingHorizontal: 12 },
+  paymentButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "#28a745",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   input: {
     flex: 1,
     borderWidth: 1,
@@ -342,5 +469,72 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendButtonDisabled: { backgroundColor: "#ccc" },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalScrollView: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    padding: 16,
+    paddingBottom: 24,
+    minHeight: "auto",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+    marginBottom: 6,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 14,
+  },
+  modalInputLarge: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  modalButton: {
+    backgroundColor: "#0097a7",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  modalButtonDisabled: { backgroundColor: "#ccc" },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+  },
 });
 

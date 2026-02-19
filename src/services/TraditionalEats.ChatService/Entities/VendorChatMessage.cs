@@ -15,5 +15,8 @@ public class VendorChatMessage
 
     public bool IsRead { get; set; } = false;
     public DateTime? ReadAt { get; set; }
+    
+    /// <summary>Optional JSON metadata for extensible message types (e.g., payment requests).</summary>
+    public string? MetadataJson { get; set; }
 }
 

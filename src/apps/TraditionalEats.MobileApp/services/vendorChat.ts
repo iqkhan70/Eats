@@ -15,6 +15,8 @@ export interface VendorChatMessage {
   senderDisplayName?: string;
   message: string;
   sentAt: string;
+  /** Optional JSON metadata for extensible message types (e.g., payment requests). */
+  metadataJson?: string;
 }
 
 export interface VendorConversation {
@@ -146,11 +148,12 @@ export async function leaveVendorConversation(
 export async function sendVendorMessage(
   conversationId: string,
   message: string,
+  metadataJson?: string,
 ): Promise<void> {
   if (vendorHubConnection?.state !== SignalR.HubConnectionState.Connected) {
     throw new Error("Not connected to chat");
   }
-  await vendorHubConnection.invoke("SendVendorMessage", conversationId, message);
+  await vendorHubConnection.invoke("SendVendorMessage", conversationId, message, metadataJson);
 }
 
 export async function disconnectVendorChatHub(): Promise<void> {

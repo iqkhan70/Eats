@@ -431,8 +431,8 @@ const styles = StyleSheet.create({
   },
   backButton: { marginRight: 12 },
   title: { flex: 1, fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
-  iconButton: { padding: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  iconButton: { padding: 2, marginRight: 8 },
   cartDot: {
     position: 'absolute',
     top: 0,

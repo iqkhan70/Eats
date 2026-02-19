@@ -26,6 +26,8 @@ import axios from "axios";
 import { authService } from "../../services/auth";
 import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
+import AppHeader from "../../components/AppHeader";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface Restaurant {
   restaurantId: string;
@@ -526,23 +528,15 @@ export default function VendorOrdersScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View style={styles.container}>
-          <BlurView intensity={80} tint="light" style={styles.header}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.backButton}
-            >
-              <Ionicons name="chevron-back" size={28} color="#007AFF" />
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>Vendor Orders</Text>
-          </BlurView>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <AppHeader title="Vendor Orders" />
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.container}>
 
           <ScrollView
             style={styles.scrollView}
@@ -801,6 +795,7 @@ export default function VendorOrdersScreen() {
         }}
       />
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -817,6 +812,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
+    paddingTop: 8,
     backgroundColor: "white",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
