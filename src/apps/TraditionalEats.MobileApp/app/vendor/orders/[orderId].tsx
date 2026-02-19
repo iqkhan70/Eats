@@ -119,7 +119,27 @@ export default function VendorOrderDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <AppHeader title={title} showBack onBack={() => router.back()} />
+      <AppHeader
+        title={title}
+        showBack
+        onBack={() => router.back()}
+        right={
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/orders/chat/[orderId]",
+                params: { orderId },
+              } as any)
+            }
+            disabled={!orderId}
+            style={[styles.headerIconBtn, !orderId && styles.headerIconBtnDisabled]}
+            accessibilityLabel="Open order chat"
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chatbubbles-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        }
+      />
 
       {loading ? (
         <View style={styles.center}>
@@ -218,6 +238,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
   scroll: { flex: 1 },
   content: { padding: 16, paddingBottom: 24, gap: 12 },
+
+  headerIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  headerIconBtnDisabled: { opacity: 0.4 },
 
   center: {
     flex: 1,

@@ -28,7 +28,8 @@ public class ChatService : IChatService
     {
         try
         {
-            // Call OrderService to verify user has access to this order
+            // Call OrderService for minimal order metadata. We intentionally use an internal endpoint
+            // because the customer-facing GET /api/order/{orderId} forbids vendors.
             var client = _httpClientFactory.CreateClient("OrderService");
 
             // Forward bearer token if provided (from SignalR connection)
@@ -38,10 +39,19 @@ public class ChatService : IChatService
                 client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {bearerToken.Trim()}");
             }
 
+            // Forward internal API key if configured (OrderService internal endpoints support optional key)
+            var internalApiKey =
+                _configuration["Services:OrderService:InternalApiKey"] ?? _configuration["InternalApiKey"];
+            if (!string.IsNullOrWhiteSpace(internalApiKey))
+            {
+                client.DefaultRequestHeaders.Remove("X-Internal-Api-Key");
+                client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey.Trim());
+            }
+
             HttpResponseMessage response;
             try
             {
-                response = await client.GetAsync($"/api/order/{orderId}");
+                response = await client.GetAsync($"/api/order/internal/{orderId}/metadata");
             }
             catch (HttpRequestException ex)
             {
@@ -52,13 +62,13 @@ public class ChatService : IChatService
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("OrderService returned {StatusCode} for order {OrderId}. Response: {Response}",
+                _logger.LogWarning("OrderService returned {StatusCode} for internal metadata of order {OrderId}. Response: {Response}",
                     response.StatusCode, orderId, errorContent);
                 return false;
             }
 
             var orderJson = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("OrderService returned order data for order {OrderId}: {OrderJson}", orderId, orderJson);
+            _logger.LogInformation("OrderService returned order metadata for order {OrderId}: {OrderJson}", orderId, orderJson);
 
             using var orderDoc = System.Text.Json.JsonDocument.Parse(orderJson);
             var root = orderDoc.RootElement;
@@ -114,23 +124,28 @@ public class ChatService : IChatService
                         return false;
                     }
 
-                    if (restaurantResponse.IsSuccessStatusCode)
+                    if (!restaurantResponse.IsSuccessStatusCode)
                     {
-                        var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
-                        using var restaurantDoc = System.Text.Json.JsonDocument.Parse(restaurantJson);
-                        var restaurantRoot = restaurantDoc.RootElement;
-
-                        // RestaurantService uses OwnerId (not VendorId); support both camelCase and PascalCase
-                        var ownerId = restaurantRoot.TryGetProperty("ownerId", out var oProp) ? oProp.GetString()
-                            : restaurantRoot.TryGetProperty("OwnerId", out var oPProp) ? oPProp.GetString()
-                            : restaurantRoot.TryGetProperty("vendorId", out var vProp) ? vProp.GetString()
-                            : restaurantRoot.TryGetProperty("VendorId", out var vPProp) ? vPProp.GetString() : null;
-
-                        var hasAccess = ownerId != null && Guid.TryParse(ownerId, out var ownerGuid) && ownerGuid == userId;
-                        _logger.LogInformation("Vendor access check: UserId={UserId}, RestaurantOwnerId={OwnerId}, HasAccess={HasAccess}",
-                            userId, ownerId, hasAccess);
-                        return hasAccess;
+                        var errorBody = await restaurantResponse.Content.ReadAsStringAsync();
+                        _logger.LogWarning("RestaurantService returned {StatusCode} for restaurant {RestaurantId}. Body={Body}",
+                            restaurantResponse.StatusCode, restId, errorBody);
+                        return false;
                     }
+
+                    var restaurantJson = await restaurantResponse.Content.ReadAsStringAsync();
+                    using var restaurantDoc = System.Text.Json.JsonDocument.Parse(restaurantJson);
+                    var restaurantRoot = restaurantDoc.RootElement;
+
+                    // RestaurantService uses OwnerId (not VendorId); support both camelCase and PascalCase
+                    var ownerId = restaurantRoot.TryGetProperty("ownerId", out var oProp) ? oProp.GetString()
+                        : restaurantRoot.TryGetProperty("OwnerId", out var oPProp) ? oPProp.GetString()
+                        : restaurantRoot.TryGetProperty("vendorId", out var vProp) ? vProp.GetString()
+                        : restaurantRoot.TryGetProperty("VendorId", out var vPProp) ? vPProp.GetString() : null;
+
+                    var hasAccess = ownerId != null && Guid.TryParse(ownerId, out var ownerGuid) && ownerGuid == userId;
+                    _logger.LogInformation("Vendor access check: UserId={UserId}, RestaurantOwnerId={OwnerId}, HasAccess={HasAccess}",
+                        userId, ownerId, hasAccess);
+                    return hasAccess;
                 }
             }
 

@@ -517,6 +517,39 @@ public class OrderController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Internal: minimal order metadata used for cross-service authorization checks (e.g. ChatService).
+    /// </summary>
+    [HttpGet("internal/{orderId}/metadata")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalGetOrderMetadata(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal order metadata rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        try
+        {
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null) return NotFound(new { message = "Order not found" });
+
+            return Ok(new
+            {
+                orderId = order.OrderId,
+                customerId = order.CustomerId,
+                restaurantId = order.RestaurantId
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalGetOrderMetadata failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to get order metadata" });
+        }
+    }
+
     // ----------------------------
     // Vendor Orders (existing)
     // ----------------------------
