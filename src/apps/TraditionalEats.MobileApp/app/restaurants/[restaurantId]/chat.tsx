@@ -42,6 +42,17 @@ export default function RestaurantChatScreen() {
           return;
         }
 
+        const isVendor = await authService.isVendor();
+        const isAdmin = await authService.isAdmin();
+        if (isVendor || isAdmin) {
+          Alert.alert(
+            "Vendor Chat",
+            "Vendors should use the Messages inbox to chat with customers.",
+          );
+          router.replace("/vendor/messages");
+          return;
+        }
+
         const convo = await createOrGetVendorConversation(restaurantId);
         if (mounted) setConversationId(convo.conversationId);
       } catch (e: any) {
@@ -89,7 +100,7 @@ export default function RestaurantChatScreen() {
               <Text style={styles.loadingText}>Starting chat...</Text>
             </View>
           ) : conversationId ? (
-            <VendorChat conversationId={conversationId} />
+            <VendorChat conversationId={conversationId} viewerRole="Customer" />
           ) : (
             <View style={styles.center}>
               <Text style={styles.errorText}>Could not start chat.</Text>

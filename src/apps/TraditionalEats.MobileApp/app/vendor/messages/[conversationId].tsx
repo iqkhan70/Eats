@@ -36,7 +36,7 @@ export default function VendorMessageThreadScreen() {
         <AppHeader title="Chat" />
 
         <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
-          <VendorChat conversationId={conversationId} />
+          <VendorChat conversationId={conversationId} viewerRole="Vendor" />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -84,6 +84,16 @@ public class ChatController : ControllerBase
             if (request.RestaurantId == Guid.Empty)
                 return BadRequest(new { message = "RestaurantId is required" });
 
+            var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+            roles.AddRange(User.FindAll("role").Select(c => c.Value).Where(v => !roles.Contains(v, StringComparer.OrdinalIgnoreCase)));
+            if (roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase)) ||
+                roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                // Vendors/Admins should not create conversations via the customer endpoint.
+                // Vendors use the inbox (/vendor/inbox) to respond to customers.
+                return Forbid();
+            }
+
             var displayName = User.FindFirstValue(ClaimTypes.Name)
                 ?? User.FindFirstValue("name")
                 ?? User.FindFirstValue(ClaimTypes.Email)

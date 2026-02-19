@@ -55,10 +55,11 @@ public class VendorChatHub : Hub
         var groupName = GetConversationGroupName(conversationId);
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
 
+        var bestRole = ChooseBestRole(roles);
         await Clients.Group(groupName).SendAsync("UserJoined", new
         {
             UserId = userId,
-            Role = roles.First(),
+            Role = bestRole,
             ConversationId = conversationId
         });
     }
@@ -102,7 +103,7 @@ public class VendorChatHub : Hub
             return;
         }
 
-        var senderRole = roles.First();
+        var senderRole = ChooseBestRole(roles);
         var senderDisplayName = GetSenderDisplayName();
 
         var saved = await _chatService.SaveVendorMessageAsync(conversationId, userId.Value, senderRole, senderDisplayName, message.Trim(), metadataJson);
@@ -157,6 +158,15 @@ public class VendorChatHub : Hub
     }
 
     private static string GetConversationGroupName(Guid conversationId) => $"vendor_chat_{conversationId}";
+
+    private static string ChooseBestRole(IEnumerable<string> roles)
+    {
+        var list = roles?.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList() ?? new List<string>();
+        if (list.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase))) return "Admin";
+        if (list.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase))) return "Vendor";
+        if (list.Any(r => string.Equals(r, "Customer", StringComparison.OrdinalIgnoreCase))) return "Customer";
+        return list.FirstOrDefault() ?? string.Empty;
+    }
 
     private string? GetBearerToken()
     {

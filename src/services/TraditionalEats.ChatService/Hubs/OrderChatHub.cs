@@ -89,8 +89,8 @@ public class OrderChatHub : Hub
 
         _logger.LogInformation("JoinOrderChat: User {UserId} granted access to order {OrderId} chat", userId, orderId);
 
-        // Add user to the order chat group (use first role for participant label)
-        var userRole = userRoles.First();
+        // Add user to the order chat group (choose a stable “best” role)
+        var userRole = ChooseBestRole(userRoles);
         var groupName = GetOrderGroupName(orderId);
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
 
@@ -165,7 +165,7 @@ public class OrderChatHub : Hub
             return;
         }
 
-        var userRole = userRoles.First();
+        var userRole = ChooseBestRole(userRoles);
         var senderDisplayName = GetSenderDisplayName();
 
         // Save message to database
@@ -262,6 +262,15 @@ public class OrderChatHub : Hub
     }
 
     private static string GetOrderGroupName(Guid orderId) => $"order_chat_{orderId}";
+
+    private static string ChooseBestRole(IEnumerable<string> roles)
+    {
+        var list = roles?.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList() ?? new List<string>();
+        if (list.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase))) return "Admin";
+        if (list.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase))) return "Vendor";
+        if (list.Any(r => string.Equals(r, "Customer", StringComparison.OrdinalIgnoreCase))) return "Customer";
+        return list.FirstOrDefault() ?? string.Empty;
+    }
 
     private string? GetBearerToken()
     {

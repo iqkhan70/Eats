@@ -465,14 +465,23 @@ public class ChatService : IChatService
         var conversation = await _context.VendorConversations.FirstOrDefaultAsync(c => c.ConversationId == conversationId);
         if (conversation == null) return false;
 
-        if (roles.Any(r => string.Equals(r, "Customer", StringComparison.OrdinalIgnoreCase)))
+        // Important: some identities may carry multiple roles (e.g., Vendor + Customer).
+        // In that case, we should allow access if ANY applicable role grants it.
+        var isCustomer = roles.Any(r => string.Equals(r, "Customer", StringComparison.OrdinalIgnoreCase));
+        var isVendor = roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase));
+
+        if (isVendor)
         {
-            return conversation.CustomerId == userId;
+            // Vendor can access if they own the restaurant, OR if they are also the customer for this thread.
+            if (await VerifyRestaurantOwnerAsync(conversation.RestaurantId, userId, bearerToken))
+                return true;
+            if (conversation.CustomerId == userId)
+                return true;
         }
 
-        if (roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase)))
+        if (isCustomer)
         {
-            return await VerifyRestaurantOwnerAsync(conversation.RestaurantId, userId, bearerToken);
+            return conversation.CustomerId == userId;
         }
 
         return false;

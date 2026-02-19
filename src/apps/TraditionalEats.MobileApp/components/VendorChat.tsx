@@ -36,17 +36,26 @@ function isAuthError(message: string): boolean {
   );
 }
 
-function getSenderLabel(msg: VendorChatMessage): string {
+function getSenderLabel(
+  msg: VendorChatMessage,
+  viewerRole: "Customer" | "Vendor" | "Admin",
+): string {
+  const senderRole = (msg.senderRole || "").trim();
+  if (senderRole && senderRole.toLowerCase() === viewerRole.toLowerCase()) {
+    return "You";
+  }
+
   if (msg.senderDisplayName?.trim()) return msg.senderDisplayName.trim();
-  switch (msg.senderRole) {
+
+  switch (senderRole) {
     case "Customer":
-      return "You";
+      return "Customer";
     case "Vendor":
       return "Vendor";
     case "Admin":
       return "Admin";
     default:
-      return msg.senderRole || "Unknown";
+      return senderRole || "Unknown";
   }
 }
 
@@ -61,8 +70,10 @@ function formatTime(iso: string): string {
 
 export default function VendorChat({
   conversationId,
+  viewerRole = "Customer",
 }: {
   conversationId: string;
+  viewerRole?: "Customer" | "Vendor" | "Admin";
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<VendorChatMessage[]>([]);
@@ -253,7 +264,7 @@ export default function VendorChat({
           <View style={styles.emptyBox}>
             <Ionicons name="chatbubble-outline" size={40} color="#999" />
             <Text style={styles.emptyText}>
-              No messages yet. Ask the vendor a question!
+              No messages yet.
             </Text>
           </View>
         ) : (
@@ -266,7 +277,9 @@ export default function VendorChat({
             onContentSizeChange={() => scrollToBottom(false)}
           >
             {messages.map((msg) => {
-              const isYou = msg.senderRole === "Customer";
+              const isYou =
+                (msg.senderRole || "").trim().toLowerCase() ===
+                viewerRole.toLowerCase();
               return (
                 <View
                   key={msg.messageId || `${msg.sentAt}-${msg.message?.slice(0, 10)}`}
@@ -276,7 +289,9 @@ export default function VendorChat({
                   ]}
                 >
                   <View style={styles.messageMeta}>
-                    <Text style={styles.messageSender}>{getSenderLabel(msg)}</Text>
+                    <Text style={styles.messageSender}>
+                      {getSenderLabel(msg, viewerRole)}
+                    </Text>
                     <Text style={styles.messageTime}>{formatTime(msg.sentAt)}</Text>
                   </View>
                   <Text style={styles.messageBody}>{msg.message}</Text>
