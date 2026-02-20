@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import axios from "axios";
 import { authService } from "../../services/auth";
 import { api } from "../../services/api";
@@ -203,6 +203,7 @@ export default function VendorOrdersScreen() {
 
   const didInitRef = useRef(false);
   const isMountedRef = useRef(true);
+  const didRedirectToLoginRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -217,6 +218,15 @@ export default function VendorOrdersScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.restaurantId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // If opened without a restaurantId param (e.g. from dashboard), default to All
+      if (!params.restaurantId) {
+        setSelectedRestaurantId(null);
+      }
+    }, [params.restaurantId]),
+  );
 
   useEffect(() => {
     if (didInitRef.current) return;
@@ -238,7 +248,13 @@ export default function VendorOrdersScreen() {
       if (!isMountedRef.current) return;
 
       setIsAuthenticated(authenticated);
-      if (!authenticated) return;
+      if (!authenticated) {
+        if (!didRedirectToLoginRef.current) {
+          didRedirectToLoginRef.current = true;
+          router.replace("/login");
+        }
+        return;
+      }
 
       const vendor = await authService.isVendor();
       if (!isMountedRef.current) return;
@@ -276,7 +292,10 @@ export default function VendorOrdersScreen() {
               try {
                 setRefundingOrderId(orderId);
                 await api.post(`/MobileBff/orders/${orderId}/refund`);
-                Alert.alert("Refund initiated", "Refund request sent successfully.");
+                Alert.alert(
+                  "Refund initiated",
+                  "Refund request sent successfully.",
+                );
                 await loadOrders();
               } catch (err) {
                 const msg = normalizeErrorMessage(err);
@@ -302,6 +321,15 @@ export default function VendorOrdersScreen() {
 
       setRestaurants(Array.isArray(data) ? data : []);
     } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        setIsAuthenticated(false);
+        setIsVendor(false);
+        if (!didRedirectToLoginRef.current) {
+          didRedirectToLoginRef.current = true;
+          router.replace("/login");
+        }
+        return;
+      }
       console.error("Error loading restaurants:", err);
       Alert.alert("Error", normalizeErrorMessage(err));
     } finally {
@@ -349,6 +377,15 @@ export default function VendorOrdersScreen() {
       if (!isMountedRef.current) return;
       setOrders(allOrders);
     } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        setIsAuthenticated(false);
+        setIsVendor(false);
+        if (!didRedirectToLoginRef.current) {
+          didRedirectToLoginRef.current = true;
+          router.replace("/login");
+        }
+        return;
+      }
       console.error("Error loading orders:", err);
       Alert.alert("Error", normalizeErrorMessage(err));
     } finally {
@@ -498,7 +535,11 @@ export default function VendorOrdersScreen() {
     });
   }, [orders, searchTextDebounced, restaurantNameById]);
 
-  if (!isAuthenticated || !isVendor) {
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (!isVendor) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>
@@ -537,272 +578,335 @@ export default function VendorOrdersScreen() {
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={styles.container}>
-
-          <ScrollView
-            style={styles.scrollView}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={
-              Platform.OS === "ios" ? "interactive" : "on-drag"
-            }
-            contentInsetAdjustmentBehavior="automatic"
-          >
-            {/* Search Query Indicator */}
-            {searchTextDebounced.trim() && (
-              <View style={styles.searchIndicator}>
-                <Text style={styles.searchIndicatorText}>
-                  Searching: "{searchTextDebounced}"
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setSearchText("");
-                    setSearchTextDebounced("");
-                  }}
-                  style={styles.clearSearchIcon}
-                >
-                  <Text style={styles.clearSearchIconText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={styles.filterContainer}>
-              <View style={styles.filterHeaderRow}>
-                <Text style={styles.filterLabel}>Filter by Vendor:</Text>
-                {!!searchTextDebounced && (
-                  <Text style={styles.resultsText}>
-                    {filteredOrders.length} result
-                    {filteredOrders.length === 1 ? "" : "s"}
+            <ScrollView
+              style={styles.scrollView}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={
+                Platform.OS === "ios" ? "interactive" : "on-drag"
+              }
+              contentInsetAdjustmentBehavior="automatic"
+            >
+              {/* Search Query Indicator */}
+              {searchTextDebounced.trim() && (
+                <View style={styles.searchIndicator}>
+                  <Text style={styles.searchIndicatorText}>
+                    Searching: "{searchTextDebounced}"
                   </Text>
-                )}
-              </View>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.restaurantFilter}
-                keyboardShouldPersistTaps="handled"
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.filterChip,
-                    !selectedRestaurantId && styles.filterChipActive,
-                  ]}
-                  onPress={() => setSelectedRestaurantId(null)}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      !selectedRestaurantId && styles.filterChipTextActive,
-                    ]}
-                  >
-                    All
-                  </Text>
-                </TouchableOpacity>
-
-                {filteredRestaurantsForChips.map((restaurant) => (
                   <TouchableOpacity
-                    key={restaurant.restaurantId}
+                    onPress={() => {
+                      setSearchText("");
+                      setSearchTextDebounced("");
+                    }}
+                    style={styles.clearSearchIcon}
+                  >
+                    <Text style={styles.clearSearchIconText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={styles.filterContainer}>
+                <View style={styles.filterHeaderRow}>
+                  <Text style={styles.filterLabel}>Filter by Vendor:</Text>
+                  {!!searchTextDebounced && (
+                    <Text style={styles.resultsText}>
+                      {filteredOrders.length} result
+                      {filteredOrders.length === 1 ? "" : "s"}
+                    </Text>
+                  )}
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.restaurantFilter}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <TouchableOpacity
                     style={[
                       styles.filterChip,
-                      selectedRestaurantId === restaurant.restaurantId &&
-                        styles.filterChipActive,
+                      !selectedRestaurantId && styles.filterChipActive,
                     ]}
-                    onPress={() =>
-                      setSelectedRestaurantId(restaurant.restaurantId)
-                    }
+                    onPress={() => setSelectedRestaurantId(null)}
                   >
                     <Text
                       style={[
                         styles.filterChipText,
-                        selectedRestaurantId === restaurant.restaurantId &&
-                          styles.filterChipTextActive,
+                        !selectedRestaurantId && styles.filterChipTextActive,
                       ]}
                     >
-                      {restaurant.name}
+                      All
                     </Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
 
-            {loadingOrders ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#007AFF" />
-                <Text style={styles.loadingText}>Loading orders...</Text>
-              </View>
-            ) : filteredOrders.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>
-                  {searchTextDebounced
-                    ? "No matching orders"
-                    : "No orders found"}
-                </Text>
-              </View>
-            ) : (
-              filteredOrders.map((order) => (
-                <TouchableOpacity
-                  key={order.orderId}
-                  style={styles.orderCardWrapper}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/vendor/orders/[orderId]",
-                      params: {
-                        orderId: order.orderId,
-                        restaurantId: order.restaurantId,
-                      },
-                    } as any)
-                  }
-                  activeOpacity={0.85}
-                >
-                  <BlurView
-                    intensity={80}
-                    tint="light"
-                    style={styles.orderCard}
-                  >
-                    <View style={styles.orderHeader}>
-                      <View>
-                        <Text style={styles.orderId}>
-                          Order #{order.orderId.substring(0, 8)}
-                        </Text>
-                        <Text style={styles.orderDate}>
-                          {new Date(order.createdAt).toLocaleString()}
-                        </Text>
-                      </View>
-
-                      <View
+                  {filteredRestaurantsForChips.map((restaurant) => (
+                    <TouchableOpacity
+                      key={restaurant.restaurantId}
+                      style={[
+                        styles.filterChip,
+                        selectedRestaurantId === restaurant.restaurantId &&
+                          styles.filterChipActive,
+                      ]}
+                      onPress={() =>
+                        setSelectedRestaurantId(restaurant.restaurantId)
+                      }
+                    >
+                      <Text
                         style={[
-                          styles.statusBadge,
-                          { backgroundColor: getStatusColor(order.status) },
+                          styles.filterChipText,
+                          selectedRestaurantId === restaurant.restaurantId &&
+                            styles.filterChipTextActive,
                         ]}
                       >
-                        <Text style={styles.statusText}>{order.status}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.orderItems}>
-                      {order.items.map((item) => (
-                        <Text key={item.orderItemId} style={styles.orderItem}>
-                          {item.quantity}x {item.name} - $
-                          {item.totalPrice.toFixed(2)}
-                        </Text>
-                      ))}
-                    </View>
-
-                    {order.specialInstructions && (
-                      <View style={styles.specialInstructionsContainer}>
-                        <Text style={styles.specialInstructionsLabel}>
-                          Special Instructions:
-                        </Text>
-                        <Text style={styles.specialInstructionsText}>
-                          {order.specialInstructions}
-                        </Text>
-                      </View>
-                    )}
-
-                    {order.deliveryAddress && (
-                      <Text style={styles.deliveryAddress}>
-                        📍 {order.deliveryAddress}
+                        {restaurant.name}
                       </Text>
-                    )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
-                    <View style={styles.orderFooter}>
-                      <Text style={styles.orderTotal}>
-                        Total: ${order.total.toFixed(2)}
-                      </Text>
-
-                      <View style={styles.footerActions}>
-                        {canRefund(order.status) && (
-                          <TouchableOpacity
-                            style={[
-                              styles.refundButton,
-                              refundingOrderId === order.orderId &&
-                                styles.statusButtonDisabled,
-                            ]}
-                            onPress={() => refundOrder(order.orderId)}
-                            disabled={refundingOrderId === order.orderId}
-                            activeOpacity={0.85}
-                          >
-                            {refundingOrderId === order.orderId ? (
-                              <ActivityIndicator size="small" color="white" />
-                            ) : (
-                              <Text style={styles.refundButtonText}>Refund</Text>
-                            )}
-                          </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                          style={[
-                            styles.statusButton,
-                            { backgroundColor: getStatusColor(order.status) },
-                            updatingStatus === order.orderId &&
-                              styles.statusButtonDisabled,
-                          ]}
-                          onPress={() => showStatusPicker(order)}
-                          disabled={updatingStatus === order.orderId}
-                          activeOpacity={0.8}
-                        >
-                          {updatingStatus === order.orderId ? (
-                            <ActivityIndicator size="small" color="white" />
-                          ) : (
-                            <Text style={styles.statusButtonText}>
-                              Update Status
+              {loadingOrders ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#007AFF" />
+                  <Text style={styles.loadingText}>Loading orders...</Text>
+                </View>
+              ) : filteredOrders.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>
+                    {searchTextDebounced
+                      ? "No matching orders"
+                      : "No orders found"}
+                  </Text>
+                </View>
+              ) : (
+                filteredOrders.map((order) => (
+                  <TouchableOpacity
+                    key={order.orderId}
+                    style={styles.orderCardWrapper}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/vendor/orders/[orderId]",
+                        params: {
+                          orderId: order.orderId,
+                          restaurantId: order.restaurantId,
+                          restaurantName:
+                            restaurantNameById.get(order.restaurantId) ?? "",
+                        },
+                      } as any)
+                    }
+                    activeOpacity={0.85}
+                  >
+                    <BlurView
+                      intensity={80}
+                      tint="light"
+                      style={styles.orderCard}
+                    >
+                      <View style={styles.orderHeader}>
+                        <View>
+                          <Text style={styles.orderId}>
+                            Order #{order.orderId.substring(0, 8)}
+                          </Text>
+                          <Text style={styles.orderDate}>
+                            {new Date(order.createdAt).toLocaleString()}
+                          </Text>
+                          {!!(
+                            restaurantNameById.get(order.restaurantId) ?? ""
+                          ).trim() && (
+                            <Text style={styles.orderVendorName}>
+                              {restaurantNameById.get(order.restaurantId)}
                             </Text>
                           )}
-                        </TouchableOpacity>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.statusBadge,
+                            { backgroundColor: getStatusColor(order.status) },
+                          ]}
+                        >
+                          <Text style={styles.statusText}>{order.status}</Text>
+                        </View>
                       </View>
-                    </View>
-                  </BlurView>
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        </View>
-      </TouchableWithoutFeedback>
-      <BottomSearchBar
-        onSearch={(query) => {
-          Keyboard.dismiss();
-          setSearchText(query);
-          setSearchTextDebounced(query);
-        }}
-        onClear={() => {
-          setSearchText("");
-          setSearchTextDebounced("");
-        }}
-        placeholder="Search orders or vendors..."
-        emptyStateTitle="Search orders"
-        emptyStateSubtitle="Search by order ID, vendor name, or status"
-        loadSuggestions={async (query) => {
-          // Return restaurant names and order IDs as suggestions
-          const suggestions: string[] = [];
-          restaurants.forEach((r) => {
-            if (r.name.toLowerCase().includes(query.toLowerCase())) {
-              suggestions.push(r.name);
+
+                      <View style={styles.orderItems}>
+                        {order.items.map((item) => (
+                          <Text key={item.orderItemId} style={styles.orderItem}>
+                            {item.quantity}x {item.name} - $
+                            {item.totalPrice.toFixed(2)}
+                          </Text>
+                        ))}
+                      </View>
+
+                      {order.specialInstructions && (
+                        <View style={styles.specialInstructionsContainer}>
+                          <Text style={styles.specialInstructionsLabel}>
+                            Special Instructions:
+                          </Text>
+                          <Text style={styles.specialInstructionsText}>
+                            {order.specialInstructions}
+                          </Text>
+                        </View>
+                      )}
+
+                      {order.deliveryAddress && (
+                        <Text style={styles.deliveryAddress}>
+                          📍 {order.deliveryAddress}
+                        </Text>
+                      )}
+
+                      <View style={styles.orderFooter}>
+                        <Text style={styles.orderTotal}>
+                          Total: ${order.total.toFixed(2)}
+                        </Text>
+
+                        <View style={styles.footerActions}>
+                          {canRefund(order.status) && (
+                            <TouchableOpacity
+                              style={[
+                                styles.refundButton,
+                                refundingOrderId === order.orderId &&
+                                  styles.statusButtonDisabled,
+                              ]}
+                              onPress={() => refundOrder(order.orderId)}
+                              disabled={refundingOrderId === order.orderId}
+                              activeOpacity={0.85}
+                            >
+                              {refundingOrderId === order.orderId ? (
+                                <ActivityIndicator size="small" color="white" />
+                              ) : (
+                                <Text style={styles.refundButtonText}>
+                                  Refund
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          )}
+
+                          <TouchableOpacity
+                            style={[
+                              styles.statusButton,
+                              { backgroundColor: getStatusColor(order.status) },
+                              updatingStatus === order.orderId &&
+                                styles.statusButtonDisabled,
+                            ]}
+                            onPress={() => showStatusPicker(order)}
+                            disabled={updatingStatus === order.orderId}
+                            activeOpacity={0.8}
+                          >
+                            {updatingStatus === order.orderId ? (
+                              <ActivityIndicator size="small" color="white" />
+                            ) : (
+                              <Text style={styles.statusButtonText}>
+                                Update Status
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </TouchableWithoutFeedback>
+        <BottomSearchBar
+          onSearch={(query) => {
+            Keyboard.dismiss();
+            const searchTerm = query.trim();
+
+            const matchedRestaurant = restaurants.find(
+              (r) =>
+                (r?.name ?? "").trim().toLowerCase() ===
+                searchTerm.toLowerCase(),
+            );
+            if (matchedRestaurant?.restaurantId) {
+              setSelectedRestaurantId(matchedRestaurant.restaurantId);
+              setSearchText("");
+              setSearchTextDebounced("");
+              return;
             }
-          });
-          orders.forEach((o) => {
-            const orderId = o.orderId.substring(0, 8);
-            if (orderId.toLowerCase().includes(query.toLowerCase())) {
-              suggestions.push(`Order #${orderId}`);
+
+            setSearchText(searchTerm);
+            setSearchTextDebounced(searchTerm);
+          }}
+          onClear={() => {
+            setSearchText("");
+            setSearchTextDebounced("");
+          }}
+          placeholder="Search orders or vendors..."
+          emptyStateTitle="Search orders"
+          emptyStateSubtitle="Search within orders, or select a vendor to switch vendors"
+          loadSuggestions={async (query) => {
+            // Return restaurant names and order IDs as suggestions
+            const q = query.trim().toLowerCase();
+            const suggestions: string[] = [];
+
+            const vendorMatches = restaurants
+              .map((r) => r?.name ?? "")
+              .filter((name) => name.trim().length > 0)
+              .filter((name) => name.toLowerCase().includes(q))
+              .sort((a, b) => {
+                const al = a.toLowerCase();
+                const bl = b.toLowerCase();
+
+                const aExact = al === q;
+                const bExact = bl === q;
+                if (aExact !== bExact) return aExact ? -1 : 1;
+
+                const aStarts = al.startsWith(q);
+                const bStarts = bl.startsWith(q);
+                if (aStarts !== bStarts) return aStarts ? -1 : 1;
+
+                return a.localeCompare(b);
+              });
+
+            for (const name of vendorMatches) {
+              if (suggestions.length >= 10) break;
+              if (!suggestions.includes(name)) suggestions.push(name);
             }
-          });
-          return suggestions.slice(0, 10);
-        }}
-        onSuggestionSelect={(suggestion) => {
-          Keyboard.dismiss();
-          // Extract the actual search term from suggestion
-          // Remove "Order #" prefix if present
-          let searchTerm = suggestion;
-          if (suggestion.startsWith("Order #")) {
-            searchTerm = suggestion.replace("Order #", "").trim();
-          }
-          // Set both searchText and searchTextDebounced immediately for instant filtering
-          setSearchText(searchTerm);
-          setSearchTextDebounced(searchTerm);
-        }}
-      />
-    </KeyboardAvoidingView>
+
+            for (const o of orders) {
+              if (suggestions.length >= 10) break;
+              const orderId = (o.orderId ?? "").substring(0, 8);
+              if (!orderId) continue;
+              if (orderId.toLowerCase().includes(q)) {
+                const label = `Order #${orderId}`;
+                if (!suggestions.includes(label)) suggestions.push(label);
+              }
+            }
+
+            return suggestions.slice(0, 10);
+          }}
+          onSuggestionSelect={(suggestion) => {
+            Keyboard.dismiss();
+            // Extract the actual search term from suggestion
+            // Remove "Order #" prefix if present
+            let searchTerm = suggestion;
+            if (suggestion.startsWith("Order #")) {
+              searchTerm = suggestion.replace("Order #", "").trim();
+            }
+
+            // If the suggestion exactly matches a vendor name, switch vendor filter
+            const matchedRestaurant = restaurants.find(
+              (r) =>
+                (r?.name ?? "").trim().toLowerCase() ===
+                searchTerm.toLowerCase(),
+            );
+            if (matchedRestaurant?.restaurantId) {
+              setSelectedRestaurantId(matchedRestaurant.restaurantId);
+              setSearchText("");
+              setSearchTextDebounced("");
+              return;
+            }
+
+            // Otherwise treat as text filter (order id/status/items/etc.)
+            setSearchText(searchTerm);
+            setSearchTextDebounced(searchTerm);
+          }}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -936,6 +1040,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
   },
+  orderCardWrapper: {},
   orderCard: {
     backgroundColor: "white",
     margin: 16,
@@ -962,6 +1067,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     marginTop: 4,
+  },
+  orderVendorName: {
+    fontSize: 13,
+    color: "#444",
+    marginTop: 6,
+    fontWeight: "600",
   },
   statusBadge: {
     paddingHorizontal: 12,

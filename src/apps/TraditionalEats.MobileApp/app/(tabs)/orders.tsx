@@ -25,6 +25,11 @@ import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import BottomSearchBar from "../../components/BottomSearchBar";
 
+interface RestaurantLight {
+  restaurantId: string;
+  name: string;
+}
+
 interface Order {
   orderId: string;
   customerId: string;
@@ -58,6 +63,9 @@ export default function OrdersScreen() {
   const params = useLocalSearchParams<{ refresh?: string }>();
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [restaurantNamesById, setRestaurantNamesById] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -145,6 +153,45 @@ export default function OrdersScreen() {
       setOrders([]);
     }
   }, [isAuthenticated, router]);
+
+  const loadRestaurantName = useCallback(async (restaurantId: string) => {
+    if (!restaurantId) return;
+
+    try {
+      const res = await api.get<RestaurantLight>(
+        `/MobileBff/restaurants/${restaurantId}`,
+      );
+      const name = (res.data as any)?.name;
+      if (typeof name !== "string" || !name.trim()) return;
+
+      setRestaurantNamesById((prev) => {
+        if (prev[restaurantId] === name) return prev;
+        return { ...prev, [restaurantId]: name };
+      });
+    } catch {
+      return;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!orders.length) return;
+
+    const uniqueRestaurantIds = Array.from(
+      new Set(orders.map((o) => o.restaurantId).filter(Boolean)),
+    );
+
+    const missing = uniqueRestaurantIds.filter(
+      (id) => !restaurantNamesById[id],
+    );
+
+    if (!missing.length) return;
+
+    void (async () => {
+      for (const id of missing) {
+        await loadRestaurantName(id);
+      }
+    })();
+  }, [orders, restaurantNamesById, loadRestaurantName]);
 
   const canCancel = useCallback((status: string) => {
     return status === "Pending" || status === "Accepted";
@@ -293,6 +340,10 @@ export default function OrdersScreen() {
           .map((item) => (item.name || "").toLowerCase())
           .join(" ");
 
+        const restaurantName = (restaurantNamesById[order.restaurantId] || "")
+          .toLowerCase()
+          .trim();
+
         // Check if query matches any field
         // For order ID: check both full ID and first 8 characters
         const matchesOrderId =
@@ -305,9 +356,15 @@ export default function OrdersScreen() {
         const matchesAddress = address && address.includes(query);
         // For items: contains
         const matchesItems = itemNames && itemNames.includes(query);
+        const matchesRestaurant =
+          restaurantName && restaurantName.includes(query);
 
         return (
-          matchesOrderId || matchesStatus || matchesAddress || matchesItems
+          matchesOrderId ||
+          matchesStatus ||
+          matchesAddress ||
+          matchesItems ||
+          matchesRestaurant
         );
       });
     }
@@ -317,7 +374,7 @@ export default function OrdersScreen() {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [orders, filter, searchQuery]);
+  }, [orders, filter, searchQuery, restaurantNamesById]);
 
   function getStatusColor(status: string): string {
     switch (status) {
@@ -387,12 +444,17 @@ export default function OrdersScreen() {
   // BottomSearchBar is positioned at insets.bottom + 70, so we need extra padding
   const tabBarHeight = 49 + insets.bottom;
   const bottomPadding = tabBarHeight + 80; // Extra space for search bar above tab bar
-  
+
   return (
     <View style={styles.container}>
       {/* Search Query Indicator */}
       {searchQuery.trim() && (
-        <View style={[styles.searchIndicator, { marginTop: insets.top + 10, paddingTop: 12 }]}>
+        <View
+          style={[
+            styles.searchIndicator,
+            { marginTop: insets.top + 10, paddingTop: 12 },
+          ]}
+        >
           <Text style={styles.searchIndicatorText}>
             Searching: "{searchQuery}"
           </Text>
@@ -406,7 +468,14 @@ export default function OrdersScreen() {
       )}
 
       {/* Filter Tabs */}
-      <BlurView intensity={80} tint="light" style={[styles.filterContainer, { marginTop: searchQuery.trim() ? 0 : insets.top }]}>
+      <BlurView
+        intensity={80}
+        tint="light"
+        style={[
+          styles.filterContainer,
+          { marginTop: searchQuery.trim() ? 0 : insets.top },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.filterTab, filter === "all" && styles.filterTabActive]}
           onPress={() => setFilter("all")}
@@ -477,7 +546,16 @@ export default function OrdersScreen() {
           renderItem={({ item }) => (
             <Pressable
               style={styles.orderCardWrapper}
-              onPress={() => router.push(`/orders/${item.orderId}`)}
+              onPress={() =>
+                router.push({
+                  pathname: "/orders/[orderId]",
+                  params: {
+                    orderId: item.orderId,
+                    restaurantName:
+                      restaurantNamesById[item.restaurantId] ?? "",
+                  },
+                } as any)
+              }
             >
               <BlurView intensity={80} tint="light" style={styles.orderCard}>
                 <View style={styles.orderHeader}>
@@ -494,6 +572,12 @@ export default function OrdersScreen() {
                     })}
                   </Text>
                 </View>
+
+                {!!(restaurantNamesById[item.restaurantId] ?? "").trim() && (
+                  <Text style={styles.restaurantName}>
+                    {restaurantNamesById[item.restaurantId]}
+                  </Text>
+                )}
 
                 <View style={styles.orderItems}>
                   {item.items.slice(0, 2).map((orderItem) => (
@@ -544,7 +628,11 @@ export default function OrdersScreen() {
                         <ActivityIndicator size="small" color="#dc3545" />
                       ) : (
                         <>
-                          <Ionicons name="close-circle-outline" size={18} color="#dc3545" />
+                          <Ionicons
+                            name="close-circle-outline"
+                            size={18}
+                            color="#dc3545"
+                          />
                           <Text style={styles.cancelButtonText}>Cancel</Text>
                         </>
                       )}
@@ -566,11 +654,21 @@ export default function OrdersScreen() {
         }}
         placeholder="Search orders..."
         emptyStateTitle="Search orders"
-        emptyStateSubtitle="Search by order ID, status, items, or address"
+        emptyStateSubtitle="Search by order ID, vendor, status, items, or address"
         loadSuggestions={async (query) => {
           // Return order IDs, statuses, and item names as suggestions
           const suggestions: string[] = [];
           const queryLower = query.toLowerCase();
+
+          // Vendor names
+          Object.values(restaurantNamesById)
+            .filter((n) => (n ?? "").toLowerCase().includes(queryLower))
+            .slice(0, 3)
+            .forEach((n) => {
+              if (suggestions.length < 10 && !suggestions.includes(n)) {
+                suggestions.push(n);
+              }
+            });
 
           // Get unique statuses
           const statuses = Array.from(new Set(orders.map((o) => o.status)))
@@ -638,6 +736,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  browseButton: {
+    backgroundColor: "#6200ee",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 18,
+  },
+  browseButtonText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+
   loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 
   pullHint: { marginTop: 14, fontSize: 12, color: "#999", textAlign: "center" },
@@ -668,6 +775,8 @@ const styles = StyleSheet.create({
   },
   clearSearchButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 
+  orderCardWrapper: {},
+
   orderId: { fontSize: 18, fontWeight: "600", color: "#333" },
 
   orderItems: { marginVertical: 8 },
@@ -694,6 +803,13 @@ const styles = StyleSheet.create({
   },
 
   orderDate: { fontSize: 14, color: "#666" },
+
+  restaurantName: {
+    fontSize: 13,
+    color: "#444",
+    marginTop: 10,
+    fontWeight: "600",
+  },
 
   orderFooter: {
     flexDirection: "row",

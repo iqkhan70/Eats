@@ -70,11 +70,17 @@ function getStatusColor(status: string): string {
 
 export default function VendorOrderDetailsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ orderId?: string; restaurantId?: string }>();
+  const params = useLocalSearchParams<{
+    orderId?: string;
+    restaurantId?: string;
+    restaurantName?: string;
+  }>();
 
   const orderId = typeof params.orderId === "string" ? params.orderId : "";
   const restaurantId =
     typeof params.restaurantId === "string" ? params.restaurantId : "";
+  const restaurantName =
+    typeof params.restaurantName === "string" ? params.restaurantName : "";
 
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -88,7 +94,9 @@ export default function VendorOrderDetailsScreen() {
   useEffect(() => {
     const load = async () => {
       if (!orderId || !restaurantId) {
-        setError("Missing order context. Please open the order from the vendor orders list.");
+        setError(
+          "Missing order context. Please open the order from the vendor orders list.",
+        );
         setLoading(false);
         return;
       }
@@ -132,7 +140,10 @@ export default function VendorOrderDetailsScreen() {
               } as any)
             }
             disabled={!orderId}
-            style={[styles.headerIconBtn, !orderId && styles.headerIconBtnDisabled]}
+            style={[
+              styles.headerIconBtn,
+              !orderId && styles.headerIconBtnDisabled,
+            ]}
             accessibilityLabel="Open order chat"
             activeOpacity={0.8}
           >
@@ -150,19 +161,28 @@ export default function VendorOrderDetailsScreen() {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Could not load order</Text>
           <Text style={styles.errorBody}>{error}</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.primaryBtn}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.primaryBtn}
+          >
             <Text style={styles.primaryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       ) : !order ? (
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Order not found</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.primaryBtn}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.primaryBtn}
+          >
             <Text style={styles.primaryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+        >
           <View style={styles.card}>
             <View style={styles.rowBetween}>
               <Text style={styles.h2}>Status</Text>
@@ -176,6 +196,9 @@ export default function VendorOrderDetailsScreen() {
               </View>
             </View>
             <Text style={styles.muted}>
+              Vendor: {restaurantName?.trim() ? restaurantName : restaurantId}
+            </Text>
+            <Text style={styles.muted}>
               Created: {new Date(order.createdAt).toLocaleString()}
             </Text>
           </View>
@@ -188,7 +211,9 @@ export default function VendorOrderDetailsScreen() {
                   <Text style={styles.itemName}>
                     {it.quantity}x {it.name}
                   </Text>
-                  <Text style={styles.itemPrice}>${it.totalPrice.toFixed(2)}</Text>
+                  <Text style={styles.itemPrice}>
+                    ${it.totalPrice.toFixed(2)}
+                  </Text>
                 </View>
               ))
             ) : (
@@ -205,7 +230,9 @@ export default function VendorOrderDetailsScreen() {
             <View style={styles.card}>
               <Text style={styles.h2}>Customer Details</Text>
               {!!order.deliveryAddress && (
-                <Text style={styles.body}>Address: {order.deliveryAddress}</Text>
+                <Text style={styles.body}>
+                  Address: {order.deliveryAddress}
+                </Text>
               )}
               {!!order.specialInstructions && (
                 <Text style={styles.body}>
@@ -265,7 +292,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
-  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   h2: { fontSize: 16, fontWeight: "700", color: "#333" },
   body: { fontSize: 13, color: "#333", marginTop: 8 },
 
@@ -291,7 +322,12 @@ const styles = StyleSheet.create({
 
   historyRow: { marginTop: 10, gap: 4 },
 
-  errorTitle: { fontSize: 16, fontWeight: "800", color: "#d32f2f", textAlign: "center" },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#d32f2f",
+    textAlign: "center",
+  },
   errorBody: { color: "#444", textAlign: "center" },
 
   primaryBtn: {
@@ -303,4 +339,3 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { color: "#fff", fontWeight: "800" },
 });
-

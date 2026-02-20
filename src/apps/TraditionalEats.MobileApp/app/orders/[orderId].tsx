@@ -19,6 +19,11 @@ import ReviewDisplay, { Review } from "../../components/ReviewDisplay";
 import { authService } from "../../services/auth";
 import AppHeader from "../../components/AppHeader";
 
+interface RestaurantLight {
+  restaurantId: string;
+  name: string;
+}
+
 interface Order {
   orderId: string;
   customerId: string;
@@ -60,14 +65,20 @@ interface StatusHistory {
 export default function OrderDetailsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{ orderId: string }>();
+  const params = useLocalSearchParams<{
+    orderId: string;
+    restaurantName?: string;
+  }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [reordering, setReordering] = useState(false);
   const [hasReview, setHasReview] = useState(false);
   const [existingReview, setExistingReview] = useState<Review | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'review'>('details');
+  const [activeTab, setActiveTab] = useState<"details" | "review">("details");
+  const [restaurantName, setRestaurantName] = useState<string>(
+    typeof params.restaurantName === "string" ? params.restaurantName : "",
+  );
 
   // Hide default header - we use custom header with SafeAreaView
   useLayoutEffect(() => {
@@ -83,7 +94,36 @@ export default function OrderDetailsScreen() {
   }, [params.orderId]);
 
   useEffect(() => {
-    if (order && (order.status === "Delivered" || order.status === "Completed")) {
+    const passed =
+      typeof params.restaurantName === "string" ? params.restaurantName : "";
+    if (passed.trim()) {
+      setRestaurantName(passed);
+    }
+  }, [params.restaurantName]);
+
+  useEffect(() => {
+    const rid = order?.restaurantId;
+    if (!rid) return;
+    if (restaurantName.trim()) return;
+
+    void (async () => {
+      try {
+        const res = await api.get<RestaurantLight>(
+          `/MobileBff/restaurants/${rid}`,
+        );
+        const name = (res.data as any)?.name;
+        if (typeof name === "string" && name.trim()) setRestaurantName(name);
+      } catch {
+        return;
+      }
+    })();
+  }, [order?.restaurantId, restaurantName]);
+
+  useEffect(() => {
+    if (
+      order &&
+      (order.status === "Delivered" || order.status === "Completed")
+    ) {
       checkForExistingReview();
     } else {
       // Reset review state if order status changes
@@ -228,7 +268,7 @@ export default function OrderDetailsScreen() {
 
   const checkForExistingReview = async () => {
     if (!order) return;
-    
+
     try {
       const token = await authService.getAccessToken();
       if (!token) {
@@ -238,9 +278,12 @@ export default function OrderDetailsScreen() {
         return;
       }
 
-      const response = await api.get<Review[]>("/MobileBff/reviews/me?skip=0&take=100", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.get<Review[]>(
+        "/MobileBff/reviews/me?skip=0&take=100",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       if (response.data) {
         const review = response.data.find((r) => r.orderId === order.orderId);
@@ -306,38 +349,49 @@ export default function OrderDetailsScreen() {
       )
     : [];
 
-  const canReview = order && (order.status === "Delivered" || order.status === "Completed");
+  const canReview =
+    order && (order.status === "Delivered" || order.status === "Completed");
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <AppHeader title="Order Details" />
 
       {/* Tabs */}
       {canReview && (
         <View style={styles.tabsContainer}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'details' && styles.tabActive]}
-            onPress={() => setActiveTab('details')}
+            style={[styles.tab, activeTab === "details" && styles.tabActive]}
+            onPress={() => setActiveTab("details")}
           >
-            <Ionicons 
-              name="receipt-outline" 
-              size={20} 
-              color={activeTab === 'details' ? '#6200ee' : '#666'} 
+            <Ionicons
+              name="receipt-outline"
+              size={20}
+              color={activeTab === "details" ? "#6200ee" : "#666"}
             />
-            <Text style={[styles.tabText, activeTab === 'details' && styles.tabTextActive]}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "details" && styles.tabTextActive,
+              ]}
+            >
               Order Details
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'review' && styles.tabActive]}
-            onPress={() => setActiveTab('review')}
+            style={[styles.tab, activeTab === "review" && styles.tabActive]}
+            onPress={() => setActiveTab("review")}
           >
-            <Ionicons 
-              name="star" 
-              size={20} 
-              color={activeTab === 'review' ? '#6200ee' : '#666'} 
+            <Ionicons
+              name="star"
+              size={20}
+              color={activeTab === "review" ? "#6200ee" : "#666"}
             />
-            <Text style={[styles.tabText, activeTab === 'review' && styles.tabTextActive]}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "review" && styles.tabTextActive,
+              ]}
+            >
               Review
               {hasReview && <Text style={styles.tabBadge}> ✓</Text>}
             </Text>
@@ -349,105 +403,52 @@ export default function OrderDetailsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
       >
-        {(activeTab === 'details' || !canReview) ? (
+        {activeTab === "details" || !canReview ? (
           <>
-      {/* Order Info Card */}
-      <View style={styles.card}>
-        <View style={styles.orderHeader}>
-          <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>
-              Order #{order.orderId.substring(0, 8)}
-            </Text>
-            <Text style={styles.orderDate}>
-              Placed on{" "}
-              {new Date(order.createdAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(order.status) },
-            ]}
-          >
-            <Text
-              style={[
-                styles.statusText,
-                { color: getStatusTextColor(order.status) },
-              ]}
-            >
-              {order.status}
-            </Text>
-          </View>
-        </View>
-
-        {order.estimatedDeliveryAt && (
-          <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={20} color="#666" />
-            <Text style={styles.infoText}>
-              Estimated delivery:{" "}
-              {new Date(order.estimatedDeliveryAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-        )}
-
-        {order.specialInstructions && (
-          <View style={[styles.infoRow, styles.specialInstructionsRow]}>
-            <Ionicons
-              name="information-circle-outline"
-              size={20}
-              color="#ffc107"
-            />
-            <View style={styles.specialInstructionsContent}>
-              <Text style={styles.specialInstructionsLabel}>
-                Special Instructions
-              </Text>
-              <Text style={[styles.infoText, styles.specialInstructionsText]}>
-                {order.specialInstructions}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {order.deliveryAddress && (
-          <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={20} color="#666" />
-            <Text style={styles.infoText}>{order.deliveryAddress}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Status History Timeline */}
-      {sortedStatusHistory.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Order Status</Text>
-          <View style={styles.timeline}>
-            {sortedStatusHistory.map((statusEntry, index) => (
-              <View key={statusEntry.id} style={styles.timelineItem}>
-                <View style={styles.timelineLine}>
-                  <View
-                    style={[styles.timelineDot, { backgroundColor: "#6200ee" }]}
-                  />
-                  {index < sortedStatusHistory.length - 1 && (
-                    <View style={styles.timelineConnector} />
-                  )}
-                </View>
-                <View style={styles.timelineContent}>
-                  <Text style={styles.timelineStatus}>
-                    {statusEntry.status}
+            {/* Order Info Card */}
+            <View style={styles.card}>
+              <View style={styles.orderHeader}>
+                <View style={styles.orderInfo}>
+                  <Text style={styles.orderId}>
+                    Order #{order.orderId.substring(0, 8)}
                   </Text>
-                  <Text style={styles.timelineDate}>
-                    {new Date(statusEntry.changedAt).toLocaleDateString(
+                  {!!restaurantName.trim() && (
+                    <Text style={styles.restaurantName}>{restaurantName}</Text>
+                  )}
+                  <Text style={styles.orderDate}>
+                    Placed on{" "}
+                    {new Date(order.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(order.status) },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: getStatusTextColor(order.status) },
+                    ]}
+                  >
+                    {order.status}
+                  </Text>
+                </View>
+              </View>
+
+              {order.estimatedDeliveryAt && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={20} color="#666" />
+                  <Text style={styles.infoText}>
+                    Estimated delivery:{" "}
+                    {new Date(order.estimatedDeliveryAt).toLocaleDateString(
                       "en-US",
                       {
                         month: "short",
@@ -457,122 +458,195 @@ export default function OrderDetailsScreen() {
                       },
                     )}
                   </Text>
-                  {statusEntry.notes && (
-                    <Text style={styles.timelineNotes}>
-                      {statusEntry.notes}
-                    </Text>
-                  )}
                 </View>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
+              )}
 
-      {/* Chat – opens on its own screen to save space */}
-      <TouchableOpacity
-        style={styles.chatCard}
-        onPress={() => router.push(`/orders/chat/${params.orderId}`)}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="chatbubbles" size={24} color="#6200ee" />
-        <View style={styles.chatCardText}>
-          <Text style={styles.chatCardTitle}>Order Chat</Text>
-          <Text style={styles.chatCardSubtitle}>Message about this order</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={22} color="#999" />
-      </TouchableOpacity>
-
-      {/* Order Items */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Order Items</Text>
-        {order.items.map((item, index) => {
-          const modifiers = parseModifiers(item.modifiersJson);
-          return (
-            <View key={item.orderItemId}>
-              <View style={styles.orderItem}>
-                <View style={styles.orderItemInfo}>
-                  <Text style={styles.orderItemName}>{item.name}</Text>
-                  {item.description && (
-                    <Text style={styles.orderItemDescription}>
-                      {item.description}
+              {order.specialInstructions && (
+                <View style={[styles.infoRow, styles.specialInstructionsRow]}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={20}
+                    color="#ffc107"
+                  />
+                  <View style={styles.specialInstructionsContent}>
+                    <Text style={styles.specialInstructionsLabel}>
+                      Special Instructions
                     </Text>
-                  )}
-                  <Text style={styles.orderItemQuantity}>
-                    Quantity: {item.quantity} × ${item.unitPrice.toFixed(2)}
-                  </Text>
-                  {modifiers.length > 0 && (
-                    <View style={styles.modifiersContainer}>
-                      {modifiers.map((modifier, modIndex) => (
-                        <View key={modIndex} style={styles.modifierBadge}>
-                          <Text style={styles.modifierText}>{modifier}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+                    <Text
+                      style={[styles.infoText, styles.specialInstructionsText]}
+                    >
+                      {order.specialInstructions}
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.orderItemPrice}>
-                  ${item.totalPrice.toFixed(2)}
-                </Text>
-              </View>
-              {index < order.items.length - 1 && (
-                <View style={styles.divider} />
+              )}
+
+              {order.deliveryAddress && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="location-outline" size={20} color="#666" />
+                  <Text style={styles.infoText}>{order.deliveryAddress}</Text>
+                </View>
               )}
             </View>
-          );
-        })}
-      </View>
 
-      {/* Reorder Button - Only show for past orders */}
-      {isPastOrder(order.status) && (
-        <TouchableOpacity
-          style={[styles.reorderButton, reordering && styles.reorderButtonDisabled]}
-          onPress={handleReorder}
-          disabled={reordering}
-        >
-          {reordering ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="repeat" size={20} color="#fff" />
-              <Text style={styles.reorderButtonText}>Reorder</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
+            {/* Status History Timeline */}
+            {sortedStatusHistory.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Order Status</Text>
+                <View style={styles.timeline}>
+                  {sortedStatusHistory.map((statusEntry, index) => (
+                    <View key={statusEntry.id} style={styles.timelineItem}>
+                      <View style={styles.timelineLine}>
+                        <View
+                          style={[
+                            styles.timelineDot,
+                            { backgroundColor: "#6200ee" },
+                          ]}
+                        />
+                        {index < sortedStatusHistory.length - 1 && (
+                          <View style={styles.timelineConnector} />
+                        )}
+                      </View>
+                      <View style={styles.timelineContent}>
+                        <Text style={styles.timelineStatus}>
+                          {statusEntry.status}
+                        </Text>
+                        <Text style={styles.timelineDate}>
+                          {new Date(statusEntry.changedAt).toLocaleDateString(
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </Text>
+                        {statusEntry.notes && (
+                          <Text style={styles.timelineNotes}>
+                            {statusEntry.notes}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
 
-      {/* Order Summary */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Order Summary</Text>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Subtotal</Text>
-          <Text style={styles.summaryValue}>${order.subtotal.toFixed(2)}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Tax</Text>
-          <Text style={styles.summaryValue}>${order.tax.toFixed(2)}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery Fee</Text>
-          <Text style={styles.summaryValue}>
-            ${order.deliveryFee.toFixed(2)}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Service Fee</Text>
-          <Text style={styles.summaryValue}>
-            ${(order.serviceFee ?? 0).toFixed(2)}
-          </Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryTotalLabel}>Total</Text>
-          <Text style={styles.summaryTotalValue}>
-            ${order.total.toFixed(2)}
-          </Text>
-        </View>
-      </View>
+            {/* Chat – opens on its own screen to save space */}
+            <TouchableOpacity
+              style={styles.chatCard}
+              onPress={() => router.push(`/orders/chat/${params.orderId}`)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chatbubbles" size={24} color="#6200ee" />
+              <View style={styles.chatCardText}>
+                <Text style={styles.chatCardTitle}>Order Chat</Text>
+                <Text style={styles.chatCardSubtitle}>
+                  Message about this order
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#999" />
+            </TouchableOpacity>
 
+            {/* Order Items */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Order Items</Text>
+              {order.items.map((item, index) => {
+                const modifiers = parseModifiers(item.modifiersJson);
+                return (
+                  <View key={item.orderItemId}>
+                    <View style={styles.orderItem}>
+                      <View style={styles.orderItemInfo}>
+                        <Text style={styles.orderItemName}>{item.name}</Text>
+                        {item.description && (
+                          <Text style={styles.orderItemDescription}>
+                            {item.description}
+                          </Text>
+                        )}
+                        <Text style={styles.orderItemQuantity}>
+                          Quantity: {item.quantity} × $
+                          {item.unitPrice.toFixed(2)}
+                        </Text>
+                        {modifiers.length > 0 && (
+                          <View style={styles.modifiersContainer}>
+                            {modifiers.map((modifier, modIndex) => (
+                              <View key={modIndex} style={styles.modifierBadge}>
+                                <Text style={styles.modifierText}>
+                                  {modifier}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.orderItemPrice}>
+                        ${item.totalPrice.toFixed(2)}
+                      </Text>
+                    </View>
+                    {index < order.items.length - 1 && (
+                      <View style={styles.divider} />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Reorder Button - Only show for past orders */}
+            {isPastOrder(order.status) && (
+              <TouchableOpacity
+                style={[
+                  styles.reorderButton,
+                  reordering && styles.reorderButtonDisabled,
+                ]}
+                onPress={handleReorder}
+                disabled={reordering}
+              >
+                {reordering ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="repeat" size={20} color="#fff" />
+                    <Text style={styles.reorderButtonText}>Reorder</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Order Summary */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Order Summary</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryValue}>
+                  ${order.subtotal.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tax</Text>
+                <Text style={styles.summaryValue}>${order.tax.toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Delivery Fee</Text>
+                <Text style={styles.summaryValue}>
+                  ${order.deliveryFee.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Service Fee</Text>
+                <Text style={styles.summaryValue}>
+                  ${(order.serviceFee ?? 0).toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryTotalLabel}>Total</Text>
+                <Text style={styles.summaryTotalValue}>
+                  ${order.total.toFixed(2)}
+                </Text>
+              </View>
+            </View>
           </>
         ) : (
           <>
@@ -600,7 +674,11 @@ export default function OrderDetailsScreen() {
                       onPress={() => setShowEditForm(true)}
                       style={styles.editButton}
                     >
-                      <Ionicons name="create-outline" size={18} color="#6200ee" />
+                      <Ionicons
+                        name="create-outline"
+                        size={18}
+                        color="#6200ee"
+                      />
                       <Text style={styles.editButtonText}>Edit</Text>
                     </TouchableOpacity>
                   )}
@@ -756,6 +834,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     marginBottom: 4,
+  },
+  restaurantName: {
+    fontSize: 14,
+    color: "#444",
+    marginBottom: 6,
+    fontWeight: "600",
   },
   orderDate: {
     fontSize: 14,
