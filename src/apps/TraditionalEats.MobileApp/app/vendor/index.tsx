@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
+import BottomSearchBar from "../../components/BottomSearchBar";
 
 interface Restaurant {
   restaurantId: string;
@@ -34,10 +35,23 @@ export default function VendorDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [searchTextDebounced, setSearchTextDebounced] = useState("");
   const [stripeOnboardingStatus, setStripeOnboardingStatus] = useState<
     string | null
   >(null);
   const [stripeConnecting, setStripeConnecting] = useState(false);
+
+  const filteredRestaurants = useMemo(() => {
+    const q = searchTextDebounced.trim().toLowerCase();
+    if (!q) return restaurants;
+    return restaurants.filter((r) => (r.name ?? "").toLowerCase().includes(q));
+  }, [restaurants, searchTextDebounced]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTextDebounced(searchText), 150);
+    return () => clearTimeout(t);
+  }, [searchText]);
 
   useEffect(() => {
     checkAuthAndLoad();
@@ -50,8 +64,12 @@ export default function VendorDashboardScreen() {
         loadRestaurants();
         // Sync onboarding status from Stripe so we show Complete when user just finished in browser (webhook may be missed)
         api
-          .post<{ status?: string }>("/MobileBff/payments/vendor/refresh-onboarding-status")
-          .then((res) => setStripeOnboardingStatus(res.data?.status ?? "Pending"))
+          .post<{ status?: string }>(
+            "/MobileBff/payments/vendor/refresh-onboarding-status",
+          )
+          .then((res) =>
+            setStripeOnboardingStatus(res.data?.status ?? "Pending"),
+          )
           .catch(() => loadStripeOnboardingStatus());
       }
     }, [isAuthenticated, isVendor]),
@@ -219,151 +237,201 @@ export default function VendorDashboardScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Ionicons name="chevron-back" size={28} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => router.push('/vendor/documents')} style={styles.iconButton}>
-            <Ionicons name="document-text-outline" size={20} color="#fff" />
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={28} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/vendor/orders')} style={styles.iconButton}>
-            <Ionicons name="receipt-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/vendor/create-restaurant')} style={styles.iconButton}>
-            <Ionicons name="add" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {stripeOnboardingStatus && stripeOnboardingStatus !== "Complete" && (
-        <View style={styles.stripeBanner}>
-          <View style={styles.stripeBannerContent}>
-            <Text style={styles.stripeBannerTitle}>
-              Stripe setup incomplete
-            </Text>
-            <Text style={styles.stripeBannerText}>
-              Complete the short Stripe Connect flow so you can accept paid
-              orders. In test mode use Stripe's test data—no real bank details
-              needed until you go live.
-            </Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => router.push("/vendor/documents")}
+              style={styles.iconButton}
+            >
+              <Ionicons name="document-text-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/vendor/orders")}
+              style={styles.iconButton}
+            >
+              <Ionicons name="receipt-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/vendor/create-restaurant")}
+              style={styles.iconButton}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[
-              styles.stripeButton,
-              stripeConnecting && styles.stripeButtonDisabled,
-            ]}
-            onPress={connectStripe}
-            disabled={stripeConnecting}
-          >
-            {stripeConnecting ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.stripeButtonText}>Finish Stripe setup</Text>
-            )}
-          </TouchableOpacity>
         </View>
-      )}
 
-      {restaurants.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="restaurant-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No vendors yet</Text>
-          <Text style={styles.emptySubtext}>
-            Create your first vendor to get started
-          </Text>
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={handleCreateRestaurant}
-          >
-            <Text style={styles.createButtonText}>Create Vendor</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.restaurantsList}>
-          {restaurants.map((restaurant) => (
-            <View key={restaurant.restaurantId} style={styles.restaurantCard}>
-              <View style={styles.restaurantHeader}>
-                <Text style={styles.restaurantName}>{restaurant.name}</Text>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    restaurant.isActive
-                      ? styles.activeBadge
-                      : styles.inactiveBadge,
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {restaurant.isActive ? "Active" : "Inactive"}
+        {stripeOnboardingStatus && stripeOnboardingStatus !== "Complete" && (
+          <View style={styles.stripeBanner}>
+            <View style={styles.stripeBannerContent}>
+              <Text style={styles.stripeBannerTitle}>
+                Stripe setup incomplete
+              </Text>
+              <Text style={styles.stripeBannerText}>
+                Complete the short Stripe Connect flow so you can accept paid
+                orders. In test mode use Stripe's test data—no real bank details
+                needed until you go live.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.stripeButton,
+                stripeConnecting && styles.stripeButtonDisabled,
+              ]}
+              onPress={connectStripe}
+              disabled={stripeConnecting}
+            >
+              {stripeConnecting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.stripeButtonText}>Finish Stripe setup</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {restaurants.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="restaurant-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>No vendors yet</Text>
+            <Text style={styles.emptySubtext}>
+              Create your first vendor to get started
+            </Text>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={handleCreateRestaurant}
+            >
+              <Text style={styles.createButtonText}>Create Vendor</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.restaurantsList}>
+            {filteredRestaurants.map((restaurant) => (
+              <View key={restaurant.restaurantId} style={styles.restaurantCard}>
+                <View style={styles.restaurantHeader}>
+                  <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      restaurant.isActive
+                        ? styles.activeBadge
+                        : styles.inactiveBadge,
+                    ]}
+                  >
+                    <Text style={styles.statusText}>
+                      {restaurant.isActive ? "Active" : "Inactive"}
+                    </Text>
+                  </View>
+                </View>
+
+                {restaurant.description && (
+                  <Text style={styles.restaurantDescription} numberOfLines={2}>
+                    {restaurant.description}
                   </Text>
+                )}
+
+                {restaurant.cuisineType && (
+                  <Text style={styles.cuisineType}>
+                    {restaurant.cuisineType}
+                  </Text>
+                )}
+
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.editButton]}
+                    onPress={() =>
+                      handleEditRestaurant(restaurant.restaurantId)
+                    }
+                  >
+                    <Ionicons name="create-outline" size={18} color="#6200ee" />
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.menuButton]}
+                    onPress={() => handleManageMenu(restaurant.restaurantId)}
+                  >
+                    <Ionicons
+                      name="restaurant-outline"
+                      size={18}
+                      color="#fff"
+                    />
+                    <Text style={styles.menuButtonText}>Menu</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.ordersButton]}
+                    onPress={() =>
+                      router.push(
+                        `/vendor/orders?restaurantId=${restaurant.restaurantId}`,
+                      )
+                    }
+                  >
+                    <Ionicons name="receipt-outline" size={18} color="#fff" />
+                    <Text style={styles.ordersButtonText}>Orders</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDeleteRestaurant(restaurant)}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#d32f2f" />
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
+            ))}
+          </View>
+        )}
 
-              {restaurant.description && (
-                <Text style={styles.restaurantDescription} numberOfLines={2}>
-                  {restaurant.description}
-                </Text>
-              )}
+        <TouchableOpacity style={styles.fab} onPress={handleCreateRestaurant}>
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
+      </ScrollView>
 
-              {restaurant.cuisineType && (
-                <Text style={styles.cuisineType}>{restaurant.cuisineType}</Text>
-              )}
-
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.editButton]}
-                  onPress={() => handleEditRestaurant(restaurant.restaurantId)}
-                >
-                  <Ionicons name="create-outline" size={18} color="#6200ee" />
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.menuButton]}
-                  onPress={() => handleManageMenu(restaurant.restaurantId)}
-                >
-                  <Ionicons name="restaurant-outline" size={18} color="#fff" />
-                  <Text style={styles.menuButtonText}>Menu</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.ordersButton]}
-                  onPress={() =>
-                    router.push(
-                      `/vendor/orders?restaurantId=${restaurant.restaurantId}`,
-                    )
-                  }
-                >
-                  <Ionicons name="receipt-outline" size={18} color="#fff" />
-                  <Text style={styles.ordersButtonText}>Orders</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.deleteButton]}
-                  onPress={() => handleDeleteRestaurant(restaurant)}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#d32f2f" />
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
-      <TouchableOpacity style={styles.fab} onPress={handleCreateRestaurant}>
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-    </ScrollView>
+      <BottomSearchBar
+        bottomOffset={160}
+        onSearch={(query) => {
+          setSearchText(query.trim());
+          setSearchTextDebounced(query.trim());
+        }}
+        onClear={() => {
+          setSearchText("");
+          setSearchTextDebounced("");
+        }}
+        placeholder="Search vendors..."
+        emptyStateTitle="Search vendors"
+        emptyStateSubtitle="Search by vendor name"
+        loadSuggestions={async (query) => {
+          const q = query.trim().toLowerCase();
+          if (!q) return [];
+          const matches = restaurants
+            .map((r) => r?.name ?? "")
+            .filter((name) => name.trim().length > 0)
+            .filter((name) => name.toLowerCase().includes(q))
+            .sort((a, b) => a.localeCompare(b));
+          return matches.slice(0, 10);
+        }}
+        onSuggestionSelect={(suggestion) => {
+          setSearchText(suggestion);
+          setSearchTextDebounced(suggestion);
+        }}
+        initialValue={searchText}
+      />
+    </View>
   );
 }
 
@@ -371,6 +439,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+  },
+  scrollContent: {
+    paddingBottom: 240,
   },
   centerContainer: {
     flex: 1,
@@ -411,9 +482,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   iconButton: {
-    padding: 8,
-  },
-  ordersButton: {
     padding: 8,
   },
   addButton: {

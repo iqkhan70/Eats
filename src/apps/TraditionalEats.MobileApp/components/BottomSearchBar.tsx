@@ -30,6 +30,7 @@ interface BottomSearchBarProps {
   onSuggestionSelect?: (suggestion: string) => void;
   onClear?: () => void;
   initialValue?: string;
+  bottomOffset?: number;
 }
 
 export default function BottomSearchBar({
@@ -43,6 +44,7 @@ export default function BottomSearchBar({
   onSuggestionSelect,
   onClear,
   initialValue = "",
+  bottomOffset = 70,
 }: BottomSearchBarProps) {
   const insets = useSafeAreaInsets();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -52,7 +54,7 @@ export default function BottomSearchBar({
 
   const searchInputRef = useRef<TextInput>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Animation values
   const expandAnimation = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -218,15 +220,15 @@ export default function BottomSearchBar({
         style={[
           styles.pillContainer,
           {
-            bottom: insets.bottom + 70, // Position above tab bar (tab bar is ~49px + padding)
+            bottom: insets.bottom + bottomOffset,
             opacity: pillOpacity,
             height: pillHeight,
           },
         ]}
         pointerEvents={isExpanded ? "none" : "box-none"}
       >
-        <Pressable 
-          onPress={handleExpand} 
+        <Pressable
+          onPress={handleExpand}
           style={styles.pill}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -308,6 +310,7 @@ export default function BottomSearchBar({
                       if (onClear) {
                         onClear();
                       }
+                      handleCollapse();
                     }}
                     style={styles.clearButton}
                   >
@@ -374,9 +377,7 @@ export default function BottomSearchBar({
                 <View style={styles.emptyContainer}>
                   <Ionicons name="location-outline" size={48} color="#6200ee" />
                   <Text style={styles.emptyText}>{emptyStateTitle}</Text>
-                  <Text style={styles.emptySubtext}>
-                    {emptyStateSubtitle}
-                  </Text>
+                  <Text style={styles.emptySubtext}>{emptyStateSubtitle}</Text>
                 </View>
               )}
             </ScrollView>
