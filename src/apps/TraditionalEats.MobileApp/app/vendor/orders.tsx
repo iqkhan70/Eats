@@ -720,13 +720,36 @@ export default function VendorOrdersScreen() {
                           )}
                         </View>
 
-                        <View
-                          style={[
-                            styles.statusBadge,
-                            { backgroundColor: getStatusColor(order.status) },
-                          ]}
-                        >
-                          <Text style={styles.statusText}>{order.status}</Text>
+                        <View style={styles.orderHeaderRight}>
+                          <TouchableOpacity
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              router.push({
+                                pathname: "/orders/chat/[orderId]",
+                                params: { orderId: order.orderId },
+                              } as any);
+                            }}
+                            style={styles.chatIconBtn}
+                            accessibilityLabel="Open order chat"
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons
+                              name="chatbubbles-outline"
+                              size={18}
+                              color="#007AFF"
+                            />
+                          </TouchableOpacity>
+
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              { backgroundColor: getStatusColor(order.status) },
+                            ]}
+                          >
+                            <Text style={styles.statusText}>
+                              {order.status}
+                            </Text>
+                          </View>
                         </View>
                       </View>
 
@@ -1058,10 +1081,23 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 12,
   },
+  orderHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  chatIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0, 122, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   orderId: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+    fontWeight: "700",
+    color: "#111",
   },
   orderDate: {
     fontSize: 12,

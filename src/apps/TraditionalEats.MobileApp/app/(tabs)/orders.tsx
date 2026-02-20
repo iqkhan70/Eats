@@ -559,18 +559,41 @@ export default function OrdersScreen() {
             >
               <BlurView intensity={80} tint="light" style={styles.orderCard}>
                 <View style={styles.orderHeader}>
-                  <Text style={styles.orderId}>
-                    Order #{item.orderId.substring(0, 8)}
-                  </Text>
-                  <Text style={styles.orderDate}>
-                    {new Date(item.createdAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
+                  <View>
+                    <Text style={styles.orderId}>
+                      Order #{item.orderId.substring(0, 8)}
+                    </Text>
+                    <Text style={styles.orderDate}>
+                      {new Date(item.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={(ev) => {
+                      // Prevent the card press from triggering navigation
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      (ev as any)?.stopPropagation?.();
+                      router.push({
+                        pathname: "/orders/chat/[orderId]",
+                        params: { orderId: item.orderId },
+                      } as any);
+                    }}
+                    style={styles.chatIconBtn}
+                    accessibilityLabel="Open order chat"
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="chatbubbles-outline"
+                      size={18}
+                      color="#6200ee"
+                    />
+                  </TouchableOpacity>
                 </View>
 
                 {!!(restaurantNamesById[item.restaurantId] ?? "").trim() && (
@@ -799,7 +822,17 @@ const styles = StyleSheet.create({
   orderHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
+  },
+
+  chatIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(98, 0, 238, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   orderDate: { fontSize: 14, color: "#666" },
