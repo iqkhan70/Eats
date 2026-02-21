@@ -116,7 +116,26 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
-    db.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    const int maxAttempts = 10;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            logger.LogInformation("Applying OrderService migrations (attempt {Attempt}/{MaxAttempts})...", attempt, maxAttempts);
+            db.Database.Migrate();
+            logger.LogInformation("OrderService migrations applied successfully");
+            break;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to apply OrderService migrations (attempt {Attempt}/{MaxAttempts})", attempt, maxAttempts);
+            if (attempt == maxAttempts)
+                throw;
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+        }
+    }
 }
 
 app.Run();
