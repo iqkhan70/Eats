@@ -73,6 +73,13 @@ class ApiClient {
           const isAuthEndpoint = url.includes('/vendor/') || url.includes('/admin/');
           const isUnauthorized = status === 401;
 
+          // Don't log 400 for Stripe onboarding refresh when vendor has not linked a Stripe account yet
+          // This is an expected state for new vendors; UI should show "Finish Stripe setup".
+          const isStripeRefreshOnboardingStatus =
+            url.includes('/payments/vendor/refresh-onboarding-status') &&
+            method === 'POST' &&
+            status === 400;
+
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
           // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
@@ -82,7 +89,8 @@ class ApiClient {
             (isCartGetEndpoint && isExpectedEmptyResponse) ||
             isGeocodeZip404 ||
             isLogin401 ||
-            (isAuthEndpoint && isUnauthorized);
+            (isAuthEndpoint && isUnauthorized) ||
+            isStripeRefreshOnboardingStatus;
 
           if (!shouldSuppress) {
             console.error('❌ API Error:', {
