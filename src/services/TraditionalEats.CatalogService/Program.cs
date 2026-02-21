@@ -81,10 +81,26 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-    db.Database.EnsureCreated();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    const int maxAttempts = 10;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            db.Database.Migrate();
+            break;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to apply CatalogService migrations (attempt {Attempt}/{MaxAttempts})", attempt, maxAttempts);
+            if (attempt == maxAttempts)
+                throw;
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+        }
+    }
     
     // Seed data
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     SeedData.SetLogger(logger);
     
     var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
