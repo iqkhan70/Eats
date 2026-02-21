@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,13 +11,63 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { authService } from "../../services/auth";
+import { api } from "../../services/api";
 import AppHeader from "../../components/AppHeader";
-import { getVendorInbox, type VendorConversation } from "../../services/vendorChat";
+import {
+  getVendorInbox,
+  type VendorConversation,
+} from "../../services/vendorChat";
 
 export default function VendorMessagesScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<VendorConversation[]>([]);
+  const [vendorNameById, setVendorNameById] = useState<Record<string, string>>(
+    {},
+  );
+
+  const restaurantIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of conversations) {
+      if (c.restaurantId) ids.add(c.restaurantId);
+    }
+    return Array.from(ids);
+  }, [conversations]);
+
+  const loadVendorNames = useCallback(
+    async (ids: string[]) => {
+      const missing = ids.filter((id) => !vendorNameById[id]);
+      if (missing.length === 0) return;
+
+      const results = await Promise.all(
+        missing.map(async (restaurantId) => {
+          try {
+            const { data } = await api.get<{ name?: string; Name?: string }>(
+              `/MobileBff/restaurants/${restaurantId}`,
+            );
+            const name =
+              typeof data?.name === "string"
+                ? data.name
+                : typeof data?.Name === "string"
+                  ? data.Name
+                  : "";
+            return { restaurantId, name };
+          } catch {
+            return { restaurantId, name: "" };
+          }
+        }),
+      );
+
+      setVendorNameById((prev) => {
+        const next = { ...prev };
+        for (const r of results) {
+          if (r.name) next[r.restaurantId] = r.name;
+        }
+        return next;
+      });
+    },
+    [vendorNameById],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -41,13 +91,21 @@ export default function VendorMessagesScreen() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (restaurantIds.length === 0) return;
+    loadVendorNames(restaurantIds);
+  }, [restaurantIds, loadVendorNames]);
+
   return (
     <SafeAreaView style={styles.safe}>
-      <AppHeader title="Messages" right={(
-        <TouchableOpacity onPress={load} style={styles.backButton}>
-          <Ionicons name="refresh" size={22} color="#333" />
-        </TouchableOpacity>
-      )} />
+      <AppHeader
+        title="Messages"
+        right={
+          <TouchableOpacity onPress={load} style={styles.backButton}>
+            <Ionicons name="refresh" size={22} color="#333" />
+          </TouchableOpacity>
+        }
+      />
 
       {loading ? (
         <View style={styles.center}>
@@ -67,17 +125,24 @@ export default function VendorMessagesScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.row}
-              onPress={() => router.push(`/vendor/messages/${item.conversationId}`)}
+              onPress={() =>
+                router.push(`/vendor/messages/${item.conversationId}`)
+              }
             >
               <View style={styles.rowLeft}>
-                <Ionicons name="person-circle-outline" size={34} color="#6200ee" />
+                <Ionicons
+                  name="person-circle-outline"
+                  size={34}
+                  color="#6200ee"
+                />
               </View>
               <View style={styles.rowBody}>
                 <Text style={styles.primaryText} numberOfLines={1}>
                   {item.customerDisplayName || item.customerId || "Customer"}
                 </Text>
                 <Text style={styles.secondaryText} numberOfLines={1}>
-                  Restaurant: {item.restaurantId}
+                  Vendor:{" "}
+                  {vendorNameById[item.restaurantId] || item.restaurantId}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#777" />
@@ -107,7 +172,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "600", color: "#333" },
+  title: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   loadingText: { marginTop: 12, color: "#666" },
   emptyText: { marginTop: 12, color: "#777", fontSize: 14 },
@@ -127,4 +198,3 @@ const styles = StyleSheet.create({
   primaryText: { fontSize: 15, fontWeight: "600", color: "#333" },
   secondaryText: { fontSize: 12, color: "#666", marginTop: 2 },
 });
-
