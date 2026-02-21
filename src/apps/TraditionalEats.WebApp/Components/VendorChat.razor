@@ -1,10 +1,12 @@
 @using Microsoft.Extensions.Configuration
 @using Microsoft.AspNetCore.Components
+@using System.Text.Json
 @using Radzen
 @using Radzen.Blazor
 @using TraditionalEats.WebApp.Services
 @inject VendorChatService VendorChatService
 @inject AuthService AuthService
+@inject HttpClient Http
 @inject IConfiguration Configuration
 @inject ILogger<VendorChat> Logger
 @inject IJSRuntime JSRuntime
@@ -17,7 +19,7 @@
             AlignItems="AlignItems.Center" Style="flex-shrink: 0;">
             <RadzenText TextStyle="TextStyle.H5" Style="font-weight: bold;">
                 <RadzenIcon Icon="forum" Style="margin-right: 0.5rem;" />
-                Vendor Chat
+                @ChatTitle
             </RadzenText>
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
                 @if (FullScreen)
@@ -98,7 +100,11 @@
 
 @code {
     [Parameter] public Guid ConversationId { get; set; }
+    [Parameter] public Guid? RestaurantId { get; set; }
     [Parameter] public bool FullScreen { get; set; }
+
+    private string? vendorName;
+    private string ChatTitle => !string.IsNullOrWhiteSpace(vendorName) ? vendorName! : "Vendor Chat";
 
     private List<VendorChatMessage> messages = new();
     private string newMessage = string.Empty;
@@ -118,6 +124,8 @@
         var token = await AuthService.GetAccessTokenAsync();
         if (!string.IsNullOrEmpty(token))
             currentUserId = await AuthService.GetUserIdAsync();
+
+        await LoadVendorName();
 
         await LoadMessages();
 
@@ -152,6 +160,36 @@
         else if (string.IsNullOrEmpty(token))
         {
             connectionError = "Sign in to chat.";
+        }
+    }
+
+    private async Task LoadVendorName()
+    {
+        if (!RestaurantId.HasValue || RestaurantId.Value == Guid.Empty)
+            return;
+
+        try
+        {
+            var json = await Http.GetStringAsync($"WebBff/restaurants/{RestaurantId.Value}");
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return;
+
+            if (doc.RootElement.TryGetProperty("name", out var nameProp))
+            {
+                var name = nameProp.GetString();
+                if (!string.IsNullOrWhiteSpace(name))
+                    vendorName = name.Trim();
+            }
+            else if (doc.RootElement.TryGetProperty("Name", out var nameProp2))
+            {
+                var name = nameProp2.GetString();
+                if (!string.IsNullOrWhiteSpace(name))
+                    vendorName = name.Trim();
+            }
+        }
+        catch
+        {
         }
     }
 

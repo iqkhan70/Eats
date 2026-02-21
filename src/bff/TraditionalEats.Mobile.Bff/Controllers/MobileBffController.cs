@@ -723,6 +723,77 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("orders/{orderId}/retry-payment")]
+    [Authorize]
+    public async Task<IActionResult> RetryPayment(Guid orderId)
+    {
+        try
+        {
+            var orderClient = _httpClientFactory.CreateClient("OrderService");
+            var getOrderRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/order/{orderId}");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                getOrderRequest.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+
+            var getOrderResponse = await orderClient.SendAsync(getOrderRequest);
+            var orderContent = await getOrderResponse.Content.ReadAsStringAsync();
+            if (!getOrderResponse.IsSuccessStatusCode)
+                return StatusCode((int)getOrderResponse.StatusCode, orderContent);
+
+            decimal total = 0, serviceFee = 0;
+            Guid restaurantId = default;
+            try
+            {
+                using var orderDoc = System.Text.Json.JsonDocument.Parse(orderContent);
+                var root = orderDoc.RootElement;
+                total = root.TryGetProperty("total", out var t) ? t.GetDecimal() : root.GetProperty("Total").GetDecimal();
+                serviceFee = root.TryGetProperty("serviceFee", out var s) ? s.GetDecimal() : (root.TryGetProperty("ServiceFee", out s) ? s.GetDecimal() : 0);
+                var restEl = root.TryGetProperty("restaurantId", out var r) ? r : root.GetProperty("RestaurantId");
+                if (restEl.ValueKind != System.Text.Json.JsonValueKind.Null && restEl.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+                    restaurantId = Guid.Parse(restEl.GetString()!);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "RetryPayment: Could not parse order details for checkout");
+                return StatusCode(500, new { error = "Could not load order details for payment" });
+            }
+
+            if (restaurantId == default)
+                return BadRequest(new { error = "Order is missing restaurantId" });
+
+            var baseUrl = _configuration["AppBaseUrl"] ?? (Request.Scheme + "://" + Request.Host);
+            var successUrl = baseUrl.TrimEnd('/') + "/orders?payment=success";
+            var cancelUrl = baseUrl.TrimEnd('/') + "/orders/" + orderId + "?payment=cancelled";
+
+            var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
+            var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
+            if (Request.Headers.TryGetValue("Authorization", out var checkoutAuthHeader))
+                checkoutRequest.Headers.TryAddWithoutValidation("Authorization", checkoutAuthHeader.ToString());
+            checkoutRequest.Content = JsonContent.Create(new
+            {
+                orderId,
+                amount = total,
+                serviceFee,
+                restaurantId,
+                successUrl,
+                cancelUrl
+            });
+
+            var checkoutResponse = await checkoutPaymentClient.SendAsync(checkoutRequest);
+            var checkoutContent = await checkoutResponse.Content.ReadAsStringAsync();
+            if (!checkoutResponse.IsSuccessStatusCode)
+                return StatusCode((int)checkoutResponse.StatusCode, checkoutContent);
+
+            var checkoutDoc = System.Text.Json.JsonDocument.Parse(checkoutContent);
+            var url = checkoutDoc.RootElement.TryGetProperty("url", out var u) ? u.GetString() : null;
+            return Ok(new { orderId, checkoutUrl = url });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RetryPayment failed for order {OrderId}", orderId);
+            return StatusCode(500, new { error = "Failed to retry payment" });
+        }
+    }
+
     [HttpPost("orders/{orderId}/cancel")]
     [Authorize]
     public async Task<IActionResult> CancelOrder(Guid orderId)

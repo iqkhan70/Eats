@@ -1,5 +1,6 @@
 @page "/vendor/messages"
 @using System.Net.Http.Json
+@using System.Text.Json
 @using Radzen
 @using Radzen.Blazor
 @using TraditionalEats.WebApp.Services
@@ -43,7 +44,11 @@
         <RadzenDataGrid Data="@conversations" TItem="ConversationDto" AllowPaging="true" PageSize="20" ShowPagingSummary="true">
             <Columns>
                 <RadzenDataGridColumn TItem="ConversationDto" Property="CustomerDisplayName" Title="Customer" Width="240px" />
-                <RadzenDataGridColumn TItem="ConversationDto" Property="RestaurantId" Title="Restaurant" Width="240px" />
+                <RadzenDataGridColumn TItem="ConversationDto" Title="Vendor" Width="240px">
+                    <Template Context="c">
+                        <RadzenText>@GetVendorLabel(c.RestaurantId)</RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="ConversationDto" Property="LastMessageAt" Title="Last message" Width="200px">
                     <Template Context="c">
                         <RadzenText>@(c.LastMessageAt?.ToLocalTime().ToString("g") ?? c.UpdatedAt.ToLocalTime().ToString("g"))</RadzenText>
@@ -52,7 +57,7 @@
                 <RadzenDataGridColumn TItem="ConversationDto" Title="Actions" Width="140px" Sortable="false" Filterable="false">
                     <Template Context="c">
                         <RadzenButton Text="Open" Icon="forum" Variant="Variant.Outlined" Size="ButtonSize.Small"
-                                      Click="@(() => OpenConversation(c.ConversationId))" />
+                                      Click="@(() => OpenConversation(c))" />
                     </Template>
                 </RadzenDataGridColumn>
             </Columns>
@@ -67,6 +72,7 @@
     private bool isAdmin;
     private bool loading = true;
     private List<ConversationDto> conversations = new();
+    private Dictionary<Guid, string> vendorNameByRestaurantId = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -95,10 +101,12 @@
         {
             loading = true;
             conversations = await Http.GetFromJsonAsync<List<ConversationDto>>("WebBff/vendor-chat/inbox") ?? new();
+            await LoadVendorNames();
         }
         catch (Exception ex)
         {
             conversations = new();
+            vendorNameByRestaurantId = new();
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Error,
@@ -112,9 +120,68 @@
         }
     }
 
-    private void OpenConversation(Guid conversationId)
+    private async Task LoadVendorNames()
     {
-        Navigation.NavigateTo($"/vendor/messages/{conversationId}");
+        var restaurantIds = conversations
+            .Select(c => c.RestaurantId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (restaurantIds.Count == 0)
+            return;
+
+        var next = new Dictionary<Guid, string>(vendorNameByRestaurantId);
+        foreach (var id in restaurantIds)
+        {
+            if (next.ContainsKey(id))
+                continue;
+
+            try
+            {
+                var json = await Http.GetStringAsync($"WebBff/restaurants/{id}");
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    if (doc.RootElement.TryGetProperty("name", out var nameProp))
+                    {
+                        var name = nameProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                            next[id] = name.Trim();
+                    }
+                    else if (doc.RootElement.TryGetProperty("Name", out var nameProp2))
+                    {
+                        var name = nameProp2.GetString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                            next[id] = name.Trim();
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        vendorNameByRestaurantId = next;
+    }
+
+    private string GetVendorLabel(Guid restaurantId)
+    {
+        if (restaurantId == Guid.Empty)
+            return string.Empty;
+
+        if (vendorNameByRestaurantId.TryGetValue(restaurantId, out var name) && !string.IsNullOrWhiteSpace(name))
+            return name;
+
+        return restaurantId.ToString();
+    }
+
+    private void OpenConversation(ConversationDto c)
+    {
+        if (c.RestaurantId != Guid.Empty)
+            Navigation.NavigateTo($"/vendor/messages/{c.ConversationId}?restaurantId={c.RestaurantId}");
+        else
+            Navigation.NavigateTo($"/vendor/messages/{c.ConversationId}");
     }
 
     private class ConversationDto

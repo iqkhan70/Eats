@@ -16,11 +16,12 @@ else if (!isAuthenticated)
 }
 else
 {
-    <VendorChat ConversationId="@ConversationId" FullScreen="true" />
+    <VendorChat ConversationId="@ConversationId" RestaurantId="@RestaurantId" FullScreen="true" />
 }
 
 @code {
     [Parameter] public Guid ConversationId { get; set; }
+    [SupplyParameterFromQuery(Name = "restaurantId")] public Guid? RestaurantId { get; set; }
 
     private bool isAuthChecked;
     private bool isAuthenticated;

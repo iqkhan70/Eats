@@ -160,6 +160,7 @@ services:
       RabbitMQ__HostName: "rabbitmq"
       RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+      InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -291,6 +292,8 @@ services:
       Stripe__ConnectReturnUrl: ${STRIPE_CONNECT_RETURN_URL:-}
       AppBaseUrl: ${APP_BASE_URL}
       Services__RestaurantService__BaseUrl: "http://restaurant-service:5007"
+      Services__OrderService__BaseUrl: ${ORDER_SERVICE_BASE_URL:-http://order-service:5002}
+      Services__OrderService__InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
     depends_on:
       restaurant-service: { condition: service_started }
       mysql: { condition: service_healthy }

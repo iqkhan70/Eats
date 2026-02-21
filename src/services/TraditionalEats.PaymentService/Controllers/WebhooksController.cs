@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stripe;
+using Stripe.Checkout;
+using System.Text;
+using System.Text.Json;
 using TraditionalEats.PaymentService.Services;
 
 namespace TraditionalEats.PaymentService.Controllers;
@@ -13,15 +16,18 @@ public class WebhooksController : ControllerBase
     private readonly IPaymentService _paymentService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WebhooksController> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public WebhooksController(
         IPaymentService paymentService,
         IConfiguration configuration,
-        ILogger<WebhooksController> logger)
+        ILogger<WebhooksController> logger,
+        IHttpClientFactory httpClientFactory)
     {
         _paymentService = paymentService;
         _configuration = configuration;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     [HttpPost("stripe")]
@@ -63,6 +69,32 @@ public class WebhooksController : ControllerBase
                     if (account != null)
                         await _paymentService.UpdateVendorOnboardingFromStripeAsync(account.Id);
                     break;
+                case Events.CheckoutSessionCompleted:
+                    var sessionCompleted = stripeEvent.Data.Object as Session;
+                    if (sessionCompleted != null)
+                    {
+                        var (orderId, stripePiId) = ExtractOrderAndPaymentIntent(sessionCompleted);
+                        if (orderId != null)
+                        {
+                            if (!string.IsNullOrEmpty(stripePiId))
+                                await _paymentService.UpdatePaymentIntentStatusFromStripeAsync(stripePiId, "Authorized", null);
+                            await UpdateOrderPaymentAsync(orderId.Value, "Succeeded", stripePiId, null);
+                        }
+                    }
+                    break;
+                case Events.CheckoutSessionExpired:
+                    var sessionExpired = stripeEvent.Data.Object as Session;
+                    if (sessionExpired != null)
+                    {
+                        var (orderId, stripePiId) = ExtractOrderAndPaymentIntent(sessionExpired);
+                        if (orderId != null)
+                        {
+                            if (!string.IsNullOrEmpty(stripePiId))
+                                await _paymentService.UpdatePaymentIntentStatusFromStripeAsync(stripePiId, "Failed", "Checkout session expired");
+                            await UpdateOrderPaymentAsync(orderId.Value, "Failed", stripePiId, "Checkout session expired");
+                        }
+                    }
+                    break;
                 case Events.PaymentIntentSucceeded:
                     var piSucceeded = stripeEvent.Data.Object as PaymentIntent;
                     if (piSucceeded != null)
@@ -85,6 +117,57 @@ public class WebhooksController : ControllerBase
         }
 
         return Ok();
+    }
+
+    private static (Guid? OrderId, string? StripePaymentIntentId) ExtractOrderAndPaymentIntent(Session session)
+    {
+        Guid? orderId = null;
+
+        var orderIdRaw = session?.ClientReferenceId;
+        if (string.IsNullOrWhiteSpace(orderIdRaw))
+        {
+            if (session?.Metadata != null && session.Metadata.TryGetValue("OrderId", out var metaOrderId))
+                orderIdRaw = metaOrderId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(orderIdRaw) && Guid.TryParse(orderIdRaw, out var parsed))
+            orderId = parsed;
+
+        var stripePiId = session?.PaymentIntentId;
+        return (orderId, stripePiId);
+    }
+
+    private async Task UpdateOrderPaymentAsync(Guid orderId, string paymentStatus, string? stripePaymentIntentId, string? failureReason)
+    {
+        var orderBaseUrl = _configuration["Services:OrderService:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(orderBaseUrl))
+            orderBaseUrl = "http://localhost:5002";
+
+        var internalApiKey = _configuration["Services:OrderService:InternalApiKey"];
+
+        using var http = _httpClientFactory.CreateClient();
+        var url = $"{orderBaseUrl.TrimEnd('/')}/api/order/internal/{orderId}/payment";
+
+        var payload = new
+        {
+            paymentStatus,
+            stripePaymentIntentId,
+            failureReason
+        };
+        var json = JsonSerializer.Serialize(payload);
+        var req = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        if (!string.IsNullOrWhiteSpace(internalApiKey))
+            req.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+
+        var res = await http.SendAsync(req);
+        if (!res.IsSuccessStatusCode)
+        {
+            var body = await res.Content.ReadAsStringAsync();
+            _logger.LogWarning("Order payment patch failed for OrderId={OrderId} (HTTP {StatusCode}): {Body}", orderId, res.StatusCode, body);
+        }
     }
 
     private async Task<string> ReadRequestBodyAsync()

@@ -21,6 +21,50 @@ public class OrderController : ControllerBase
         _configuration = configuration;
     }
 
+    public record InternalUpdateOrderPaymentRequest(
+        string PaymentStatus,
+        string? StripePaymentIntentId,
+        string? FailureReason);
+
+    /// <summary>
+    /// Internal: update order payment state. Called by PaymentService Stripe webhooks.
+    /// </summary>
+    [HttpPatch("internal/{orderId}/payment")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalUpdateOrderPayment(
+        Guid orderId,
+        [FromBody] InternalUpdateOrderPaymentRequest request,
+        [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal order payment update rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        if (request == null)
+            return BadRequest(new { message = "Request body is required" });
+
+        try
+        {
+            var ok = await _orderService.UpdateOrderPaymentAsync(
+                orderId,
+                request.PaymentStatus,
+                request.StripePaymentIntentId,
+                request.FailureReason);
+
+            if (!ok) return NotFound(new { message = "Order not found" });
+
+            return Ok(new { message = "Payment status updated" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalUpdateOrderPayment failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to update order payment" });
+        }
+    }
+
     // ----------------------------
     // Cart endpoints (UNCHANGED)
     // ----------------------------

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
@@ -34,6 +35,9 @@ interface Order {
   serviceFee?: number;
   total: number;
   status: string;
+  paymentStatus?: string;
+  stripePaymentIntentId?: string;
+  paymentFailureReason?: string;
   deliveryAddress?: string;
   specialInstructions?: string;
   createdAt: string;
@@ -72,6 +76,7 @@ export default function OrderDetailsScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [reordering, setReordering] = useState(false);
+  const [retryingPayment, setRetryingPayment] = useState(false);
   const [hasReview, setHasReview] = useState(false);
   const [existingReview, setExistingReview] = useState<Review | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -310,6 +315,41 @@ export default function OrderDetailsScreen() {
     Alert.alert("Success", "Review submitted successfully!");
   };
 
+  const retryPayment = async () => {
+    if (!order) return;
+
+    try {
+      setRetryingPayment(true);
+      const res = await api.post<{ orderId: string; checkoutUrl?: string }>(
+        `/MobileBff/orders/${order.orderId}/retry-payment`,
+      );
+      const checkoutUrl = (res.data as any)?.checkoutUrl;
+      if (typeof checkoutUrl !== "string" || !checkoutUrl.trim()) {
+        Alert.alert(
+          "Payment",
+          "Could not start payment retry. Please try again in a moment.",
+        );
+        return;
+      }
+
+      await Linking.openURL(checkoutUrl);
+      Alert.alert(
+        "Complete payment",
+        "Complete your payment in the browser, then return to the app.",
+        [{ text: "OK", onPress: () => loadOrder() }],
+      );
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Failed to retry payment.";
+      Alert.alert("Payment", String(msg));
+    } finally {
+      setRetryingPayment(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -442,6 +482,60 @@ export default function OrderDetailsScreen() {
                   </Text>
                 </View>
               </View>
+
+              {!!order.paymentStatus && (
+                <View style={styles.paymentRow}>
+                  <Ionicons
+                    name={
+                      order.paymentStatus === "Succeeded"
+                        ? "checkmark-circle"
+                        : order.paymentStatus === "Failed"
+                          ? "close-circle"
+                          : "time"
+                    }
+                    size={18}
+                    color={
+                      order.paymentStatus === "Succeeded"
+                        ? "#2e7d32"
+                        : order.paymentStatus === "Failed"
+                          ? "#c62828"
+                          : "#666"
+                    }
+                  />
+                  <Text style={styles.paymentText}>
+                    Payment: {order.paymentStatus}
+                  </Text>
+                </View>
+              )}
+
+              {order.paymentStatus === "Failed" && (
+                <View style={styles.paymentRetryContainer}>
+                  {!!order.paymentFailureReason?.trim() && (
+                    <Text style={styles.paymentFailureText}>
+                      {order.paymentFailureReason}
+                    </Text>
+                  )}
+                  <TouchableOpacity
+                    style={[
+                      styles.retryPaymentButton,
+                      retryingPayment && styles.retryPaymentButtonDisabled,
+                    ]}
+                    onPress={retryPayment}
+                    disabled={retryingPayment}
+                  >
+                    {retryingPayment ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh" size={18} color="#fff" />
+                        <Text style={styles.retryPaymentButtonText}>
+                          Retry Payment
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {order.estimatedDeliveryAt && (
                 <View style={styles.infoRow}>
@@ -824,7 +918,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  paymentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  paymentText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
+  },
+  paymentRetryContainer: {
+    marginTop: 10,
+  },
+  paymentFailureText: {
+    color: "#c62828",
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  retryPaymentButton: {
+    backgroundColor: "#c62828",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  retryPaymentButtonDisabled: {
+    opacity: 0.7,
+  },
+  retryPaymentButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   orderInfo: {
     flex: 1,

@@ -33,6 +33,9 @@ interface Order {
   customerId: string;
   restaurantId: string;
   status: string;
+  paymentStatus?: string;
+  stripePaymentIntentId?: string;
+  paymentFailureReason?: string;
   createdAt: string;
   deliveryAddress?: string;
   specialInstructions?: string;
@@ -183,25 +186,59 @@ export default function VendorOrderDetailsScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.content}
         >
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.h2}>Status</Text>
-              <View
-                style={[
-                  styles.badge,
-                  { backgroundColor: getStatusColor(order.status) },
-                ]}
-              >
-                <Text style={styles.badgeText}>{order.status}</Text>
+          {order && (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.label}>Status</Text>
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: getStatusColor(order.status) },
+                  ]}
+                >
+                  <Text style={styles.badgeText}>{order.status}</Text>
+                </View>
               </View>
+
+              {!!order.paymentStatus && (
+                <View style={styles.paymentRow}>
+                  <Ionicons
+                    name={
+                      order.paymentStatus === "Succeeded"
+                        ? "checkmark-circle"
+                        : order.paymentStatus === "Failed"
+                          ? "close-circle"
+                          : "time"
+                    }
+                    size={18}
+                    color={
+                      order.paymentStatus === "Succeeded"
+                        ? "#2e7d32"
+                        : order.paymentStatus === "Failed"
+                          ? "#c62828"
+                          : "#666"
+                    }
+                  />
+                  <Text style={styles.paymentText}>
+                    Payment: {order.paymentStatus}
+                  </Text>
+                </View>
+              )}
+
+              {order.paymentStatus === "Failed" &&
+                !!order.paymentFailureReason?.trim() && (
+                  <Text style={styles.paymentFailureText}>
+                    {order.paymentFailureReason}
+                  </Text>
+                )}
+              <Text style={styles.muted}>
+                Vendor: {restaurantName?.trim() ? restaurantName : restaurantId}
+              </Text>
+              <Text style={styles.muted}>
+                Created: {new Date(order.createdAt).toLocaleString()}
+              </Text>
             </View>
-            <Text style={styles.muted}>
-              Vendor: {restaurantName?.trim() ? restaurantName : restaurantId}
-            </Text>
-            <Text style={styles.muted}>
-              Created: {new Date(order.createdAt).toLocaleString()}
-            </Text>
-          </View>
+          )}
 
           <View style={styles.card}>
             <Text style={styles.h2}>Items</Text>
@@ -296,6 +333,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  label: { color: "#333", fontWeight: "800" },
+  paymentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  paymentText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600",
+  },
+  paymentFailureText: {
+    marginTop: 8,
+    color: "#c62828",
+    fontSize: 13,
   },
   h2: { fontSize: 16, fontWeight: "700", color: "#333" },
   body: { fontSize: 13, color: "#333", marginTop: 8 },

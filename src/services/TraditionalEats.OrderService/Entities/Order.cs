@@ -16,6 +16,9 @@ public class Order
     public DateTime? EstimatedDeliveryAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
     public DateTime? PaidAt { get; set; }
+    public string PaymentStatus { get; set; } = "Pending"; // Pending, Succeeded, Failed
+    public string? StripePaymentIntentId { get; set; }
+    public string? PaymentFailureReason { get; set; }
     public string? DeliveryAddress { get; set; }
     public string? SpecialInstructions { get; set; }
     public string? IdempotencyKey { get; set; }

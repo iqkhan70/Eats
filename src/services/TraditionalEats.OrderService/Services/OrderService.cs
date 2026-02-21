@@ -24,6 +24,8 @@ public interface IOrderService
     Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null);
     /// <summary>Customer self-cancel. Allowed only while Pending or Accepted.</summary>
     Task<bool> CancelOrderByCustomerAsync(Guid orderId, Guid customerId);
+    /// <summary>Internal: update payment state fields on the order (called by PaymentService webhooks).</summary>
+    Task<bool> UpdateOrderPaymentAsync(Guid orderId, string paymentStatus, string? stripePaymentIntentId, string? failureReason);
 }
 
 public class OrderService : IOrderService
@@ -49,6 +51,41 @@ public class OrderService : IOrderService
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+    }
+
+    public async Task<bool> UpdateOrderPaymentAsync(
+        Guid orderId,
+        string paymentStatus,
+        string? stripePaymentIntentId,
+        string? failureReason)
+    {
+        var normalized = (paymentStatus ?? "").Trim();
+        if (string.IsNullOrEmpty(normalized)) normalized = "Pending";
+
+        try
+        {
+            var rows = await _context.Orders
+                .Where(o => o.OrderId == orderId)
+                .ExecuteUpdateAsync(setters =>
+                    setters
+                        .SetProperty(o => o.PaymentStatus, normalized)
+                        .SetProperty(o => o.StripePaymentIntentId, stripePaymentIntentId)
+                        .SetProperty(o => o.PaymentFailureReason, failureReason)
+                        .SetProperty(o => o.PaidAt,
+                            string.Equals(normalized, "Succeeded", StringComparison.OrdinalIgnoreCase)
+                                ? DateTime.UtcNow
+                                : (DateTime?)null));
+
+            if (rows == 0)
+                return false;
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "UpdateOrderPaymentAsync failed for OrderId={OrderId}", orderId);
+            throw;
+        }
     }
 
     public async Task<Guid> CreateCartAsync(Guid? customerId, Guid? restaurantId = null)

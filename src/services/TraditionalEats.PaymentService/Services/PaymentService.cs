@@ -576,27 +576,27 @@ public class PaymentService : IPaymentService
         try
         {
             var orderBaseUrl = _configuration["Services:OrderService:BaseUrl"];
-            if (!string.IsNullOrWhiteSpace(orderBaseUrl))
+            if (string.IsNullOrWhiteSpace(orderBaseUrl))
+                orderBaseUrl = "http://localhost:5002";
+
+            var internalApiKey = _configuration["Services:OrderService:InternalApiKey"];
+            using var http = _httpClientFactory.CreateClient();
+            var req = new HttpRequestMessage(HttpMethod.Get, $"{orderBaseUrl.TrimEnd('/')}/api/order/internal/{orderId}/status");
+            if (!string.IsNullOrWhiteSpace(internalApiKey))
+                req.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+            var res = await http.SendAsync(req);
+            if (res.IsSuccessStatusCode)
             {
-                var internalApiKey = _configuration["Services:OrderService:InternalApiKey"];
-                using var http = _httpClientFactory.CreateClient();
-                var req = new HttpRequestMessage(HttpMethod.Get, $"{orderBaseUrl.TrimEnd('/')}/api/order/internal/{orderId}/status");
-                if (!string.IsNullOrWhiteSpace(internalApiKey))
-                    req.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
-                var res = await http.SendAsync(req);
-                if (res.IsSuccessStatusCode)
-                {
-                    var json = await res.Content.ReadAsStringAsync();
-                    using var doc = JsonDocument.Parse(json);
-                    var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
-                    if (!string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase))
-                        return new RefundByOrderResult("not_refundable", null, "Refunds are allowed only for Completed orders.");
-                }
-                else
-                {
-                    _logger.LogWarning("OrderService status check failed for OrderId={OrderId} (HTTP {StatusCode}); falling back to payment status policy.",
-                        orderId, res.StatusCode);
-                }
+                var json = await res.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
+                if (!string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase))
+                    return new RefundByOrderResult("not_refundable", null, "Refunds are allowed only for Completed orders.");
+            }
+            else
+            {
+                _logger.LogWarning("OrderService status check failed for OrderId={OrderId} (HTTP {StatusCode}); falling back to payment status policy.",
+                    orderId, res.StatusCode);
             }
         }
         catch (Exception ex)
