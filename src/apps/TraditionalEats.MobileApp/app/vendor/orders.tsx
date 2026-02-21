@@ -726,7 +726,13 @@ export default function VendorOrdersScreen() {
                               e.stopPropagation();
                               router.push({
                                 pathname: "/orders/chat/[orderId]",
-                                params: { orderId: order.orderId },
+                                params: {
+                                  orderId: order.orderId,
+                                  restaurantName:
+                                    restaurantNameById.get(
+                                      order.restaurantId,
+                                    ) ?? "",
+                                },
                               } as any);
                             }}
                             style={styles.chatIconBtn}

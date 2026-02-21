@@ -581,7 +581,11 @@ export default function OrdersScreen() {
                       (ev as any)?.stopPropagation?.();
                       router.push({
                         pathname: "/orders/chat/[orderId]",
-                        params: { orderId: item.orderId },
+                        params: {
+                          orderId: item.orderId,
+                          restaurantName:
+                            restaurantNamesById[item.restaurantId] ?? "",
+                        },
                       } as any);
                     }}
                     style={styles.chatIconBtn}

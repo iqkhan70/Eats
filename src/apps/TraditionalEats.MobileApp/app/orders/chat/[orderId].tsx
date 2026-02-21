@@ -17,8 +17,13 @@ import AppHeader from "../../../components/AppHeader";
 
 export default function OrderChatScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ orderId?: string }>();
+  const params = useLocalSearchParams<{
+    orderId?: string;
+    restaurantName?: string;
+  }>();
   const orderId = params.orderId ?? "";
+  const restaurantName =
+    typeof params.restaurantName === "string" ? params.restaurantName : "";
 
   // ✅ This returns the real navigation header height (even if you aren't rendering one,
   // it still helps set a correct keyboard offset on iOS)
@@ -39,7 +44,13 @@ export default function OrderChatScreen() {
         // If you use a custom header (like you do), this still works well.
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <AppHeader title={`Order #${orderId.substring(0, 8)} – Chat`} />
+        <AppHeader
+          title={
+            restaurantName.trim()
+              ? `${restaurantName} – Chat`
+              : `Order #${orderId.substring(0, 8)} – Chat`
+          }
+        />
 
         {/* Chat */}
         <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>

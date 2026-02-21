@@ -67,7 +67,10 @@ function getSenderLabel(
 function formatTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
   } catch {
     return "";
   }
@@ -77,11 +80,14 @@ export default function VendorChat({
   conversationId,
   viewerRole = "Customer",
   restaurantId,
+  vendorName,
 }: {
   conversationId: string;
   viewerRole?: "Customer" | "Vendor" | "Admin";
   /** Optional context for converting payment requests into a cart/order. */
   restaurantId?: string;
+  /** Optional vendor display name for the chat header UI. */
+  vendorName?: string;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<VendorChatMessage[]>([]);
@@ -196,11 +202,11 @@ export default function VendorChat({
     try {
       const metadata = createPaymentRequestMetadata(amount, paymentDescription);
       const message = `Payment request: $${amount.toFixed(2)}${paymentDescription ? ` for ${paymentDescription}` : ""}`;
-      
+
       await sendVendorMessage(
         conversationId,
         message,
-        JSON.stringify(metadata)
+        JSON.stringify(metadata),
       );
 
       // Reset form
@@ -253,7 +259,9 @@ export default function VendorChat({
     <View style={styles.card}>
       <View style={styles.header}>
         <Ionicons name="chatbubbles" size={22} color="#333" />
-        <Text style={styles.title}>Vendor Chat</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {vendorName?.trim() ? `${vendorName.trim()} – Chat` : "Vendor Chat"}
+        </Text>
         <View style={styles.badge}>
           <View
             style={[
@@ -282,9 +290,7 @@ export default function VendorChat({
         ) : messages.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="chatbubble-outline" size={40} color="#999" />
-            <Text style={styles.emptyText}>
-              No messages yet.
-            </Text>
+            <Text style={styles.emptyText}>No messages yet.</Text>
           </View>
         ) : (
           <ScrollView
@@ -307,7 +313,10 @@ export default function VendorChat({
 
               return (
                 <View
-                  key={msg.messageId || `${msg.sentAt}-${msg.message?.slice(0, 10)}`}
+                  key={
+                    msg.messageId ||
+                    `${msg.sentAt}-${msg.message?.slice(0, 10)}`
+                  }
                   style={[
                     styles.messageBubble,
                     isYou ? styles.messageBubbleOwn : styles.messageBubbleOther,
@@ -317,7 +326,9 @@ export default function VendorChat({
                     <Text style={styles.messageSender}>
                       {getSenderLabel(msg, viewerRole)}
                     </Text>
-                    <Text style={styles.messageTime}>{formatTime(msg.sentAt)}</Text>
+                    <Text style={styles.messageTime}>
+                      {formatTime(msg.sentAt)}
+                    </Text>
                   </View>
                   <Text style={styles.messageBody}>{msg.message}</Text>
 
@@ -365,7 +376,10 @@ export default function VendorChat({
 
       <View style={styles.inputRow}>
         <TouchableOpacity
-          style={[styles.paymentButton, !connected && styles.sendButtonDisabled]}
+          style={[
+            styles.paymentButton,
+            !connected && styles.sendButtonDisabled,
+          ]}
           onPress={() => setShowPaymentModal(true)}
           disabled={!connected}
         >
@@ -375,7 +389,9 @@ export default function VendorChat({
         <TextInput
           style={styles.input}
           placeholder={
-            connected ? "Type your message..." : "Sign in and connect to chat..."
+            connected
+              ? "Type your message..."
+              : "Sign in and connect to chat..."
           }
           placeholderTextColor="#999"
           value={input}
@@ -388,7 +404,8 @@ export default function VendorChat({
         <TouchableOpacity
           style={[
             styles.sendButton,
-            (!connected || !input.trim() || sending) && styles.sendButtonDisabled,
+            (!connected || !input.trim() || sending) &&
+              styles.sendButtonDisabled,
           ]}
           onPress={handleSend}
           disabled={!connected || !input.trim() || sending}
@@ -450,7 +467,8 @@ export default function VendorChat({
               <TouchableOpacity
                 style={[
                   styles.modalButton,
-                  (!paymentAmount.trim() || sendingPaymentRequest) && styles.modalButtonDisabled,
+                  (!paymentAmount.trim() || sendingPaymentRequest) &&
+                    styles.modalButtonDisabled,
                 ]}
                 onPress={handleSendPaymentRequest}
                 disabled={!paymentAmount.trim() || sendingPaymentRequest}
@@ -458,7 +476,9 @@ export default function VendorChat({
                 {sendingPaymentRequest ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.modalButtonText}>Send Payment Request</Text>
+                  <Text style={styles.modalButtonText}>
+                    Send Payment Request
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -560,7 +580,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  inputRow: { flexDirection: "row", alignItems: "flex-end", marginTop: 12, gap: 8, paddingHorizontal: 12 },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginTop: 12,
+    gap: 8,
+    paddingHorizontal: 12,
+  },
   paymentButton: {
     width: 44,
     height: 44,
@@ -658,4 +684,3 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
 });
-

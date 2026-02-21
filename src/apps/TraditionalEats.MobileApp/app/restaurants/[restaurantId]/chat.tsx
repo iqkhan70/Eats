@@ -16,6 +16,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import VendorChat from "../../../components/VendorChat";
 import { authService } from "../../../services/auth";
+import { api } from "../../../services/api";
 import { createOrGetVendorConversation } from "../../../services/vendorChat";
 
 export default function RestaurantChatScreen() {
@@ -29,6 +30,33 @@ export default function RestaurantChatScreen() {
 
   const [loading, setLoading] = useState(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [vendorName, setVendorName] = useState<string>("");
+
+  useEffect(() => {
+    let mounted = true;
+    if (!restaurantId) return;
+
+    (async () => {
+      try {
+        const { data } = await api.get<{ name?: string; Name?: string }>(
+          `/MobileBff/restaurants/${restaurantId}`,
+        );
+        const name =
+          typeof data?.name === "string"
+            ? data.name
+            : typeof data?.Name === "string"
+              ? data.Name
+              : "";
+        if (mounted) setVendorName(name);
+      } catch {
+        if (mounted) setVendorName("");
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [restaurantId]);
 
   useEffect(() => {
     let mounted = true;
@@ -37,7 +65,10 @@ export default function RestaurantChatScreen() {
         setLoading(true);
         const authenticated = await authService.isAuthenticated();
         if (!authenticated) {
-          Alert.alert("Login Required", "Please log in to chat with the vendor.");
+          Alert.alert(
+            "Login Required",
+            "Please log in to chat with the vendor.",
+          );
           router.replace("/login");
           return;
         }
@@ -45,11 +76,10 @@ export default function RestaurantChatScreen() {
         const isVendor = await authService.isVendor();
         const isAdmin = await authService.isAdmin();
         if (isVendor || isAdmin) {
-          Alert.alert(
-            "Vendor Chat",
-            "Vendors should use the Messages inbox to chat with customers.",
-          );
-          router.replace("/vendor/messages");
+          router.replace({
+            pathname: "/vendor/messages",
+            params: { restaurantId },
+          } as any);
           return;
         }
 
@@ -87,7 +117,7 @@ export default function RestaurantChatScreen() {
           </TouchableOpacity>
 
           <Text style={styles.title} numberOfLines={1}>
-            Vendor Chat
+            {vendorName.trim() ? `${vendorName} – Chat` : "Vendor Chat"}
           </Text>
 
           <View style={styles.backButton} />
@@ -104,6 +134,7 @@ export default function RestaurantChatScreen() {
               conversationId={conversationId}
               viewerRole="Customer"
               restaurantId={restaurantId}
+              vendorName={vendorName}
             />
           ) : (
             <View style={styles.center}>
@@ -147,4 +178,3 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 12, color: "#666" },
   errorText: { color: "#c00" },
 });
-

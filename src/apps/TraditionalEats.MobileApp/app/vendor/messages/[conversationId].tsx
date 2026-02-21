@@ -17,8 +17,16 @@ import AppHeader from "../../../components/AppHeader";
 
 export default function VendorMessageThreadScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ conversationId?: string }>();
+  const params = useLocalSearchParams<{
+    conversationId?: string;
+    restaurantId?: string;
+    vendorName?: string;
+  }>();
   const conversationId = params.conversationId ?? "";
+  const restaurantId =
+    typeof params.restaurantId === "string" ? params.restaurantId : "";
+  const vendorName =
+    typeof params.vendorName === "string" ? params.vendorName : "";
 
   const headerHeight = useHeaderHeight();
   const { height: windowHeight } = useWindowDimensions();
@@ -33,10 +41,17 @@ export default function VendorMessageThreadScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <AppHeader title="Chat" />
+        <AppHeader
+          title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
+        />
 
         <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
-          <VendorChat conversationId={conversationId} viewerRole="Vendor" />
+          <VendorChat
+            conversationId={conversationId}
+            viewerRole="Vendor"
+            restaurantId={restaurantId || undefined}
+            vendorName={vendorName || undefined}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -71,4 +86,3 @@ const styles = StyleSheet.create({
   },
   chatWrapper: { flex: 1, padding: 16 },
 });
-

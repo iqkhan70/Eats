@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { authService } from "../../services/auth";
 import { api } from "../../services/api";
 import AppHeader from "../../components/AppHeader";
@@ -20,19 +20,36 @@ import {
 
 export default function VendorMessagesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ restaurantId?: string }>();
+  const restaurantIdParam =
+    typeof params.restaurantId === "string" ? params.restaurantId : "";
+
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<VendorConversation[]>([]);
   const [vendorNameById, setVendorNameById] = useState<Record<string, string>>(
     {},
   );
 
+  const [scopedRestaurantId, setScopedRestaurantId] =
+    useState<string>(restaurantIdParam);
+
+  useEffect(() => {
+    setScopedRestaurantId(restaurantIdParam);
+  }, [restaurantIdParam]);
+
+  const scopedConversations = useMemo(() => {
+    if (!scopedRestaurantId) return conversations;
+    return conversations.filter((c) => c.restaurantId === scopedRestaurantId);
+  }, [conversations, scopedRestaurantId]);
+
   const restaurantIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const c of conversations) {
+    for (const c of scopedConversations) {
       if (c.restaurantId) ids.add(c.restaurantId);
     }
+    if (scopedRestaurantId) ids.add(scopedRestaurantId);
     return Array.from(ids);
-  }, [conversations]);
+  }, [scopedConversations, scopedRestaurantId]);
 
   const loadVendorNames = useCallback(
     async (ids: string[]) => {
@@ -107,26 +124,50 @@ export default function VendorMessagesScreen() {
         }
       />
 
+      {!!scopedRestaurantId && (
+        <View style={styles.scopeBar}>
+          <Text style={styles.scopeText} numberOfLines={1}>
+            Viewing Vendor:{" "}
+            {vendorNameById[scopedRestaurantId] || scopedRestaurantId}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setScopedRestaurantId("")}
+            style={styles.scopeClearBtn}
+            accessibilityLabel="Clear vendor filter"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={18} color="#333" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#6200ee" />
           <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
-      ) : conversations.length === 0 ? (
+      ) : scopedConversations.length === 0 ? (
         <View style={styles.center}>
           <Ionicons name="chatbubbles-outline" size={48} color="#bbb" />
           <Text style={styles.emptyText}>No messages yet</Text>
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={scopedConversations}
           keyExtractor={(c) => c.conversationId}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.row}
               onPress={() =>
-                router.push(`/vendor/messages/${item.conversationId}`)
+                router.push({
+                  pathname: "/vendor/messages/[conversationId]",
+                  params: {
+                    conversationId: item.conversationId,
+                    restaurantId: item.restaurantId,
+                    vendorName: vendorNameById[item.restaurantId] || "",
+                  },
+                } as any)
               }
             >
               <View style={styles.rowLeft}>
@@ -165,6 +206,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
+  },
+  scopeBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(227, 242, 253, 0.9)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(25, 118, 210, 0.18)",
+  },
+  scopeText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#1976d2",
+    fontWeight: "600",
+    paddingRight: 8,
+  },
+  scopeClearBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.06)",
   },
   backButton: {
     width: 40,
