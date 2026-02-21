@@ -334,8 +334,9 @@ DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
   MAX_RETRIES=3
   RETRY=0
   while [ $RETRY -lt $MAX_RETRIES ]; do
-    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
-    if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull" 2>&1)
+    PULL_STATUS=$?
+    if [ $PULL_STATUS -ne 0 ] && echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
       RETRY=$((RETRY + 1))
       if [ $RETRY -lt $MAX_RETRIES ]; then
         echo -e "${YELLOW}DOCR 503 error, retrying ($RETRY/$MAX_RETRIES) in 10s...${NC}"
@@ -344,11 +345,15 @@ DIGITALOCEAN_SPACES_FOLDER=${DIGITALOCEAN_SPACES_FOLDER:-content/}
         echo -e "${YELLOW}WARNING: Pull failed after $MAX_RETRIES retries. DOCR may be experiencing issues.${NC}"
         echo -e "${YELLOW}Continuing with existing images on server...${NC}"
       fi
+    elif [ $PULL_STATUS -ne 0 ]; then
+      echo -e "${RED}ERROR: docker compose pull failed.${NC}"
+      echo "$PULL_OUTPUT"
+      exit 1
     else
       break
     fi
   done
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --remove-orphans --force-recreate"
   echo ""
 
   echo -e "${GREEN}Step 5: Creating databases${NC}"
@@ -680,27 +685,31 @@ DIGITALOCEAN_SPACES_FOLDER=$DIGITALOCEAN_SPACES_FOLDER
     fi
     
     # Try pull, capture output
-    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull 2>&1" || echo "PULL_FAILED")
+    PULL_OUTPUT=$($SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull" 2>&1)
+    PULL_STATUS=$?
     
     # Check if it's a 503 error
-    if echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
+    if [ $PULL_STATUS -ne 0 ] && echo "$PULL_OUTPUT" | grep -q "503 Service Unavailable"; then
       RETRY=$((RETRY + 1))
       if [ $RETRY -lt $MAX_RETRIES ]; then
-        echo -e "${YELLOW}DOCR returned 503 (temporary unavailability). Will retry...${NC}"
-        continue
+        echo -e "${YELLOW}DOCR 503 error, retrying ($RETRY/$MAX_RETRIES) in 10s...${NC}"
+        sleep 10
       else
-        echo -e "${YELLOW}WARNING: Pull failed after $MAX_RETRIES retries due to DOCR 503 errors.${NC}"
-        echo -e "${YELLOW}DOCR may be experiencing temporary issues. Continuing with existing images on server...${NC}"
+        echo -e "${YELLOW}WARNING: Pull failed after $MAX_RETRIES retries. DOCR may be experiencing issues.${NC}"
+        echo -e "${YELLOW}Continuing with existing images on server...${NC}"
         PULL_FAILED=true
       fi
+    elif [ $PULL_STATUS -ne 0 ]; then
+      echo -e "${RED}ERROR: docker compose pull failed.${NC}"
+      echo "$PULL_OUTPUT"
+      exit 1
     else
-      # Not a 503, either success or different error - proceed
       break
     fi
   done
   
   echo -e "${GREEN}Starting containers${NC}"
-  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d"
+  $SSH_CMD "$DROPLET_USER@$DROPLET_IP" "cd /opt/kram && docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --remove-orphans --force-recreate"
   echo ""
 
   # Step 5: MySQL init (create DBs)

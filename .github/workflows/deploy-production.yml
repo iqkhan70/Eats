@@ -248,7 +248,7 @@ jobs:
             echo "🔐 Logging into DigitalOcean Container Registry..."
             echo "$DOCR_TOKEN" | docker login ${{ env.REGISTRY }} -u doctl --password-stdin
             echo "📥 Pulling images..."
-            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull || true
+            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull
           EOF
 
       - name: Restart containers on droplet
@@ -261,9 +261,18 @@ jobs:
               exit 1
             fi
             echo "🔄 Recreating containers with new images..."
-            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --remove-orphans
+            docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env up -d --remove-orphans --force-recreate
             echo "📊 Current containers:"
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          EOF
+
+      - name: Verify OrderService ran migrations (logs)
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            set -e
+            cd /opt/kram
+            echo "🔎 Checking OrderService logs for migration messages..."
+            docker logs --tail 250 order-service 2>/dev/null | grep -E "OrderService migrations" || true
           EOF
 
       - name: Health check
