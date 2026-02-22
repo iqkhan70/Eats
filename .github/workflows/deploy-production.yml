@@ -234,6 +234,8 @@ jobs:
             sed -i "s|:\\(payment-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
             sed -i "s|:\\(chat-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
             sed -i "s|:\\(ai-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(review-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
+            sed -i "s|:\\(document-service\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
             sed -i "s|:\\(web-bff\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
             sed -i "s|:\\(mobile-bff\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
             sed -i "s|:\\(edge\\)\$|:\\1-$TAG|" deploy/digitalocean/docker-compose.prod.yml
