@@ -93,6 +93,8 @@ jobs:
             ["payment-service"]="src/services/TraditionalEats.PaymentService/TraditionalEats.PaymentService.csproj:TraditionalEats.PaymentService"
             ["chat-service"]="src/services/TraditionalEats.ChatService/TraditionalEats.ChatService.csproj:TraditionalEats.ChatService"
             ["ai-service"]="src/services/TraditionalEats.AIService/TraditionalEats.AIService.csproj:TraditionalEats.AIService"
+            ["review-service"]="src/services/TraditionalEats.ReviewService/TraditionalEats.ReviewService.csproj:TraditionalEats.ReviewService"
+            ["document-service"]="src/services/TraditionalEats.DocumentService/TraditionalEats.DocumentService.csproj:TraditionalEats.DocumentService"
             ["web-bff"]="src/bff/TraditionalEats.Web.Bff/TraditionalEats.Web.Bff.csproj:TraditionalEats.Web.Bff"
             ["mobile-bff"]="src/bff/TraditionalEats.Mobile.Bff/TraditionalEats.Mobile.Bff.csproj:TraditionalEats.Mobile.Bff"
           )
