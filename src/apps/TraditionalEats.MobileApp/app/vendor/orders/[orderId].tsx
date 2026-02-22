@@ -263,6 +263,41 @@ export default function VendorOrderDetailsScreen() {
             </View>
           </View>
 
+          <View style={styles.card}>
+            <Text style={styles.h2}>Order Summary</Text>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryValue}>
+                ${(order.subtotal ?? 0).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Tax</Text>
+              <Text style={styles.summaryValue}>
+                ${(order.tax ?? 0).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Delivery Fee</Text>
+              <Text style={styles.summaryValue}>
+                ${(order.deliveryFee ?? 0).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Service Fee</Text>
+              <Text style={styles.summaryValue}>
+                ${(order.serviceFee ?? 0).toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryTotalLabel}>Total</Text>
+              <Text style={styles.summaryTotalValue}>
+                ${order.total.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+
           {(order.deliveryAddress || order.specialInstructions) && (
             <View style={styles.card}>
               <Text style={styles.h2}>Customer Details</Text>
@@ -374,6 +409,19 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: "#EEE", marginTop: 12 },
   totalLabel: { color: "#333", fontWeight: "800" },
   totalValue: { color: "#007AFF", fontWeight: "800" },
+
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+    gap: 10,
+  },
+  summaryLabel: { color: "#666", fontWeight: "600" },
+  summaryValue: { color: "#333", fontWeight: "600" },
+  summaryDivider: { height: 1, backgroundColor: "#EEE", marginTop: 12 },
+  summaryTotalLabel: { color: "#333", fontWeight: "800" },
+  summaryTotalValue: { color: "#007AFF", fontWeight: "800" },
 
   historyRow: { marginTop: 10, gap: 4 },
 
