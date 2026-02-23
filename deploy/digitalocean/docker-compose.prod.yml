@@ -567,6 +567,7 @@ services:
       - certbot_certs:/etc/letsencrypt:ro
     depends_on:
       - web-bff
+      - payment-service
     networks:
       - internal
     restart: unless-stopped
