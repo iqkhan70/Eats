@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -39,6 +45,10 @@ export default function MessagesScreen() {
   >({});
   const [lastSenderRoleByConversationId, setLastSenderRoleByConversationId] =
     useState<Record<string, string>>({});
+
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loadingRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
   const getLastSeenStorageKey = useCallback(
     (conversationId: string) => {
@@ -220,59 +230,66 @@ export default function MessagesScreen() {
     [vendorNameById],
   );
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const authenticated = await authService.isAuthenticated();
-      if (!authenticated) {
-        router.replace("/login");
+  const loadLastSenderRoles = useCallback(
+    async (source: VendorConversation[]) => {
+      try {
+        const entries = await Promise.all(
+          (source ?? []).map(async (c) => {
+            try {
+              const msgs = await getVendorConversationMessages(
+                c.conversationId,
+              );
+              const last =
+                Array.isArray(msgs) && msgs.length > 0
+                  ? msgs[msgs.length - 1]
+                  : null;
+              const role =
+                typeof last?.senderRole === "string" ? last.senderRole : "";
+              return [c.conversationId, role] as const;
+            } catch {
+              return [c.conversationId, ""] as const;
+            }
+          }),
+        );
+
+        setLastSenderRoleByConversationId((prev) => {
+          const next = { ...prev };
+          for (const [id, role] of entries) next[id] = role;
+          return next;
+        });
+      } catch {
         return;
       }
-      const inbox = await getMyVendorConversations();
-      setConversations(inbox);
-      await loadLastSeen(inbox);
+    },
+    [],
+  );
 
-      void (async () => {
-        try {
-          const entries = await Promise.all(
-            (inbox ?? []).map(async (c) => {
-              try {
-                const msgs = await getVendorConversationMessages(
-                  c.conversationId,
-                );
-                const last =
-                  Array.isArray(msgs) && msgs.length > 0
-                    ? msgs[msgs.length - 1]
-                    : null;
-                const role =
-                  typeof last?.senderRole === "string" ? last.senderRole : "";
-                return [c.conversationId, role] as const;
-              } catch {
-                return [c.conversationId, ""] as const;
-              }
-            }),
-          );
-
-          setLastSenderRoleByConversationId((prev) => {
-            const next = { ...prev };
-            for (const [id, role] of entries) next[id] = role;
-            return next;
-          });
-        } catch {
+  const load = useCallback(
+    async (silent = false) => {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+      try {
+        if (!silent) setLoading(true);
+        const authenticated = await authService.isAuthenticated();
+        if (!authenticated) {
+          router.replace("/login");
           return;
         }
-      })();
-    } catch (e) {
-      console.error("Load inbox:", e);
-      setConversations([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadLastSeen, router]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+        const inbox = await getMyVendorConversations();
+        setConversations(inbox);
+        await loadLastSeen(inbox);
+        void loadLastSenderRoles(inbox);
+      } catch (e) {
+        console.error("Load inbox:", e);
+        if (!silent) setConversations([]);
+      } finally {
+        if (!silent) setLoading(false);
+        else setLoading((prev) => (prev ? false : prev));
+        loadingRef.current = false;
+      }
+    },
+    [loadLastSeen, loadLastSenderRoles, router],
+  );
 
   useEffect(() => {
     if (!myUserId) return;
@@ -337,7 +354,21 @@ export default function MessagesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load();
+      const silent = hasLoadedOnceRef.current;
+      hasLoadedOnceRef.current = true;
+      void load(silent);
+
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = setInterval(() => {
+        void load(true);
+      }, 5000);
+
+      return () => {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      };
     }, [load]),
   );
 
@@ -360,7 +391,10 @@ export default function MessagesScreen() {
           }
         }}
         right={
-          <TouchableOpacity onPress={load} style={styles.headerBtn}>
+          <TouchableOpacity
+            onPress={() => void load(false)}
+            style={styles.headerBtn}
+          >
             <Ionicons name="refresh" size={22} color="#333" />
           </TouchableOpacity>
         }
