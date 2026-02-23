@@ -447,6 +447,15 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={[styles.messagesFab, { top: insets.top + 6 }]}
+        onPress={() => router.push("/messages")}
+        accessibilityLabel="Open all messages"
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chatbubbles-outline" size={20} color="#6200ee" />
+      </TouchableOpacity>
+
       {/* Search Query Indicator */}
       {searchQuery.trim() && (
         <View
@@ -888,18 +897,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "rgba(255, 255, 255, 0.7)",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
+    paddingRight: 72,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.3)",
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.3)",
-    gap: 8,
+    gap: 6,
     overflow: "hidden",
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderRadius: 12,
     alignItems: "center",
     backgroundColor: "rgba(245, 245, 245, 0.8)",
@@ -911,12 +921,31 @@ const styles = StyleSheet.create({
     borderColor: "#6200ee",
   },
   filterTabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
     color: "#666",
   },
   filterTabTextActive: {
     color: "#fff",
     fontWeight: "600",
+  },
+
+  messagesFab: {
+    position: "absolute",
+    right: 16,
+    zIndex: 5,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });

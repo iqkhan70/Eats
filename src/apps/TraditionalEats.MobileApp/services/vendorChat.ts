@@ -49,6 +49,13 @@ export async function getVendorConversationMessages(
   return Array.isArray(data) ? data : [];
 }
 
+export async function getMyVendorConversations(): Promise<VendorConversation[]> {
+  const { data } = await api.get<VendorConversation[]>(
+    "/MobileBff/vendor-chat/conversations/mine",
+  );
+  return Array.isArray(data) ? data : [];
+}
+
 export async function getVendorInbox(): Promise<VendorConversation[]> {
   const { data } = await api.get<VendorConversation[]>(
     "/MobileBff/vendor-chat/inbox",
