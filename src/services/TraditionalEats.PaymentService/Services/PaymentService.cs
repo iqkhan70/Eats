@@ -454,7 +454,7 @@ public class PaymentService : IPaymentService
             },
             PaymentIntentData = new SessionPaymentIntentDataOptions
             {
-                CaptureMethod = "manual",
+                //CaptureMethod = "manual",
                 ApplicationFeeAmount = serviceFeeCents,
                 TransferData = new SessionPaymentIntentDataTransferDataOptions
                 {
