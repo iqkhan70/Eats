@@ -69,6 +69,9 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [ownRestaurantIds, setOwnRestaurantIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
   const [filter, setFilter] = useState<OrderFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(
@@ -93,6 +96,31 @@ export default function OrdersScreen() {
         if (!isMounted) return;
 
         setIsAuthenticated(authenticated);
+
+        if (authenticated) {
+          const vendor = await authService.isVendor();
+          if (!isMounted) return;
+
+          if (vendor) {
+            try {
+              const res = await api.get<RestaurantLight[]>(
+                "/MobileBff/vendor/my-restaurants",
+              );
+              const ids = new Set<string>();
+              const data = res.data ?? [];
+              if (Array.isArray(data)) {
+                for (const r of data) {
+                  if (r?.restaurantId) ids.add(r.restaurantId);
+                }
+              }
+              setOwnRestaurantIds(ids);
+            } catch {
+              setOwnRestaurantIds(new Set());
+            }
+          } else {
+            setOwnRestaurantIds(new Set());
+          }
+        }
 
         if (
           !authenticated &&
@@ -583,30 +611,32 @@ export default function OrdersScreen() {
                     </Text>
                   </View>
 
-                  <TouchableOpacity
-                    onPress={(ev) => {
-                      // Prevent the card press from triggering navigation
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      (ev as any)?.stopPropagation?.();
-                      router.push({
-                        pathname: "/orders/chat/[orderId]",
-                        params: {
-                          orderId: item.orderId,
-                          restaurantName:
-                            restaurantNamesById[item.restaurantId] ?? "",
-                        },
-                      } as any);
-                    }}
-                    style={styles.chatIconBtn}
-                    accessibilityLabel="Open order chat"
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name="chatbubbles-outline"
-                      size={18}
-                      color="#6200ee"
-                    />
-                  </TouchableOpacity>
+                  {!ownRestaurantIds.has(item.restaurantId) && (
+                    <TouchableOpacity
+                      onPress={(ev) => {
+                        // Prevent the card press from triggering navigation
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (ev as any)?.stopPropagation?.();
+                        router.push({
+                          pathname: "/orders/chat/[orderId]",
+                          params: {
+                            orderId: item.orderId,
+                            restaurantName:
+                              restaurantNamesById[item.restaurantId] ?? "",
+                          },
+                        } as any);
+                      }}
+                      style={styles.chatIconBtn}
+                      accessibilityLabel="Open order chat"
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name="chatbubbles-outline"
+                        size={18}
+                        color="#6200ee"
+                      />
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {!!(restaurantNamesById[item.restaurantId] ?? "").trim() && (

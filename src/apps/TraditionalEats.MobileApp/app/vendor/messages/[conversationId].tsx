@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   SafeAreaView,
   View,
@@ -12,8 +12,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getVendorConversationMessages } from "../../../services/vendorChat";
 import VendorChat from "../../../components/VendorChat";
 import AppHeader from "../../../components/AppHeader";
+import { authService } from "../../../services/auth";
 
 export default function VendorMessageThreadScreen() {
   const router = useRouter();
@@ -31,6 +34,42 @@ export default function VendorMessageThreadScreen() {
   const headerHeight = useHeaderHeight();
   const { height: windowHeight } = useWindowDimensions();
   const chatMaxHeight = Math.round(windowHeight * 0.75);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    void (async () => {
+      try {
+        let viewerUserId = "";
+        try {
+          const id = await authService.getUserId();
+          viewerUserId = typeof id === "string" ? id : "";
+        } catch {
+          viewerUserId = "";
+        }
+
+        const key = viewerUserId
+          ? `vendor_inbox_last_seen:${viewerUserId}:${conversationId}`
+          : `vendor_inbox_last_seen:${conversationId}`;
+        const legacyKey = `vendor_inbox_last_seen:${conversationId}`;
+        let seenAt = Date.now();
+        try {
+          const msgs = await getVendorConversationMessages(conversationId);
+          const latest = (msgs ?? []).reduce((max, m) => {
+            const t = m?.sentAt ? new Date(m.sentAt).getTime() : 0;
+            return Number.isFinite(t) && t > max ? t : max;
+          }, 0);
+          if (latest > 0) seenAt = latest;
+        } catch {
+          // ignore
+        }
+        const value = String(Math.max(Date.now(), seenAt));
+        await AsyncStorage.setItem(key, value);
+        await AsyncStorage.setItem(legacyKey, value);
+      } catch {
+        return;
+      }
+    })();
+  }, [conversationId]);
 
   if (!conversationId) return null;
 

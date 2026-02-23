@@ -207,6 +207,23 @@ class AuthService {
     );
   }
 
+  async getUserId(): Promise<string | null> {
+    const token = await this.getAccessToken();
+    if (!token) return null;
+
+    const decoded = this.decodeToken(token);
+    if (!decoded) return null;
+
+    return (
+      decoded.sub ||
+      decoded.userId ||
+      decoded.uid ||
+      decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ||
+      decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/primarysid'] ||
+      null
+    );
+  }
+
   /**
    * ✅ Token expiration based on exp (seconds since epoch)
    */

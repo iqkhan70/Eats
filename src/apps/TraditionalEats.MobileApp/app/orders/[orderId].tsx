@@ -75,6 +75,10 @@ export default function OrderDetailsScreen() {
   }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ownRestaurantIds, setOwnRestaurantIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
+  const [isVendor, setIsVendor] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [retryingPayment, setRetryingPayment] = useState(false);
   const [hasReview, setHasReview] = useState(false);
@@ -97,6 +101,45 @@ export default function OrderDetailsScreen() {
       loadOrder();
     }
   }, [params.orderId]);
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const vendor = await authService.isVendor();
+        if (!mounted) return;
+        setIsVendor(vendor);
+        if (!vendor) {
+          setOwnRestaurantIds(new Set());
+          return;
+        }
+        try {
+          const res = await api.get<RestaurantLight[]>(
+            "/MobileBff/vendor/my-restaurants",
+          );
+          const ids = new Set<string>();
+          const data = res.data ?? [];
+          if (Array.isArray(data)) {
+            for (const r of data) {
+              if (r?.restaurantId) ids.add(r.restaurantId);
+            }
+          }
+          setOwnRestaurantIds(ids);
+        } catch {
+          setOwnRestaurantIds(new Set());
+        }
+      } catch {
+        if (mounted) {
+          setIsVendor(false);
+          setOwnRestaurantIds(new Set());
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const passed =
@@ -628,21 +671,22 @@ export default function OrderDetailsScreen() {
               </View>
             )}
 
-            {/* Chat – opens on its own screen to save space */}
-            <TouchableOpacity
-              style={styles.chatCard}
-              onPress={() => router.push(`/orders/chat/${params.orderId}`)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chatbubbles" size={24} color="#6200ee" />
-              <View style={styles.chatCardText}>
-                <Text style={styles.chatCardTitle}>Order Chat</Text>
-                <Text style={styles.chatCardSubtitle}>
-                  Message about this order
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={22} color="#999" />
-            </TouchableOpacity>
+            {!isVendor || !ownRestaurantIds.has(order.restaurantId) ? (
+              <TouchableOpacity
+                style={styles.chatCard}
+                onPress={() => router.push(`/orders/chat/${params.orderId}`)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chatbubbles" size={24} color="#6200ee" />
+                <View style={styles.chatCardText}>
+                  <Text style={styles.chatCardTitle}>Order Chat</Text>
+                  <Text style={styles.chatCardSubtitle}>
+                    Message about this order
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={22} color="#999" />
+              </TouchableOpacity>
+            ) : null}
 
             {/* Order Items */}
             <View style={styles.card}>

@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { authService } from "../services/auth";
 import {
   connectVendorChatHub,
   disconnectVendorChatHub,
@@ -39,6 +41,30 @@ function isAuthError(message: string): boolean {
     lower.includes("expired") ||
     lower.includes("token")
   );
+}
+
+function getLastSeenKey(
+  conversationId: string,
+  viewerRole: "Customer" | "Vendor" | "Admin",
+  viewerUserId?: string,
+): string {
+  if (viewerRole === "Customer") {
+    return viewerUserId
+      ? `vendor_chat_last_seen:${viewerUserId}:${conversationId}`
+      : `vendor_chat_last_seen:${conversationId}`;
+  }
+  return viewerUserId
+    ? `vendor_inbox_last_seen:${viewerUserId}:${conversationId}`
+    : `vendor_inbox_last_seen:${conversationId}`;
+}
+
+function getLegacyLastSeenKey(
+  conversationId: string,
+  viewerRole: "Customer" | "Vendor" | "Admin",
+): string {
+  if (viewerRole === "Customer")
+    return `vendor_chat_last_seen:${conversationId}`;
+  return `vendor_inbox_last_seen:${conversationId}`;
 }
 
 function getSenderLabel(
@@ -90,10 +116,12 @@ export default function VendorChat({
   vendorName?: string;
 }) {
   const router = useRouter();
+  const SKEW_MS = 2 * 60 * 1000;
   const [messages, setMessages] = useState<VendorChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewerUserId, setViewerUserId] = useState<string>("");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -103,6 +131,22 @@ export default function VendorChat({
 
   const scrollRef = useRef<ScrollView | null>(null);
   const hasRedirectedRef = useRef(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const id = await authService.getUserId();
+        if (!mounted) return;
+        setViewerUserId(typeof id === "string" ? id : "");
+      } catch {
+        if (mounted) setViewerUserId("");
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadMessages = useCallback(async () => {
     try {
@@ -209,6 +253,26 @@ export default function VendorChat({
         JSON.stringify(metadata),
       );
 
+      try {
+        let effectiveUserId = viewerUserId;
+        if (!effectiveUserId) {
+          try {
+            const id = await authService.getUserId();
+            effectiveUserId = typeof id === "string" ? id : "";
+          } catch {
+            effectiveUserId = "";
+          }
+        }
+
+        const key = getLastSeenKey(conversationId, viewerRole, effectiveUserId);
+        const legacyKey = getLegacyLastSeenKey(conversationId, viewerRole);
+        const value = String(Date.now() + SKEW_MS);
+        await AsyncStorage.setItem(key, value);
+        await AsyncStorage.setItem(legacyKey, value);
+      } catch {
+        // ignore
+      }
+
       // Reset form
       setPaymentAmount("");
       setPaymentDescription("");
@@ -231,6 +295,26 @@ export default function VendorChat({
       await sendVendorMessage(conversationId, text);
       setInput("");
       scrollToBottom(true);
+
+      try {
+        let effectiveUserId = viewerUserId;
+        if (!effectiveUserId) {
+          try {
+            const id = await authService.getUserId();
+            effectiveUserId = typeof id === "string" ? id : "";
+          } catch {
+            effectiveUserId = "";
+          }
+        }
+
+        const key = getLastSeenKey(conversationId, viewerRole, effectiveUserId);
+        const legacyKey = getLegacyLastSeenKey(conversationId, viewerRole);
+        const value = String(Date.now() + SKEW_MS);
+        await AsyncStorage.setItem(key, value);
+        await AsyncStorage.setItem(legacyKey, value);
+      } catch {
+        // ignore
+      }
     } catch (e: any) {
       const msg = e?.message || "Failed to send";
       if (isAuthError(msg) && !hasRedirectedRef.current) {

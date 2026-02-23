@@ -14,10 +14,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import VendorChat from "../../../components/VendorChat";
 import { authService } from "../../../services/auth";
 import { api } from "../../../services/api";
-import { createOrGetVendorConversation } from "../../../services/vendorChat";
+import {
+  createOrGetVendorConversation,
+  getVendorConversationMessages,
+} from "../../../services/vendorChat";
 
 export default function RestaurantChatScreen() {
   const router = useRouter();
@@ -85,6 +89,40 @@ export default function RestaurantChatScreen() {
 
         const convo = await createOrGetVendorConversation(restaurantId);
         if (mounted) setConversationId(convo.conversationId);
+
+        // Mark as seen so the /messages unread dot clears even when entering chat from menu screen
+        try {
+          let viewerUserId = "";
+          try {
+            const id = await authService.getUserId();
+            viewerUserId = typeof id === "string" ? id : "";
+          } catch {
+            viewerUserId = "";
+          }
+
+          const key = viewerUserId
+            ? `vendor_chat_last_seen:${viewerUserId}:${convo.conversationId}`
+            : `vendor_chat_last_seen:${convo.conversationId}`;
+          const legacyKey = `vendor_chat_last_seen:${convo.conversationId}`;
+          let seenAt = Date.now();
+          try {
+            const msgs = await getVendorConversationMessages(
+              convo.conversationId,
+            );
+            const latest = (msgs ?? []).reduce((max, m) => {
+              const t = m?.sentAt ? new Date(m.sentAt).getTime() : 0;
+              return Number.isFinite(t) && t > max ? t : max;
+            }, 0);
+            if (latest > 0) seenAt = latest;
+          } catch {
+            // ignore
+          }
+          const value = String(Math.max(Date.now(), seenAt));
+          await AsyncStorage.setItem(key, value);
+          await AsyncStorage.setItem(legacyKey, value);
+        } catch {
+          // ignore
+        }
       } catch (e: any) {
         console.error("Start vendor chat:", e);
         Alert.alert("Error", e?.message || "Failed to start chat");
