@@ -54,12 +54,7 @@ public class WebhooksController : ControllerBase
         }
         catch (StripeException ex)
         {
-            _logger.LogWarning(ex, "Stripe webhook signature verification failed. " +
-                "BodyLength={BodyLength}, SignatureHeader={Signature}, " +
-                "SecretPrefix={SecretPrefix}, SecretLength={SecretLength}",
-                json?.Length, signature?[..Math.Min(signature?.Length ?? 0, 30)],
-                webhookSecret?[..Math.Min(webhookSecret?.Length ?? 0, 10)],
-                webhookSecret?.Length);
+            _logger.LogWarning(ex, "Stripe webhook signature verification failed");
             return BadRequest(new { message = "Invalid signature" });
         }
 
@@ -69,12 +64,12 @@ public class WebhooksController : ControllerBase
         {
             switch (stripeEvent.Type)
             {
-                case Events.AccountUpdated:
+                case EventTypes.AccountUpdated:
                     var account = stripeEvent.Data.Object as Account;
                     if (account != null)
                         await _paymentService.UpdateVendorOnboardingFromStripeAsync(account.Id);
                     break;
-                case Events.CheckoutSessionCompleted:
+                case EventTypes.CheckoutSessionCompleted:
                     var sessionCompleted = stripeEvent.Data.Object as Session;
                     if (sessionCompleted != null)
                     {
@@ -87,7 +82,7 @@ public class WebhooksController : ControllerBase
                         }
                     }
                     break;
-                case Events.CheckoutSessionExpired:
+                case EventTypes.CheckoutSessionExpired:
                     var sessionExpired = stripeEvent.Data.Object as Session;
                     if (sessionExpired != null)
                     {
@@ -100,12 +95,12 @@ public class WebhooksController : ControllerBase
                         }
                     }
                     break;
-                case Events.PaymentIntentSucceeded:
+                case EventTypes.PaymentIntentSucceeded:
                     var piSucceeded = stripeEvent.Data.Object as PaymentIntent;
                     if (piSucceeded != null)
                         await _paymentService.UpdatePaymentIntentStatusFromStripeAsync(piSucceeded.Id, "Authorized", null);
                     break;
-                case Events.PaymentIntentPaymentFailed:
+                case EventTypes.PaymentIntentPaymentFailed:
                     var piFailed = stripeEvent.Data.Object as PaymentIntent;
                     if (piFailed != null)
                         await _paymentService.UpdatePaymentIntentStatusFromStripeAsync(piFailed.Id, "Failed", piFailed.LastPaymentError?.Message);
