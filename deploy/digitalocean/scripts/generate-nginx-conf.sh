@@ -37,6 +37,9 @@ http {
     upstream chat_service {
         server chat-service:5012;
     }
+    upstream payment_service {
+        server payment-service:5004;
+    }
 
 NGINX_HEAD
 
@@ -125,6 +128,15 @@ else
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
         }
+        # Stripe webhooks → payment-service (case-insensitive; raw body preserved for signature verification)
+        location ~* ^/api/webhooks/ {
+            proxy_pass http://payment_service;
+            proxy_http_version 1.1;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
         location /health {
             access_log off;
             return 200 "ok\n";
@@ -205,6 +217,15 @@ if [ -n "$DOMAIN" ] && { [ "${CERTS_READY:-0}" = "1" ] || [ "$USE_SELF_SIGNED_CE
         # ChatService REST API endpoints
         location /api/Chat/ {
             proxy_pass http://chat_service/api/Chat/;
+            proxy_http_version 1.1;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+        # Stripe webhooks → payment-service (case-insensitive; raw body preserved for signature verification)
+        location ~* ^/api/webhooks/ {
+            proxy_pass http://payment_service;
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
