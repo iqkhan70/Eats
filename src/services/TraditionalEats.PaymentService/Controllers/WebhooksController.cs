@@ -54,7 +54,12 @@ public class WebhooksController : ControllerBase
         }
         catch (StripeException ex)
         {
-            _logger.LogWarning(ex, "Stripe webhook signature verification failed");
+            _logger.LogWarning(ex, "Stripe webhook signature verification failed. " +
+                "BodyLength={BodyLength}, SignatureHeader={Signature}, " +
+                "SecretPrefix={SecretPrefix}, SecretLength={SecretLength}",
+                json?.Length, signature?[..Math.Min(signature?.Length ?? 0, 30)],
+                webhookSecret?[..Math.Min(webhookSecret?.Length ?? 0, 10)],
+                webhookSecret?.Length);
             return BadRequest(new { message = "Invalid signature" });
         }
 
