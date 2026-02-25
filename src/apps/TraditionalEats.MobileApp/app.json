@@ -26,7 +26,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Kram to use your location to find nearby vendors."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "ios": {
       "supportsTablet": true,

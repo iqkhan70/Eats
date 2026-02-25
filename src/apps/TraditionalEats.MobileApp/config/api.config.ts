@@ -18,7 +18,8 @@ export interface AppConfig {
 
 // Environment selection: 'localhost' | 'ip' | 'ngrok' | 'staging' | 'production'
 // Can be set via EXPO_PUBLIC_ENV environment variable
-const ENV_MODE = process.env.EXPO_PUBLIC_ENV || 'ip';
+// Normalize to lowercase (Unix is case-sensitive; .NET uses "Production" etc.)
+const ENV_MODE = (process.env.EXPO_PUBLIC_ENV || 'ip').toLowerCase();
 
 // Find your computer's IP address:
 // On macOS: ipconfig getifaddr en0
@@ -77,5 +78,10 @@ const config: AppConfig = {
   CHAT_HUB_URL: chatHubUrl,
   VENDOR_CHAT_HUB_URL: vendorChatHubUrl,
 };
+
+// Log API target on load (helps verify production vs local)
+if (__DEV__) {
+  console.log(`📡 API: ${apiBaseUrl} (ENV=${ENV_MODE})`);
+}
 
 export { config as APP_CONFIG };

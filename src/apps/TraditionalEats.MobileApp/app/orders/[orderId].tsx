@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as WebBrowser from "expo-web-browser";
 import {
   View,
   Text,
@@ -7,7 +8,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
@@ -363,8 +363,13 @@ export default function OrderDetailsScreen() {
 
     try {
       setRetryingPayment(true);
+      const paymentRedirectUrl = "kram://payment-done";
       const res = await api.post<{ orderId: string; checkoutUrl?: string }>(
         `/MobileBff/orders/${order.orderId}/retry-payment`,
+        {
+          successUrl: `${paymentRedirectUrl}?status=success`,
+          cancelUrl: `${paymentRedirectUrl}?status=cancelled`,
+        },
       );
       const checkoutUrl = (res.data as any)?.checkoutUrl;
       if (typeof checkoutUrl !== "string" || !checkoutUrl.trim()) {
@@ -375,12 +380,8 @@ export default function OrderDetailsScreen() {
         return;
       }
 
-      await Linking.openURL(checkoutUrl);
-      Alert.alert(
-        "Complete payment",
-        "Complete your payment in the browser, then return to the app.",
-        [{ text: "OK", onPress: () => loadOrder() }],
-      );
+      await WebBrowser.openAuthSessionAsync(checkoutUrl, paymentRedirectUrl);
+      await loadOrder();
     } catch (e: any) {
       const msg =
         e?.response?.data?.message ||

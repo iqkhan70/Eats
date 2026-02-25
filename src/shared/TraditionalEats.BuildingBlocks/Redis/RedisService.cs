@@ -185,6 +185,11 @@ public static class RedisExtensions
             ?? configuration["Redis"]
             ?? "localhost:6379"; // Default fallback
 
+        // If Redis requires auth, add password: set Redis__Password=yourpassword or include in connection string
+        var password = configuration["Redis:Password"];
+        if (!string.IsNullOrWhiteSpace(password) && !connectionString.Contains("password=", StringComparison.OrdinalIgnoreCase))
+            connectionString = connectionString.TrimEnd(',') + ",password=" + password;
+
         services.AddSingleton<IConnectionMultiplexer>(sp =>
         {
             return ConnectionMultiplexer.Connect(connectionString);
