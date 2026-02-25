@@ -410,16 +410,22 @@ export default function OrderDetailsScreen() {
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>Order Not Found</Text>
+          <Text style={styles.emptyText}>Order Not Available</Text>
           <Text style={styles.emptySubtext}>
-            The order you're looking for doesn't exist or you don't have
-            permission to view it.
+            This order doesn't exist or was placed with a different account. Try
+            logging out and back in, or open the order from your Orders list.
           </Text>
           <TouchableOpacity
             style={styles.backButton}
+            onPress={() => router.replace("/(tabs)/orders")}
+          >
+            <Text style={styles.backButtonText}>View My Orders</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.backButton, styles.backButtonSecondary]}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>Back to Orders</Text>
+            <Text style={styles.backButtonTextSecondary}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -923,8 +929,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 20,
   },
+  backButtonSecondary: {
+    backgroundColor: "transparent",
+    marginTop: 8,
+  },
   backButtonText: {
     color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  backButtonTextSecondary: {
+    color: "#6200ee",
     fontSize: 14,
     fontWeight: "600",
   },

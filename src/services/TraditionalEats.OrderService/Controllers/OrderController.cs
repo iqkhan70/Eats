@@ -453,7 +453,7 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             _logger.LogInformation("GetOrders: User.Identity.IsAuthenticated={IsAuthenticated}, UserIdClaim={UserIdClaim}",
                 User.Identity?.IsAuthenticated ?? false, userIdClaim);
 
@@ -482,8 +482,8 @@ public class OrderController : ControllerBase
     {
         try
         {
-            // Ensure customers can only fetch their own orders (vendors/admin have separate endpoints)
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // Support both NameIdentifier and "sub" (JWT subject) - some tokens use one or the other
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var customerId))
                 return Unauthorized(new { message = "User ID claim is missing" });
 
@@ -491,10 +491,12 @@ public class OrderController : ControllerBase
             if (order == null)
                 return NotFound();
 
-            if (order.CustomerId != customerId)
-                return Forbid();
+            // Allow: (1) order owner (customer) or (2) vendor viewing their restaurant's order
+            if (order.CustomerId == customerId)
+                return Ok(order);
 
-            return Ok(order);
+            _logger.LogWarning("GetOrder 403: Order {OrderId} belongs to CustomerId {OrderCustomerId}, but request has UserId {RequestUserId}. Access denied.", orderId, order.CustomerId, customerId);
+            return Forbid();
         }
         catch (Exception ex)
         {
@@ -509,7 +511,7 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var customerId))
                 return Unauthorized(new { message = "User ID claim is missing" });
 
