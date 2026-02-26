@@ -161,6 +161,8 @@ services:
       RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
+      Services__PaymentService__BaseUrl: "http://payment-service:5004"
+      Services__PaymentService__InternalApiKey: ${PAYMENT_SERVICE_INTERNAL_API_KEY:-}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -326,6 +328,7 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE:-Kram}
       HttpClients__OrderService__BaseAddress: "http://order-service:5002"
       HttpClients__RestaurantService__BaseAddress: "http://restaurant-service:5007"
+      Services__OrderService__InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -537,6 +540,9 @@ services:
       customer-service: { condition: service_started }
       order-service: { condition: service_started }
       restaurant-service: { condition: service_started }
+      catalog-service: { condition: service_started }
+      payment-service: { condition: service_started }
+      chat-service: { condition: service_started }
       ai-service: { condition: service_started }
       review-service: { condition: service_started }
       document-service: { condition: service_started }

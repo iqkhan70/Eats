@@ -286,8 +286,9 @@ public class MobileBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurant menu");
-            return StatusCode(500, new { error = "Failed to fetch restaurant menu" });
+            _logger.LogError(ex, "Error fetching restaurant menu. CatalogService may be unreachable. Returning empty list for RestaurantId={RestaurantId}", restaurantId);
+            // Return empty array so app can load restaurant page; avoids 500 when CatalogService is down
+            return JsonString("[]", 200);
         }
     }
 
@@ -307,8 +308,9 @@ public class MobileBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching categories");
-            return StatusCode(500, new { error = "Failed to fetch categories" });
+            _logger.LogError(ex, "Error fetching categories. CatalogService may be down. Returning empty array.");
+            // Return empty array so app can load; avoids 500 when CatalogService/Redis is unavailable (e.g. local dev)
+            return JsonString("[]", 200);
         }
     }
 
@@ -568,8 +570,12 @@ public class MobileBffController : ControllerBase
             }
 
             var baseUrl = _configuration["AppBaseUrl"] ?? (Request.Scheme + "://" + Request.Host);
-            var successUrl = baseUrl.TrimEnd('/') + "/orders?payment=success";
-            var cancelUrl = baseUrl.TrimEnd('/') + "/cart?payment=cancelled";
+            var successUrl = !string.IsNullOrWhiteSpace(request.SuccessUrl)
+                ? request.SuccessUrl!.Trim()
+                : baseUrl.TrimEnd('/') + "/orders?payment=success";
+            var cancelUrl = !string.IsNullOrWhiteSpace(request.CancelUrl)
+                ? request.CancelUrl!.Trim()
+                : baseUrl.TrimEnd('/') + "/cart?payment=cancelled";
             var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
             var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
             if (Request.Headers.TryGetValue("Authorization", out var checkoutAuthHeader))
@@ -725,7 +731,7 @@ public class MobileBffController : ControllerBase
 
     [HttpPost("orders/{orderId}/retry-payment")]
     [Authorize]
-    public async Task<IActionResult> RetryPayment(Guid orderId)
+    public async Task<IActionResult> RetryPayment(Guid orderId, [FromBody] RetryPaymentRequest? body = null)
     {
         try
         {
@@ -761,8 +767,12 @@ public class MobileBffController : ControllerBase
                 return BadRequest(new { error = "Order is missing restaurantId" });
 
             var baseUrl = _configuration["AppBaseUrl"] ?? (Request.Scheme + "://" + Request.Host);
-            var successUrl = baseUrl.TrimEnd('/') + "/orders?payment=success";
-            var cancelUrl = baseUrl.TrimEnd('/') + "/orders/" + orderId + "?payment=cancelled";
+            var successUrl = !string.IsNullOrWhiteSpace(body?.SuccessUrl)
+                ? body.SuccessUrl!.Trim()
+                : baseUrl.TrimEnd('/') + "/orders?payment=success";
+            var cancelUrl = !string.IsNullOrWhiteSpace(body?.CancelUrl)
+                ? body.CancelUrl!.Trim()
+                : baseUrl.TrimEnd('/') + "/orders/" + orderId + "?payment=cancelled";
 
             var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
             var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
@@ -824,11 +834,26 @@ public class MobileBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("PaymentService");
-            ForwardBearerToken(client);
+            var paymentClient = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(paymentClient);
 
-            var response = await client.PostAsJsonAsync("/api/payment/refund-by-order", new { orderId });
+            var response = await paymentClient.PostAsJsonAsync("/api/payment/refund-by-order", new { orderId });
             var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Update order status to Refunded so UI hides Refund button (PaymentService may also do this; BFF ensures it happens)
+                try
+                {
+                    var orderClient = _httpClientFactory.CreateClient("OrderService");
+                    ForwardBearerToken(orderClient);
+                    await orderClient.PutAsJsonAsync($"/api/order/{orderId}/status", new { Status = "Refunded", Notes = "Refunded by vendor" });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "RefundOrder: Failed to update order status to Refunded for OrderId={OrderId}", orderId);
+                }
+            }
 
             return StatusCode((int)response.StatusCode, content);
         }
@@ -2389,8 +2414,12 @@ public record PlaceOrderRequest(
     Guid CartId,
     string DeliveryAddress,
     string? SpecialInstructions,
-    string? IdempotencyKey
+    string? IdempotencyKey,
+    string? SuccessUrl,
+    string? CancelUrl
 );
+
+public record RetryPaymentRequest(string? SuccessUrl, string? CancelUrl);
 
 public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);

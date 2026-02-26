@@ -453,7 +453,7 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             _logger.LogInformation("GetOrders: User.Identity.IsAuthenticated={IsAuthenticated}, UserIdClaim={UserIdClaim}",
                 User.Identity?.IsAuthenticated ?? false, userIdClaim);
 
@@ -482,8 +482,8 @@ public class OrderController : ControllerBase
     {
         try
         {
-            // Ensure customers can only fetch their own orders (vendors/admin have separate endpoints)
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // Support both NameIdentifier and "sub" (JWT subject) - some tokens use one or the other
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var customerId))
                 return Unauthorized(new { message = "User ID claim is missing" });
 
@@ -491,10 +491,12 @@ public class OrderController : ControllerBase
             if (order == null)
                 return NotFound();
 
-            if (order.CustomerId != customerId)
-                return Forbid();
+            // Allow: (1) order owner (customer) or (2) vendor viewing their restaurant's order
+            if (order.CustomerId == customerId)
+                return Ok(order);
 
-            return Ok(order);
+            _logger.LogWarning("GetOrder 403: Order {OrderId} belongs to CustomerId {OrderCustomerId}, but request has UserId {RequestUserId}. Access denied.", orderId, order.CustomerId, customerId);
+            return Forbid();
         }
         catch (Exception ex)
         {
@@ -509,7 +511,7 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var customerId))
                 return Unauthorized(new { message = "User ID claim is missing" });
 
@@ -531,6 +533,67 @@ public class OrderController : ControllerBase
         {
             _logger.LogError(ex, "Failed to cancel order {OrderId}", orderId);
             return StatusCode(500, new { message = "Failed to cancel order" });
+        }
+    }
+
+    /// <summary>
+    /// Internal: mark order as Refunded. Called by PaymentService after successful vendor refund.
+    /// </summary>
+    [HttpPatch("internal/{orderId}/refunded")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalMarkOrderRefunded(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal mark refunded rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        try
+        {
+            var ok = await _orderService.UpdateOrderStatusAsync(orderId, "Refunded", "Refunded by vendor");
+            if (!ok) return NotFound(new { message = "Order not found" });
+            return Ok(new { message = "Order marked as refunded" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalMarkOrderRefunded failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to mark order as refunded" });
+        }
+    }
+
+    /// <summary>
+    /// Internal: get order payment info (StripePaymentIntentId, Total, ServiceFee, Status). Used by PaymentService for refund fallback when PaymentIntent not in its DB.
+    /// </summary>
+    [HttpGet("internal/{orderId}/payment-info")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalGetOrderPaymentInfo(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal order payment-info rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        try
+        {
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null) return NotFound(new { message = "Order not found" });
+            return Ok(new
+            {
+                orderId = order.OrderId,
+                status = order.Status,
+                stripePaymentIntentId = order.StripePaymentIntentId,
+                total = order.Total,
+                serviceFee = order.ServiceFee
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalGetOrderPaymentInfo failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to get order payment info" });
         }
     }
 

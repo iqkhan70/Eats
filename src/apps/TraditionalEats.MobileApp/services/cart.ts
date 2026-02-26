@@ -138,19 +138,24 @@ class CartService {
   async placeOrder(
     cartId: string,
     deliveryAddress: string,
-    specialInstructions?: string
+    specialInstructions?: string,
+    successUrl?: string,
+    cancelUrl?: string
   ): Promise<{ orderId: string; checkoutUrl?: string; error?: string }> {
     try {
-      const response = await api.post<{
-        orderId: string;
-        checkoutUrl?: string;
-        error?: string;
-      }>('/MobileBff/orders/place', {
+      const body: Record<string, unknown> = {
         cartId,
         deliveryAddress,
         specialInstructions: specialInstructions || null,
         idempotencyKey: null,
-      });
+      };
+      if (successUrl) body.successUrl = successUrl;
+      if (cancelUrl) body.cancelUrl = cancelUrl;
+      const response = await api.post<{
+        orderId: string;
+        checkoutUrl?: string;
+        error?: string;
+      }>('/MobileBff/orders/place', body);
       return {
         orderId: response.data.orderId,
         checkoutUrl: response.data.checkoutUrl ?? undefined,

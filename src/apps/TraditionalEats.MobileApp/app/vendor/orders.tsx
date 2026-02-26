@@ -70,6 +70,7 @@ const statusOptions = [
   "Preparing",
   "Ready",
   "Completed",
+  "Refunded",
   "Cancelled",
 ] as const;
 type OrderStatus = (typeof statusOptions)[number];
@@ -79,6 +80,7 @@ const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
   Preparing: ["Ready", "Cancelled"],
   Ready: ["Completed", "Cancelled"],
   Completed: [],
+  Refunded: [],
   Cancelled: [],
 };
 
@@ -92,6 +94,8 @@ const getStatusColor = (status: string): string => {
       return "#66BB6A";
     case "Completed":
       return "#78909C";
+    case "Refunded":
+      return "#9E9E9E";
     case "Cancelled":
       return "#EF5350";
     default:
@@ -196,6 +200,7 @@ export default function VendorOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [refundingOrderId, setRefundingOrderId] = useState<string | null>(null);
+  const [ordersRefreshTrigger, setOrdersRefreshTrigger] = useState(0);
 
   // ✅ SEARCH
   const [searchText, setSearchText] = useState("");
@@ -292,11 +297,13 @@ export default function VendorOrdersScreen() {
               try {
                 setRefundingOrderId(orderId);
                 await api.post(`/MobileBff/orders/${orderId}/refund`);
-                Alert.alert(
-                  "Refund initiated",
-                  "Refund request sent successfully.",
-                );
-                await loadOrders();
+                setOrdersRefreshTrigger((t) => t + 1);
+                if (isMountedRef.current) {
+                  Alert.alert(
+                    "Refund initiated",
+                    "Refund request sent successfully.",
+                  );
+                }
               } catch (err) {
                 const msg = normalizeErrorMessage(err);
                 Alert.alert("Refund failed", msg);
@@ -308,6 +315,7 @@ export default function VendorOrdersScreen() {
         ],
       );
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadOrders is stable enough; adding it can cause unnecessary churn
     [refundingOrderId],
   );
 
@@ -398,7 +406,7 @@ export default function VendorOrdersScreen() {
       void loadOrders();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRestaurantId, restaurants, isAuthenticated, isVendor]);
+  }, [selectedRestaurantId, restaurants, isAuthenticated, isVendor, ordersRefreshTrigger]);
 
   const onRefresh = async () => {
     setRefreshing(true);

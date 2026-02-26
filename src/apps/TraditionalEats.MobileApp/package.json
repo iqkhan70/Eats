@@ -4,10 +4,10 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-"create-assets": "node scripts/create-assets.js",
+    "create-assets": "node scripts/create-assets.js",
     "doctor": "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=true npx expo-doctor"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "expo-location": "~19.0.8",
     "expo-router": "~6.0.23",
     "expo-status-bar": "~3.0.9",
+    "expo-web-browser": "~15.0.10",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-maps": "1.20.1",

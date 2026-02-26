@@ -80,6 +80,10 @@ class ApiClient {
             method === 'POST' &&
             status === 400;
 
+          // Don't log 403 for order detail - UI shows "you don't have permission to view it"
+          const isOrderDetail403 =
+            url.includes('/orders/') && method === 'GET' && status === 403;
+
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
           // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
@@ -90,7 +94,8 @@ class ApiClient {
             isGeocodeZip404 ||
             isLogin401 ||
             (isAuthEndpoint && isUnauthorized) ||
-            isStripeRefreshOnboardingStatus;
+            isStripeRefreshOnboardingStatus ||
+            isOrderDetail403;
 
           if (!shouldSuppress) {
             console.error('❌ API Error:', {

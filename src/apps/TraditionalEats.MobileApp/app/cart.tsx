@@ -9,7 +9,6 @@ import {
   Alert,
   TextInput,
   RefreshControl,
-  Linking,
   Keyboard,
 } from "react-native";
 import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -17,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { cartService, Cart, CartItem } from "../services/cart";
 import { authService } from "../services/auth";
+import * as WebBrowser from "expo-web-browser";
 import { api } from "../services/api";
 import AppHeader from "../components/AppHeader";
 
@@ -379,10 +379,13 @@ export default function CartScreen() {
     try {
       setPlacingOrder(true);
 
+      const paymentRedirectUrl = "kram://payment-done";
       const result = await cartService.placeOrder(
         cart.cartId,
         deliveryAddress,
         specialInstructions.trim() || undefined,
+        `${paymentRedirectUrl}?status=success`,
+        `${paymentRedirectUrl}?status=cancelled`,
       );
 
       // Clear cart state immediately after successful order placement
@@ -393,19 +396,16 @@ export default function CartScreen() {
       setSpecialInstructions("");
 
       if (result.checkoutUrl) {
-        // Open Stripe Checkout in browser (authorize now; capture when vendor marks order Completed)
-        await Linking.openURL(result.checkoutUrl);
-        Alert.alert(
-          "Complete payment",
-          "Complete your payment in the browser, then return to the app.",
-          [
-            {
-              text: "OK",
-              onPress: () =>
-                router.push(`/(tabs)/orders?refresh=${Date.now()}`),
-            },
-          ],
+        // Open Stripe Checkout in in-app browser (stays within app)
+        const authResult = await WebBrowser.openAuthSessionAsync(
+          result.checkoutUrl,
+          paymentRedirectUrl,
         );
+        // Browser closed - navigate to orders (whether success or cancelled)
+        router.push(`/(tabs)/orders?refresh=${Date.now()}`);
+        if (authResult?.type === "success" && authResult.url?.includes("status=success")) {
+          // Payment completed - optional: show brief success feedback
+        }
         return;
       }
 

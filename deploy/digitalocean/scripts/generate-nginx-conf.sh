@@ -77,16 +77,17 @@ else
             try_files $uri $uri/ /index.html;
             add_header Cache-Control "no-store, no-cache, must-revalidate";
         }
-        location /api/WebBff/ {
-            proxy_pass http://web_bff/api/WebBff/;
+        # BFF routes: case-insensitive on Unix (MobileBff vs mobilebff)
+        location ~* ^/api/WebBff/ {
+            proxy_pass http://web_bff;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-        location /api/MobileBff/ {
-            proxy_pass http://mobile_bff/api/MobileBff/;
+        location ~* ^/api/MobileBff/ {
+            proxy_pass http://mobile_bff;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -175,16 +176,17 @@ if [ -n "$DOMAIN" ] && { [ "${CERTS_READY:-0}" = "1" ] || [ "$USE_SELF_SIGNED_CE
             try_files \$uri \$uri/ /index.html;
             add_header Cache-Control "no-store, no-cache, must-revalidate";
         }
-        location /api/WebBff/ {
-            proxy_pass http://web_bff/api/WebBff/;
+        # BFF routes: case-insensitive on Unix (MobileBff vs mobilebff)
+        location ~* ^/api/WebBff/ {
+            proxy_pass http://web_bff;
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
         }
-        location /api/MobileBff/ {
-            proxy_pass http://mobile_bff/api/MobileBff/;
+        location ~* ^/api/MobileBff/ {
+            proxy_pass http://mobile_bff;
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;

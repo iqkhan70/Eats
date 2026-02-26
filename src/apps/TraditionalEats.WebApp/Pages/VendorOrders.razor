@@ -278,7 +278,7 @@
     private List<OrderRowDto> orders = new();
     private int totalCount = 0;
 
-    private readonly List<string> statusOptions = new() { "Pending", "Preparing", "Ready", "Completed", "Cancelled" };
+    private readonly List<string> statusOptions = new() { "Pending", "Preparing", "Ready", "Completed", "Refunded", "Cancelled" };
 
     private string HeaderText => isAdmin ? "All Orders" : "Vendor Orders";
     private string PageTitleText => isAdmin ? "Admin Orders - Kram" : "Vendor Orders - Kram";
@@ -367,7 +367,7 @@
     {
         if (ordersGrid != null)
         {
-            await ordersGrid.FirstPage(true);
+            await ordersGrid.Reload();
         }
     }
 
@@ -757,6 +757,7 @@
             "Preparing" => "background-color: var(--rz-info); color: white;",
             "Ready" => "background-color: var(--rz-success); color: white;",
             "Completed" => "background-color: var(--rz-secondary); color: white;",
+            "Refunded" => "background-color: #757575; color: white;",
             "Cancelled" => "background-color: var(--rz-danger); color: white;",
             _ => "background-color: var(--rz-secondary); color: white;"
         };
