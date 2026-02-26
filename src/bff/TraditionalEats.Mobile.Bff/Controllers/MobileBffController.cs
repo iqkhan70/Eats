@@ -286,8 +286,9 @@ public class MobileBffController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching restaurant menu");
-            return StatusCode(500, new { error = "Failed to fetch restaurant menu" });
+            _logger.LogError(ex, "Error fetching restaurant menu. CatalogService may be unreachable. Returning empty list for RestaurantId={RestaurantId}", restaurantId);
+            // Return empty array so app can load restaurant page; avoids 500 when CatalogService is down
+            return JsonString("[]", 200);
         }
     }
 

@@ -538,6 +538,9 @@ services:
       customer-service: { condition: service_started }
       order-service: { condition: service_started }
       restaurant-service: { condition: service_started }
+      catalog-service: { condition: service_started }
+      payment-service: { condition: service_started }
+      chat-service: { condition: service_started }
       ai-service: { condition: service_started }
       review-service: { condition: service_started }
       document-service: { condition: service_started }
