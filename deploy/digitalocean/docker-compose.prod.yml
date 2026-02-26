@@ -161,6 +161,8 @@ services:
       RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
+      Services__PaymentService__BaseUrl: "http://payment-service:5004"
+      Services__PaymentService__InternalApiKey: ${PAYMENT_SERVICE_INTERNAL_API_KEY:-}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }

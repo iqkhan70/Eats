@@ -590,8 +590,10 @@ public class PaymentService : IPaymentService
                 var json = await res.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
                 var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
-                if (!string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase))
-                    return new RefundByOrderResult("not_refundable", null, "Refunds are allowed only for Completed orders.");
+                // Allow refund for Completed (vendor delivered) or Cancelled (customer/vendor cancelled - must refund to avoid orphan payment)
+                if (!string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                    return new RefundByOrderResult("not_refundable", null, "Refunds are allowed only for Completed or Cancelled orders.");
             }
             else
             {
@@ -614,8 +616,10 @@ public class PaymentService : IPaymentService
             return new RefundByOrderResult("already_refunded", existing?.RefundId, "Payment is already refunded.");
         }
 
-        // Refunds apply only after capture. Do not void here; voiding is handled by the order cancellation flow.
-        if (!string.Equals(pi.Status, "Captured", StringComparison.OrdinalIgnoreCase))
+        // Refunds apply when payment was captured (in Stripe). With auto-capture checkout, we store "Authorized"
+        // but Stripe has already captured—so allow refund for both Authorized and Captured.
+        if (!string.Equals(pi.Status, "Captured", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(pi.Status, "Authorized", StringComparison.OrdinalIgnoreCase))
         {
             return new RefundByOrderResult("not_refundable", null, $"Refund not applicable because payment is not captured (status '{pi.Status}').");
         }

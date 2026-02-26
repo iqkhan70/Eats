@@ -1476,13 +1476,11 @@ public class OrderService : IOrderService
         if (!ok)
             return false;
 
-        // Best-effort: void Stripe authorization so funds are released sooner.
-        // Even if this fails, the order will not be captured (capture only happens on Completed).
+        // Void Stripe authorization (for uncaptured) or refund (for already-captured). Prevents orphan payments.
+        var paymentBaseUrl = _configuration["Services:PaymentService:BaseUrl"] ?? "http://localhost:5004";
+        var internalApiKey = _configuration["Services:PaymentService:InternalApiKey"];
         try
         {
-            var paymentBaseUrl = _configuration["Services:PaymentService:BaseUrl"] ?? "http://localhost:5004";
-            var internalApiKey = _configuration["Services:PaymentService:InternalApiKey"];
-
             using var http = _httpClientFactory.CreateClient();
             var payload = new { orderId };
             var content = new StringContent(
@@ -1498,21 +1496,46 @@ public class OrderService : IOrderService
                 request.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
 
             var response = await http.SendAsync(request);
-            if (!response.IsSuccessStatusCode)
+            if (response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("CancelOrderByCustomerAsync: Payment void failed for OrderId={OrderId}, StatusCode={StatusCode}",
-                    orderId, response.StatusCode);
+                _logger.LogInformation("CancelOrderByCustomerAsync: Payment voided for OrderId={OrderId}", orderId);
             }
             else
             {
-                _logger.LogInformation("CancelOrderByCustomerAsync: Payment voided for OrderId={OrderId}", orderId);
+                _logger.LogWarning("CancelOrderByCustomerAsync: Payment void failed for OrderId={OrderId}, StatusCode={StatusCode}. Trying refund (payment may already be captured).",
+                    orderId, response.StatusCode);
+                await RefundPaymentOnCancelAsync(paymentBaseUrl, internalApiKey, orderId);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "CancelOrderByCustomerAsync: Failed to void payment for OrderId={OrderId} (continuing)", orderId);
+            _logger.LogWarning(ex, "CancelOrderByCustomerAsync: Failed to void payment for OrderId={OrderId}. Trying refund.", orderId);
+            try { await RefundPaymentOnCancelAsync(paymentBaseUrl, internalApiKey, orderId); } catch { /* best-effort */ }
         }
 
         return true;
+    }
+
+    private async Task RefundPaymentOnCancelAsync(string paymentBaseUrl, string? internalApiKey, Guid orderId)
+    {
+        using var http = _httpClientFactory.CreateClient();
+        var payload = new { orderId, reason = "requested_by_customer" };
+        var content = new StringContent(
+            System.Text.Json.JsonSerializer.Serialize(payload),
+            System.Text.Encoding.UTF8,
+            "application/json");
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{paymentBaseUrl.TrimEnd('/')}/api/payment/internal/refund-by-order")
+        {
+            Content = content
+        };
+        if (!string.IsNullOrEmpty(internalApiKey))
+            request.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+
+        var response = await http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+            _logger.LogInformation("CancelOrderByCustomerAsync: Payment refunded for OrderId={OrderId}", orderId);
+        else
+            _logger.LogWarning("CancelOrderByCustomerAsync: Refund failed for OrderId={OrderId}, StatusCode={StatusCode}",
+                orderId, response.StatusCode);
     }
 }
