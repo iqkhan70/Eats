@@ -563,13 +563,21 @@ public class PaymentService : IPaymentService
 
     public async Task<RefundByOrderResult> RefundOrVoidPaymentByOrderIdAsync(Guid orderId, string? reason = null)
     {
+        _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: Starting for OrderId={OrderId}", orderId);
+
         var pi = await _context.PaymentIntents
             .Where(p => p.OrderId == orderId && p.Provider == "Stripe" && p.ProviderIntentId != null)
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefaultAsync();
 
         if (pi == null || string.IsNullOrWhiteSpace(pi.ProviderIntentId))
+        {
+            _logger.LogWarning("RefundOrVoidPaymentByOrderIdAsync: not_found - No PaymentIntent for OrderId={OrderId}", orderId);
             return new RefundByOrderResult("not_found", null, "No payment intent found for this order.");
+        }
+
+        _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: Found PI Status={PiStatus}, StripePiId={StripePiId} for OrderId={OrderId}",
+            pi.Status, pi.ProviderIntentId, orderId);
 
         // Enforce policy: refund only for Completed orders (best-effort check via OrderService if configured).
         // This prevents accidental voiding/refunding of in-progress orders via direct API calls.
@@ -590,10 +598,15 @@ public class PaymentService : IPaymentService
                 var json = await res.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
                 var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
+                _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: Order status from OrderService = {OrderStatus}", status ?? "(null)");
                 // Allow refund for Completed (vendor delivered) or Cancelled (customer/vendor cancelled - must refund to avoid orphan payment)
                 if (!string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("RefundOrVoidPaymentByOrderIdAsync: not_refundable - Order status '{Status}' not Completed/Cancelled for OrderId={OrderId}",
+                        status ?? "(null)", orderId);
                     return new RefundByOrderResult("not_refundable", null, "Refunds are allowed only for Completed or Cancelled orders.");
+                }
             }
             else
             {
@@ -613,14 +626,19 @@ public class PaymentService : IPaymentService
                 .Where(r => r.OrderId == orderId && r.PaymentIntentId == pi.PaymentIntentId)
                 .OrderByDescending(r => r.CreatedAt)
                 .FirstOrDefaultAsync();
+            _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: already_refunded for OrderId={OrderId}", orderId);
             return new RefundByOrderResult("already_refunded", existing?.RefundId, "Payment is already refunded.");
         }
 
         // Refunds apply when payment was captured (in Stripe). With auto-capture checkout, we store "Authorized"
         // but Stripe has already captured—so allow refund for both Authorized and Captured.
+        // Also allow "Succeeded" in case webhook or sync stored Stripe's raw status.
         if (!string.Equals(pi.Status, "Captured", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(pi.Status, "Authorized", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(pi.Status, "Authorized", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(pi.Status, "Succeeded", StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogWarning("RefundOrVoidPaymentByOrderIdAsync: not_refundable - PI status '{PiStatus}' not Authorized/Captured/Succeeded for OrderId={OrderId}",
+                pi.Status, orderId);
             return new RefundByOrderResult("not_refundable", null, $"Refund not applicable because payment is not captured (status '{pi.Status}').");
         }
 
@@ -634,8 +652,12 @@ public class PaymentService : IPaymentService
             var action = string.Equals(existingRefund.Status, "Completed", StringComparison.OrdinalIgnoreCase)
                 ? "refunded"
                 : "refund_pending";
+            _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: existing refund found for OrderId={OrderId}, action={Action}", orderId, action);
             return new RefundByOrderResult(action, existingRefund.RefundId, "Refund already exists for this order.");
         }
+
+        _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: Calling Stripe Refund API for OrderId={OrderId}, Stripe PI={StripePiId}, Amount={Amount}",
+            orderId, pi.ProviderIntentId, pi.Amount);
 
         var reasonNormalized = NormalizeStripeRefundReason(reason) ?? "requested_by_customer";
         var refundId = Guid.NewGuid();
@@ -688,11 +710,13 @@ public class PaymentService : IPaymentService
             await _messagePublisher.PublishAsync("tradition-eats", "refund.issued", @event);
 
             var action = refund.Status == "Completed" ? "refunded" : "refund_pending";
+            _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: Stripe refund succeeded for OrderId={OrderId}, RefundId={RefundId}, StripeRefundId={StripeRefundId}",
+                orderId, refundId, stripeRefund.Id);
             return new RefundByOrderResult(action, refundId, "Refund created.");
         }
         catch (StripeException ex)
         {
-            _logger.LogWarning(ex, "Stripe refund failed for OrderId={OrderId}, Stripe PI={StripePiId}", orderId, pi.ProviderIntentId);
+            _logger.LogError(ex, "Stripe refund failed for OrderId={OrderId}, Stripe PI={StripePiId}: {StripeMessage}", orderId, pi.ProviderIntentId, ex.Message);
             pi.FailureReason = ex.Message;
             try { await _context.SaveChangesAsync(); } catch { /* ignore */ }
             return new RefundByOrderResult("refund_failed", null, ex.Message);
@@ -708,6 +732,8 @@ public class PaymentService : IPaymentService
 
     public async Task<bool> CancelPaymentByOrderIdAsync(Guid orderId)
     {
+        _logger.LogInformation("CancelPaymentByOrderIdAsync: Starting for OrderId={OrderId}", orderId);
+
         // Find latest Stripe PI for this order
         var pi = await _context.PaymentIntents
             .Where(p => p.OrderId == orderId && p.Provider == "Stripe" && p.ProviderIntentId != null)
@@ -715,12 +741,20 @@ public class PaymentService : IPaymentService
             .FirstOrDefaultAsync();
 
         if (pi == null || string.IsNullOrWhiteSpace(pi.ProviderIntentId))
+        {
+            _logger.LogWarning("CancelPaymentByOrderIdAsync: No PaymentIntent found for OrderId={OrderId}", orderId);
             return false;
+        }
 
-        // If already captured/refunded, cancellation isn't applicable
+        _logger.LogInformation("CancelPaymentByOrderIdAsync: PI Status={PiStatus} for OrderId={OrderId}", pi.Status, orderId);
+
+        // If already captured/refunded, cancellation isn't applicable (must use refund instead)
         if (string.Equals(pi.Status, "Captured", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(pi.Status, "Refunded", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("CancelPaymentByOrderIdAsync: Cannot void - PI already Captured/Refunded for OrderId={OrderId} (caller should use refund)", orderId);
             return false;
+        }
 
         // If already cancelled, idempotent success
         if (string.Equals(pi.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) ||
