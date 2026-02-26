@@ -3,6 +3,9 @@
 
 # Xcode
 build/
+ios/Pods/
+ios/build/
+*.xcframework
 *.pbxuser
 !default.pbxuser
 *.mode1v3
