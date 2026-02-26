@@ -86,9 +86,6 @@ export default function MenuScreen() {
         }
       );
 
-      console.log("MENU FETCHED AT", new Date().toISOString());
-console.log("FIRST ITEM", response.data?.[0]);
-
       const mappedItems = (response.data || []).map((item: any) => ({
         menuItemId: item.menuItemId || item.id,
         restaurantId: item.restaurantId,
