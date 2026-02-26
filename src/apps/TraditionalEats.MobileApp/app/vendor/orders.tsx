@@ -70,6 +70,7 @@ const statusOptions = [
   "Preparing",
   "Ready",
   "Completed",
+  "Refunded",
   "Cancelled",
 ] as const;
 type OrderStatus = (typeof statusOptions)[number];
@@ -79,6 +80,7 @@ const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
   Preparing: ["Ready", "Cancelled"],
   Ready: ["Completed", "Cancelled"],
   Completed: [],
+  Refunded: [],
   Cancelled: [],
 };
 
@@ -92,6 +94,8 @@ const getStatusColor = (status: string): string => {
       return "#66BB6A";
     case "Completed":
       return "#78909C";
+    case "Refunded":
+      return "#9E9E9E";
     case "Cancelled":
       return "#EF5350";
     default:

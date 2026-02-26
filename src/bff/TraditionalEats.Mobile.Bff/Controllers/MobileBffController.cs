@@ -834,11 +834,26 @@ public class MobileBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("PaymentService");
-            ForwardBearerToken(client);
+            var paymentClient = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(paymentClient);
 
-            var response = await client.PostAsJsonAsync("/api/payment/refund-by-order", new { orderId });
+            var response = await paymentClient.PostAsJsonAsync("/api/payment/refund-by-order", new { orderId });
             var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Update order status to Refunded so UI hides Refund button (PaymentService may also do this; BFF ensures it happens)
+                try
+                {
+                    var orderClient = _httpClientFactory.CreateClient("OrderService");
+                    ForwardBearerToken(orderClient);
+                    await orderClient.PutAsJsonAsync($"/api/order/{orderId}/status", new { Status = "Refunded", Notes = "Refunded by vendor" });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "RefundOrder: Failed to update order status to Refunded for OrderId={OrderId}", orderId);
+                }
+            }
 
             return StatusCode((int)response.StatusCode, content);
         }

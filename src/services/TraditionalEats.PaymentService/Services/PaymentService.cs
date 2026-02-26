@@ -690,6 +690,7 @@ public class PaymentService : IPaymentService
                 ? "refunded"
                 : "refund_pending";
             _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: existing refund found for OrderId={OrderId}, action={Action}", orderId, action);
+            await MarkOrderRefundedAsync(orderId);
             return new RefundByOrderResult(action, existingRefund.RefundId, "Refund already exists for this order.");
         }
 
@@ -749,6 +750,10 @@ public class PaymentService : IPaymentService
             var action = refund.Status == "Completed" ? "refunded" : "refund_pending";
             _logger.LogInformation("RefundOrVoidPaymentByOrderIdAsync: Stripe refund succeeded for OrderId={OrderId}, RefundId={RefundId}, StripeRefundId={StripeRefundId}",
                 orderId, refundId, stripeRefund.Id);
+
+            // Update Order status to Refunded so vendor UI hides Refund button and shows correct status.
+            await MarkOrderRefundedAsync(orderId);
+
             return new RefundByOrderResult(action, refundId, "Refund created.");
         }
         catch (StripeException ex)
@@ -902,6 +907,31 @@ public class PaymentService : IPaymentService
         {
             _logger.LogWarning(ex, "TryCreatePaymentIntentFromOrderAsync failed for OrderId={OrderId}", orderId);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Notify OrderService to set order status to Refunded. Hides Refund button and shows correct status in vendor UI.
+    /// </summary>
+    private async Task MarkOrderRefundedAsync(Guid orderId)
+    {
+        var orderBaseUrl = _configuration["Services:OrderService:BaseUrl"] ?? "http://localhost:5002";
+        var internalApiKey = _configuration["Services:OrderService:InternalApiKey"];
+        try
+        {
+            using var http = _httpClientFactory.CreateClient();
+            var req = new HttpRequestMessage(HttpMethod.Patch, $"{orderBaseUrl.TrimEnd('/')}/api/order/internal/{orderId}/refunded");
+            if (!string.IsNullOrWhiteSpace(internalApiKey))
+                req.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+            var res = await http.SendAsync(req);
+            if (res.IsSuccessStatusCode)
+                _logger.LogInformation("MarkOrderRefundedAsync: Order {OrderId} marked as Refunded", orderId);
+            else
+                _logger.LogWarning("MarkOrderRefundedAsync: Failed to mark OrderId={OrderId} as Refunded (HTTP {StatusCode})", orderId, res.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MarkOrderRefundedAsync: Failed to notify OrderService for OrderId={OrderId}", orderId);
         }
     }
 

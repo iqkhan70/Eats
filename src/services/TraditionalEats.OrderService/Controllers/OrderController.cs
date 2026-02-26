@@ -537,6 +537,33 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
+    /// Internal: mark order as Refunded. Called by PaymentService after successful vendor refund.
+    /// </summary>
+    [HttpPatch("internal/{orderId}/refunded")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalMarkOrderRefunded(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal mark refunded rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        try
+        {
+            var ok = await _orderService.UpdateOrderStatusAsync(orderId, "Refunded", "Refunded by vendor");
+            if (!ok) return NotFound(new { message = "Order not found" });
+            return Ok(new { message = "Order marked as refunded" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalMarkOrderRefunded failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to mark order as refunded" });
+        }
+    }
+
+    /// <summary>
     /// Internal: get order payment info (StripePaymentIntentId, Total, ServiceFee, Status). Used by PaymentService for refund fallback when PaymentIntent not in its DB.
     /// </summary>
     [HttpGet("internal/{orderId}/payment-info")]

@@ -1543,15 +1543,32 @@ public class WebBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("PaymentService");
-            ForwardBearerToken(client);
+            var paymentClient = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(paymentClient);
 
             var payload = new { orderId };
             var json = JsonSerializer.Serialize(payload, JsonOptions);
             var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await client.PostAsync("/api/payment/refund-by-order", body);
+            var response = await paymentClient.PostAsync("/api/payment/refund-by-order", body);
             var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Update order status to Refunded so UI hides Refund button (PaymentService may also do this; BFF ensures it happens)
+                try
+                {
+                    var orderClient = _httpClientFactory.CreateClient("OrderService");
+                    ForwardBearerToken(orderClient);
+                    var statusPayload = JsonSerializer.Serialize(new { Status = "Refunded", Notes = "Refunded by vendor" }, JsonOptions);
+                    await orderClient.PutAsync($"/api/order/{orderId}/status", new StringContent(statusPayload, System.Text.Encoding.UTF8, "application/json"));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "RefundOrder: Failed to update order status to Refunded for OrderId={OrderId}", orderId);
+                }
+            }
+
             return JsonContent(content, (int)response.StatusCode);
         }
         catch (Exception ex)
