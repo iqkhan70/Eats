@@ -76,8 +76,14 @@ public class WebhooksController : ControllerBase
                         var (orderId, stripePiId) = ExtractOrderAndPaymentIntent(sessionCompleted);
                         if (orderId != null)
                         {
+                            // Since Stripe API 2022-08-01, PaymentIntent is only created when session is confirmed (not at create).
+                            // Ensure our record exists before updating status.
                             if (!string.IsNullOrEmpty(stripePiId))
+                            {
+                                var amountCents = sessionCompleted.AmountTotal ?? 0;
+                                await _paymentService.EnsurePaymentIntentExistsFromSessionAsync(orderId.Value, stripePiId, amountCents);
                                 await _paymentService.UpdatePaymentIntentStatusFromStripeAsync(stripePiId, "Authorized", null);
+                            }
                             await UpdateOrderPaymentAsync(orderId.Value, "Succeeded", stripePiId, null);
                         }
                     }

@@ -537,6 +537,40 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
+    /// Internal: get order payment info (StripePaymentIntentId, Total, ServiceFee, Status). Used by PaymentService for refund fallback when PaymentIntent not in its DB.
+    /// </summary>
+    [HttpGet("internal/{orderId}/payment-info")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalGetOrderPaymentInfo(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+        {
+            _logger.LogWarning("Internal order payment-info rejected: missing or invalid API key");
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+        }
+
+        try
+        {
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null) return NotFound(new { message = "Order not found" });
+            return Ok(new
+            {
+                orderId = order.OrderId,
+                status = order.Status,
+                stripePaymentIntentId = order.StripePaymentIntentId,
+                total = order.Total,
+                serviceFee = order.ServiceFee
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalGetOrderPaymentInfo failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to get order payment info" });
+        }
+    }
+
+    /// <summary>
     /// Internal: get order status by order id. Used by other services (e.g. PaymentService) to enforce policies.
     /// </summary>
     [HttpGet("internal/{orderId}/status")]
