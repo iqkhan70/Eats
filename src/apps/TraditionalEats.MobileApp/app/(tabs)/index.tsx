@@ -434,7 +434,7 @@ export default function HomeScreen() {
               >
                 <View style={styles.restaurantInfo}>
                   <TouchableOpacity
-                    onPress={() => setFullSizeImageRestaurant(restaurant)}
+                    onPress={() => { if (restaurant.imageUrl && !failedImageUrls.has(restaurant.imageUrl)) setFullSizeImageRestaurant(restaurant); }}
                     activeOpacity={0.9}
                     style={styles.restaurantImagePlaceholder}
                   >

@@ -361,7 +361,7 @@ export default function MenuScreen() {
                   <TouchableOpacity key={item.menuItemId} style={styles.menuItemCard} activeOpacity={0.8}>
                     <View style={styles.menuItemContent}>
                       <TouchableOpacity
-                        onPress={() => setFullSizeImageItem(item)}
+                        onPress={() => { if (item.imageUrl && !failedImageUrls.has(item.imageUrl)) setFullSizeImageItem(item); }}
                         activeOpacity={0.9}
                         style={[styles.menuItemImage, { justifyContent: "center", alignItems: "center" }]}
                       >

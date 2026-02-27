@@ -330,7 +330,7 @@ export default function RestaurantsScreen() {
       activeOpacity={0.85}
     >
       <TouchableOpacity
-        onPress={() => setFullSizeImageRestaurant(item)}
+        onPress={() => { if (item.imageUrl && !failedImageUrls.has(item.imageUrl)) setFullSizeImageRestaurant(item); }}
         activeOpacity={0.9}
         style={styles.restaurantImagePlaceholder}
       >
