@@ -27,7 +27,13 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Kram to use your location to find nearby vendors."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Kram to access your photos so you can upload images for your vendor listings."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,

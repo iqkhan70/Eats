@@ -15,6 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import * as Linking from "expo-linking";
 import { api } from "../../../../../services/api";
 import { APP_CONFIG } from "../../../../../config/api.config";
 
@@ -59,7 +60,14 @@ export default function CreateMenuItemScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Needed", "Allow access to photos to upload images.");
+        Alert.alert(
+          "Photo Access Needed",
+          "Kram needs access to your photos to upload images. Please allow access in Settings.",
+          [
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+            { text: "Cancel", style: "cancel" },
+          ]
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
