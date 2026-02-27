@@ -140,6 +140,12 @@ builder.Services.AddHttpClient("DocumentService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:DocumentService"] ?? "http://localhost:5014");
 });
 
+builder.Services.AddHttpClient("DocumentServiceNoRedirect", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.BaseAddress = new Uri(builder.Configuration["Services:DocumentService"] ?? "http://localhost:5014");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())

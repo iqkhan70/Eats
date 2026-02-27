@@ -106,6 +106,7 @@ export default function VendorDashboardScreen() {
       setLoading(true);
       const response = await api.get<Restaurant[]>(
         "/MobileBff/vendor/my-restaurants",
+        { params: { __ts: Date.now() } },
       );
       setRestaurants(response.data || []);
     } catch (error: any) {
@@ -561,8 +562,8 @@ const styles = StyleSheet.create({
   restaurantCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 16,
     marginBottom: 16,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -574,6 +575,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
+    padding: 16,
+    paddingBottom: 0,
   },
   restaurantName: {
     fontSize: 18,
@@ -601,16 +604,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginBottom: 8,
+    paddingHorizontal: 16,
   },
   cuisineType: {
     fontSize: 12,
     color: "#999",
     marginBottom: 12,
+    paddingHorizontal: 16,
   },
   actionButtons: {
     flexDirection: "row",
     gap: 8,
     marginTop: 8,
+    padding: 16,
   },
   actionButton: {
     flex: 1,

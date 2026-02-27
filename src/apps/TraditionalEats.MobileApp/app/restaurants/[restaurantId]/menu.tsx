@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import ReviewDisplay, { Review } from '../../../components/ReviewDisplay';
 import ReviewRating from '../../../components/ReviewRating';
 import { authService } from '../../../services/auth';
 import AppHeader from '../../../components/AppHeader';
+import { APP_CONFIG } from '../../../config/api.config';
 
 interface MenuItem {
   menuItemId: string;
@@ -62,8 +63,18 @@ export default function MenuScreen() {
   } | null>(null);
   const [activeTab, setActiveTab] = useState<'menu' | 'reviews'>('menu');
   const [userCanReview, setUserCanReview] = useState(false);
+  const [fullSizeImageItem, setFullSizeImageItem] = useState<MenuItem | null>(null);
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
 
   const isAddingToCartRef = useRef(false);
+
+  const getMenuImageDisplayUrl = (imageUrl?: string) => {
+    if (!imageUrl) return '';
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))
+      return imageUrl;
+    const base = APP_CONFIG.API_BASE_URL.replace(/\/$/, '');
+    return `${base}/MobileBff/menu-image?path=${encodeURIComponent(imageUrl)}`;
+  };
 
   const loadMenu = useCallback(async () => {
     try {
@@ -349,7 +360,21 @@ export default function MenuScreen() {
                 {items.map(item => (
                   <TouchableOpacity key={item.menuItemId} style={styles.menuItemCard} activeOpacity={0.8}>
                     <View style={styles.menuItemContent}>
-                      <Ionicons name="restaurant" size={40} color="#6200ee" style={styles.menuItemIcon} />
+                      <TouchableOpacity
+                        onPress={() => setFullSizeImageItem(item)}
+                        activeOpacity={0.9}
+                        style={[styles.menuItemImage, { justifyContent: "center", alignItems: "center" }]}
+                      >
+                        <Ionicons name="restaurant" size={40} color="#6200ee" style={{ position: "absolute" }} />
+                        {item.imageUrl && !failedImageUrls.has(item.imageUrl) && (
+                          <Image
+                            source={{ uri: getMenuImageDisplayUrl(item.imageUrl) }}
+                            style={[StyleSheet.absoluteFillObject, { borderRadius: 8 }]}
+                            resizeMode="cover"
+                            onError={() => setFailedImageUrls((prev) => new Set(prev).add(item.imageUrl!))}
+                          />
+                        )}
+                      </TouchableOpacity>
                       <View style={styles.menuItemDetails}>
                         <Text style={styles.menuItemName}>{item.name}</Text>
                         {item.description && <Text style={styles.menuItemDescription}>{item.description}</Text>}
@@ -412,11 +437,64 @@ export default function MenuScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!fullSizeImageItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullSizeImageItem(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setFullSizeImageItem(null)}
+        >
+          <View style={styles.modalContent}>
+            {fullSizeImageItem && (
+              <>
+                <Text style={styles.modalTitle}>{fullSizeImageItem.name}</Text>
+                <Image
+                  source={{ uri: getMenuImageDisplayUrl(fullSizeImageItem.imageUrl) }}
+                  style={styles.fullSizeImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.modalCloseHint}>Tap outside to close</Text>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  fullSizeImage: {
+    width: 320,
+    height: 320,
+    borderRadius: 8,
+  },
+  modalCloseHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 12,
+  },
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: {
     flexDirection: 'row',
@@ -523,6 +601,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   menuItemContent: { flexDirection: 'row', alignItems: 'flex-start' },
+  menuItemImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    marginRight: 12,
+    overflow: "hidden",
+  },
   menuItemIcon: { marginRight: 12 },
   menuItemDetails: { flex: 1 },
   menuItemName: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 4 },

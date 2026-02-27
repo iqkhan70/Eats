@@ -119,7 +119,7 @@ public class DocumentController : ControllerBase
         }
     }
 
-    [HttpGet("{documentId}")]
+    [HttpGet("{documentId:guid}")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> GetDocument(Guid documentId)
     {
@@ -164,7 +164,7 @@ public class DocumentController : ControllerBase
         }
     }
 
-    [HttpPatch("{documentId}/status")]
+    [HttpPatch("{documentId:guid}/status")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> UpdateDocumentStatus(Guid documentId, [FromBody] UpdateStatusRequest request)
     {
@@ -194,7 +194,7 @@ public class DocumentController : ControllerBase
         }
     }
 
-    [HttpDelete("{documentId}")]
+    [HttpDelete("{documentId:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteDocument(Guid documentId)
     {
@@ -259,7 +259,7 @@ public class DocumentController : ControllerBase
         }
     }
 
-    [HttpPatch("admin/{documentId}/status")]
+    [HttpPatch("admin/{documentId:guid}/status")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AdminUpdateDocumentStatus(Guid documentId, [FromBody] UpdateStatusRequest request)
     {
@@ -281,7 +281,163 @@ public class DocumentController : ControllerBase
         }
     }
 
-    [HttpDelete("admin/{documentId}")]
+    // ----------------------------
+    // Menu item image upload (appimages folder, no document record)
+    // ----------------------------
+
+    [HttpPost("upload-menu-image")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UploadMenuImage([FromForm] IFormFile file)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File is required" });
+
+            var replacePath = Request.Form["replacePath"].FirstOrDefault()?.Trim();
+            if (!string.IsNullOrEmpty(replacePath) && replacePath.Contains('%'))
+            {
+                try { replacePath = Uri.UnescapeDataString(replacePath); } catch { /* keep as-is */ }
+            }
+
+            const long maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.Length > maxSize)
+                return BadRequest(new { message = "Image size must be less than 5MB" });
+
+            string s3Path;
+            using (var stream = file.OpenReadStream())
+            {
+                s3Path = await _s3Service.UploadFileAsync(stream, file.FileName, file.ContentType ?? "image/jpeg", "appimages");
+            }
+
+            // Delete previous image from S3 when replacing (avoid orphaned files)
+            if (!string.IsNullOrWhiteSpace(replacePath) && replacePath.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var deleted = await _s3Service.DeleteFileAsync(replacePath);
+                    _logger.LogInformation("Delete previous menu image: Path={Path}, Success={Success}", replacePath, deleted);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete previous menu image {Path}", replacePath);
+                }
+            }
+
+            return Ok(new { imageUrl = s3Path });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading menu image");
+            return StatusCode(500, new { message = "Failed to upload image" });
+        }
+    }
+
+    [HttpPost("upload-restaurant-image")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UploadRestaurantImage([FromForm] IFormFile file)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File is required" });
+
+            var replacePath = Request.Form["replacePath"].FirstOrDefault()?.Trim();
+            if (!string.IsNullOrEmpty(replacePath) && replacePath.Contains('%'))
+            {
+                try { replacePath = Uri.UnescapeDataString(replacePath); } catch { /* keep as-is */ }
+            }
+
+            const long maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.Length > maxSize)
+                return BadRequest(new { message = "Image size must be less than 5MB" });
+
+            string s3Path;
+            using (var stream = file.OpenReadStream())
+            {
+                // Use appimages (same as menu items) so vendor images resolve correctly via menu-image
+                s3Path = await _s3Service.UploadFileAsync(stream, file.FileName, file.ContentType ?? "image/jpeg", "appimages");
+            }
+
+            // Delete previous image from S3 when replacing (avoid orphaned files)
+            if (!string.IsNullOrWhiteSpace(replacePath) && replacePath.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var deleted = await _s3Service.DeleteFileAsync(replacePath);
+                    _logger.LogInformation("Delete previous restaurant image: Path={Path}, Success={Success}", replacePath, deleted);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete previous restaurant image {Path}", replacePath);
+                }
+            }
+
+            return Ok(new { imageUrl = s3Path });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading restaurant image");
+            return StatusCode(500, new { message = "Failed to upload image" });
+        }
+    }
+
+    /// <summary>
+    /// Deletes an app image from S3 when it is being replaced. Path must be under appimages.
+    /// </summary>
+    [HttpPost("delete-app-image")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> DeleteAppImage([FromBody] DeleteAppImageRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Path))
+            return BadRequest();
+
+        var path = request.Path.Trim();
+        if (!path.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Invalid image path" });
+
+        try
+        {
+            var deleted = await _s3Service.DeleteFileAsync(path);
+            if (deleted)
+                return Ok(new { deleted = true });
+            _logger.LogWarning("Delete returned false for path: {Path}", path);
+            return NotFound();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete app image {Path}", path);
+            return StatusCode(500, new { message = "Failed to delete image" });
+        }
+    }
+
+    /// <summary>
+    /// Returns a presigned URL for app images (menu items, vendors). Public - no auth required.
+    /// Path must be under appimages to prevent abuse.
+    /// </summary>
+    [HttpGet("menu-image-url")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMenuImageUrl([FromQuery] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest();
+
+        if (!path.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Invalid image path" });
+
+        try
+        {
+            var url = await _s3Service.GetPresignedUrlAsync(path, 60);
+            return Redirect(url);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get presigned URL for path: {Path}", path);
+            return NotFound();
+        }
+    }
+
+    [HttpDelete("admin/{documentId:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AdminDeleteDocument(Guid documentId)
     {
@@ -305,3 +461,4 @@ public class DocumentController : ControllerBase
 }
 
 public record UpdateStatusRequest(bool IsActive);
+public record DeleteAppImageRequest(string Path);

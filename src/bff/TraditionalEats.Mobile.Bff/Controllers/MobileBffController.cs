@@ -37,6 +37,29 @@ public class MobileBffController : ControllerBase
     // Helpers
     // ----------------------------
 
+    private async Task TryDeleteOldAppImageAsync(string? oldPath, string? newPath)
+    {
+        if (string.IsNullOrWhiteSpace(oldPath) || !oldPath.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+            return;
+        if (string.Equals(oldPath?.Trim(), newPath?.Trim(), StringComparison.OrdinalIgnoreCase))
+            return;
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+            var body = new StringContent(JsonSerializer.Serialize(new { path = oldPath }), System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("/api/document/delete-app-image", body);
+            if (response.IsSuccessStatusCode)
+                _logger.LogInformation("Deleted replaced app image from S3");
+            else
+                _logger.LogWarning("Delete app image returned {Status}", response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete replaced app image");
+        }
+    }
+
     private void ForwardBearerToken(HttpClient client)
     {
         if (Request.Headers.TryGetValue("Authorization", out var authHeader))
@@ -1701,12 +1724,33 @@ public class MobileBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("RestaurantService");
-            ForwardBearerToken(client);
+            var restClient = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(restClient);
 
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            string? oldImageUrl = null;
+            var getResp = await restClient.GetAsync($"/api/restaurant/{restaurantId}");
+            if (getResp.IsSuccessStatusCode)
+            {
+                var current = JsonSerializer.Deserialize<JsonElement>(await getResp.Content.ReadAsStringAsync());
+                if (current.TryGetProperty("imageUrl", out var imgProp) || current.TryGetProperty("ImageUrl", out imgProp))
+                    oldImageUrl = imgProp.GetString();
+            }
+
+            var json = JsonSerializer.Serialize(request);
+            string? newImageUrl = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("imageUrl", out var newImgProp) || doc.RootElement.TryGetProperty("ImageUrl", out newImgProp))
+                    newImageUrl = newImgProp.GetString();
+            }
+            catch { /* ignore */ }
+
             var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PutAsync($"/api/restaurant/{restaurantId}", body);
+            var response = await restClient.PutAsync($"/api/restaurant/{restaurantId}", body);
+
+            if (response.IsSuccessStatusCode)
+                await TryDeleteOldAppImageAsync(oldImageUrl, newImageUrl);
 
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
@@ -1769,12 +1813,33 @@ public class MobileBffController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("CatalogService");
-            ForwardBearerToken(client);
+            var catClient = _httpClientFactory.CreateClient("CatalogService");
+            ForwardBearerToken(catClient);
 
-            var json = System.Text.Json.JsonSerializer.Serialize(request);
+            string? oldImageUrl = null;
+            var getResp = await catClient.GetAsync($"/api/catalog/menu-items/{menuItemId}");
+            if (getResp.IsSuccessStatusCode)
+            {
+                var current = JsonSerializer.Deserialize<JsonElement>(await getResp.Content.ReadAsStringAsync());
+                if (current.TryGetProperty("imageUrl", out var imgProp) || current.TryGetProperty("ImageUrl", out imgProp))
+                    oldImageUrl = imgProp.GetString();
+            }
+
+            var json = JsonSerializer.Serialize(request);
+            string? newImageUrl = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("imageUrl", out var newImgProp) || doc.RootElement.TryGetProperty("ImageUrl", out newImgProp))
+                    newImageUrl = newImgProp.GetString();
+            }
+            catch { /* ignore */ }
+
             var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PutAsync($"/api/catalog/menu-items/{menuItemId}", body);
+            var response = await catClient.PutAsync($"/api/catalog/menu-items/{menuItemId}", body);
+
+            if (response.IsSuccessStatusCode)
+                await TryDeleteOldAppImageAsync(oldImageUrl, newImageUrl);
 
             var content = await response.Content.ReadAsStringAsync();
             return StatusCode((int)response.StatusCode, content);
@@ -2088,6 +2153,121 @@ public class MobileBffController : ControllerBase
     // Document endpoints
     // ----------------------------
 
+    [HttpPost("documents/upload-restaurant-image")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UploadRestaurantImage([FromForm] IFormFile file, [FromForm] string? replacePath = null)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File is required" });
+
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            MemoryStream memoryStream;
+            using (var fileStream = file.OpenReadStream())
+            {
+                memoryStream = new MemoryStream();
+                await fileStream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+            }
+
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                content.Add(new StreamContent(memoryStream), "file", file.FileName);
+                if (!string.IsNullOrWhiteSpace(replacePath))
+                    content.Add(new StringContent(replacePath), "replacePath");
+
+                var response = await client.PostAsync("/api/document/upload-restaurant-image", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return JsonString(responseContent, (int)response.StatusCode);
+            }
+            finally
+            {
+                memoryStream?.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading restaurant image");
+            return StatusCode(500, new { message = "Failed to upload image" });
+        }
+    }
+
+    [HttpPost("documents/upload-menu-image")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> UploadMenuImage([FromForm] IFormFile file, [FromForm] string? replacePath = null)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File is required" });
+
+            var client = _httpClientFactory.CreateClient("DocumentService");
+            ForwardBearerToken(client);
+
+            MemoryStream memoryStream;
+            using (var fileStream = file.OpenReadStream())
+            {
+                memoryStream = new MemoryStream();
+                await fileStream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+            }
+
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                content.Add(new StreamContent(memoryStream), "file", file.FileName);
+                if (!string.IsNullOrWhiteSpace(replacePath))
+                    content.Add(new StringContent(replacePath), "replacePath");
+
+                var response = await client.PostAsync("/api/document/upload-menu-image", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return JsonString(responseContent, (int)response.StatusCode);
+            }
+            finally
+            {
+                memoryStream?.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading menu image");
+            return StatusCode(500, new { message = "Failed to upload image" });
+        }
+    }
+
+    [HttpGet("menu-image")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMenuImage([FromQuery] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest();
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("DocumentServiceNoRedirect");
+            var encodedPath = Uri.EscapeDataString(path);
+            var response = await client.GetAsync($"/api/document/menu-image-url?path={encodedPath}");
+            if (response.StatusCode == System.Net.HttpStatusCode.Redirect
+                || response.StatusCode == System.Net.HttpStatusCode.MovedPermanently
+                || (int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
+            {
+                var location = response.Headers.Location;
+                if (location != null)
+                    return Redirect(location.ToString());
+            }
+            return StatusCode((int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get menu image for path: {Path}", path);
+            return NotFound();
+        }
+    }
+
     [HttpPost("documents/upload")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> UploadDocument(
@@ -2189,7 +2369,7 @@ public class MobileBffController : ControllerBase
         }
     }
 
-    [HttpGet("documents/{documentId}")]
+    [HttpGet("documents/{documentId:guid}")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> GetDocument(Guid documentId)
     {
@@ -2209,7 +2389,7 @@ public class MobileBffController : ControllerBase
         }
     }
 
-    [HttpPatch("documents/{documentId}/status")]
+    [HttpPatch("documents/{documentId:guid}/status")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> UpdateDocumentStatus(Guid documentId, [FromBody] UpdateDocumentStatusRequest request)
     {
@@ -2229,7 +2409,7 @@ public class MobileBffController : ControllerBase
         }
     }
 
-    [HttpDelete("documents/{documentId}")]
+    [HttpDelete("documents/{documentId:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteDocument(Guid documentId)
     {
@@ -2340,7 +2520,7 @@ public class MobileBffController : ControllerBase
         }
     }
 
-    [HttpPatch("documents/admin/{documentId}/status")]
+    [HttpPatch("documents/admin/{documentId:guid}/status")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AdminUpdateDocumentStatus(Guid documentId, [FromBody] UpdateDocumentStatusRequest request)
     {
@@ -2360,7 +2540,7 @@ public class MobileBffController : ControllerBase
         }
     }
 
-    [HttpDelete("documents/admin/{documentId}")]
+    [HttpDelete("documents/admin/{documentId:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AdminDeleteDocument(Guid documentId)
     {

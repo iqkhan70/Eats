@@ -11,17 +11,27 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
+import { APP_CONFIG } from "../../config/api.config";
 
 const ZIP_REGEX = /^\s*(\d{5})(?:-\d{4})?\s*$/;
+
+const getRestaurantImageUrl = (imageUrl?: string) => {
+  if (!imageUrl) return "";
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))
+    return imageUrl;
+  const base = APP_CONFIG.API_BASE_URL.replace(/\/$/, "");
+  return `${base}/MobileBff/menu-image?path=${encodeURIComponent(imageUrl)}`;
+};
 
 interface Restaurant {
   restaurantId: string;
@@ -52,6 +62,9 @@ export default function HomeScreen() {
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+  const [fullSizeImageRestaurant, setFullSizeImageRestaurant] =
+    useState<Restaurant | null>(null);
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
 
   const initialCategoryCount = 6;
 
@@ -201,46 +214,53 @@ export default function HomeScreen() {
   }, []);
 
   // Fetch nearby restaurants when location or distance changes
-  useEffect(() => {
+  const fetchNearbyRestaurants = useCallback(async () => {
     if (!userLocation) return;
+    try {
+      setLoadingRestaurants(true);
+      const response = await api.get<Restaurant[]>("/MobileBff/restaurants", {
+        params: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          radiusMiles: Math.round(distanceMiles),
+          take: 10, // Limit to 10 for home page
+          __ts: Date.now(),
+        },
+      });
 
-    const fetchNearbyRestaurants = async () => {
-      try {
-        setLoadingRestaurants(true);
-        const response = await api.get<Restaurant[]>("/MobileBff/restaurants", {
-          params: {
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-            radiusMiles: Math.round(distanceMiles),
-            take: 10, // Limit to 10 for home page
-          },
-        });
+      const data = response.data;
+      const list = Array.isArray(data) ? data : [];
+      const mappedRestaurants = list.map((r: any) => ({
+        restaurantId: r.restaurantId || r.id,
+        name: r.name,
+        cuisineType: r.cuisineType,
+        address: r.address,
+        rating: r.rating,
+        reviewCount: r.reviewCount,
+        imageUrl: r.imageUrl,
+        latitude: r.latitude,
+        longitude: r.longitude,
+      }));
 
-        const data = response.data;
-        const list = Array.isArray(data) ? data : [];
-        const mappedRestaurants = list.map((r: any) => ({
-          restaurantId: r.restaurantId || r.id,
-          name: r.name,
-          cuisineType: r.cuisineType,
-          address: r.address,
-          rating: r.rating,
-          reviewCount: r.reviewCount,
-          imageUrl: r.imageUrl,
-          latitude: r.latitude,
-          longitude: r.longitude,
-        }));
-
-        setNearbyRestaurants(mappedRestaurants);
-      } catch (error: any) {
-        console.error("Error loading nearby vendors:", error);
-        setNearbyRestaurants([]);
-      } finally {
-        setLoadingRestaurants(false);
-      }
-    };
-
-    fetchNearbyRestaurants();
+      setNearbyRestaurants(mappedRestaurants);
+    } catch (error: any) {
+      console.error("Error loading nearby vendors:", error);
+      setNearbyRestaurants([]);
+    } finally {
+      setLoadingRestaurants(false);
+    }
   }, [userLocation, distanceMiles]);
+
+  useEffect(() => {
+    fetchNearbyRestaurants();
+  }, [fetchNearbyRestaurants]);
+
+  // Refresh when tab gains focus (e.g. after vendor adds image and returns)
+  useFocusEffect(
+    useCallback(() => {
+      fetchNearbyRestaurants();
+    }, [fetchNearbyRestaurants]),
+  );
 
   const navigateToRestaurantDetails = (restaurant?: Restaurant) => {
     if (restaurant) {
@@ -413,16 +433,21 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
               >
                 <View style={styles.restaurantInfo}>
-                  {restaurant.imageUrl ? (
-                    <Image
-                      source={{ uri: restaurant.imageUrl }}
-                      style={styles.restaurantImage}
-                    />
-                  ) : (
-                    <View style={styles.restaurantImagePlaceholder}>
-                      <Ionicons name="restaurant" size={24} color="#6200ee" />
-                    </View>
-                  )}
+                  <TouchableOpacity
+                    onPress={() => setFullSizeImageRestaurant(restaurant)}
+                    activeOpacity={0.9}
+                    style={styles.restaurantImagePlaceholder}
+                  >
+                    <Ionicons name="restaurant" size={24} color="#6200ee" style={{ position: "absolute" }} />
+                    {restaurant.imageUrl && !failedImageUrls.has(restaurant.imageUrl) && (
+                      <Image
+                        source={{ uri: getRestaurantImageUrl(restaurant.imageUrl) }}
+                        style={[StyleSheet.absoluteFillObject, { borderRadius: 8 }]}
+                        resizeMode="cover"
+                        onError={() => setFailedImageUrls((prev) => new Set(prev).add(restaurant.imageUrl!))}
+                      />
+                    )}
+                  </TouchableOpacity>
                   <View style={styles.restaurantDetails}>
                     <Text style={styles.restaurantName}>{restaurant.name}</Text>
                     <Text style={styles.restaurantAddress}>
@@ -455,6 +480,39 @@ export default function HomeScreen() {
             ))}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={!!fullSizeImageRestaurant}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullSizeImageRestaurant(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setFullSizeImageRestaurant(null)}
+        >
+          <View style={styles.modalContent}>
+            {fullSizeImageRestaurant && (
+              <>
+                <Text style={styles.modalTitle}>
+                  {fullSizeImageRestaurant.name}
+                </Text>
+                <Image
+                  source={{
+                    uri: getRestaurantImageUrl(
+                      fullSizeImageRestaurant.imageUrl,
+                    ),
+                  }}
+                  style={styles.fullSizeImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.modalCloseHint}>Tap outside to close</Text>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Bottom Search Bar */}
       <BottomSearchBar
@@ -587,6 +645,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   restaurantDetails: { marginLeft: 12, flex: 1 },
   restaurantName: {
@@ -666,5 +725,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#6200ee",
     marginRight: 4,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    padding: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 16,
+  },
+  fullSizeImage: {
+    width: 320,
+    height: 320,
+    borderRadius: 8,
+  },
+  modalCloseHint: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 12,
   },
 });

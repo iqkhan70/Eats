@@ -2,6 +2,8 @@
 @using TraditionalEats.WebApp.Services
 @using Radzen
 @using Radzen.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject AuthService AuthService
@@ -9,6 +11,7 @@
 @inject IJSRuntime JSRuntime
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@inject IConfiguration Configuration
 
 <PageTitle>@PageTitleText</PageTitle>
 
@@ -178,10 +181,6 @@
                 {
                     <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
                         <RadzenCard Style="height: 100%;">
-                            @if (!string.IsNullOrEmpty(restaurant.ImageUrl))
-                            {
-                                <img src="@restaurant.ImageUrl" alt="@restaurant.Name" style="width: 100%; height: 200px; object-fit: cover; border-radius: 4px 4px 0 0;" />
-                            }
                             <RadzenStack Gap="0.75rem" Style="padding: 1rem;">
                                 <RadzenText TextStyle="TextStyle.H5">@restaurant.Name</RadzenText>
                                 <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">@restaurant.CuisineType</RadzenText>
@@ -256,8 +255,21 @@
                     <RadzenTextBox @bind-Value="restaurantForm.Email" Placeholder="Enter email" Type="email" Style="width: 100%;" />
                 </RadzenFormField>
 
-                <RadzenFormField Text="Image URL" class="w-100">
-                    <RadzenTextBox @bind-Value="restaurantForm.ImageUrl" Placeholder="Enter image URL" Style="width: 100%;" />
+                <RadzenFormField Text="Vendor Image" class="w-100">
+                    <RadzenStack Gap="0.5rem">
+                        @if (!string.IsNullOrEmpty(restaurantForm.ImageUrl))
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                <span @onclick="@(() => ShowRestaurantFormImageFullSize())" style="cursor: pointer;">
+                                    <img src="@GetMenuImageDisplayUrl(restaurantForm.ImageUrl)" alt="Preview" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #eee;" />
+                                </span>
+                                <RadzenButton Text="Remove" Click="RemoveRestaurantImage" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                            </RadzenStack>
+                        }
+                        <InputFile Accept="image/jpeg,image/png,image/webp,image/gif" OnChange="OnRestaurantImageSelected" class="rz-fileinput" style="display: block;" disabled="@isUploadingRestaurantImage" />
+                        @if (isUploadingRestaurantImage) { <RadzenText TextStyle="TextStyle.Caption">Uploading...</RadzenText> }
+                        <RadzenText TextStyle="TextStyle.Caption">JPEG, PNG, WebP or GIF. Max 5MB. Leave empty for default.</RadzenText>
+                    </RadzenStack>
                 </RadzenFormField>
 
                 @if (!string.IsNullOrEmpty(errorMessage))
@@ -382,8 +394,19 @@
                     }
                 </RadzenFormField>
 
-                <RadzenFormField Text="Image URL" class="w-100">
-                    <RadzenTextBox @bind-Value="menuItemForm.ImageUrl" Placeholder="Enter image URL" Style="width: 100%;" />
+                <RadzenFormField Text="Item Image" class="w-100">
+                    <RadzenStack Gap="0.5rem">
+                        @if (!string.IsNullOrEmpty(menuItemForm.ImageUrl))
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                <img src="@GetMenuImageDisplayUrl(menuItemForm.ImageUrl)" alt="Preview" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #eee;" />
+                                <RadzenButton Text="Remove" Click="RemoveMenuItemImage" Variant="Variant.Flat" Size="ButtonSize.Small" />
+                            </RadzenStack>
+                        }
+                        <InputFile Accept="image/jpeg,image/png,image/webp,image/gif" OnChange="OnMenuItemImageSelected" class="rz-fileinput" style="display: block;" disabled="@isUploadingMenuItemImage" />
+                        @if (isUploadingMenuItemImage) { <RadzenText TextStyle="TextStyle.Caption">Uploading...</RadzenText> }
+                        <RadzenText TextStyle="TextStyle.Caption">JPEG, PNG, WebP or GIF. Max 5MB. Leave empty for default.</RadzenText>
+                    </RadzenStack>
                 </RadzenFormField>
 
                 @if (!string.IsNullOrEmpty(menuItemErrorMessage))
@@ -428,6 +451,8 @@
     private bool menuItemsLoading = false;
     private bool showMenuItemForm = false;
     private bool isSavingMenuItem = false;
+    private bool isUploadingMenuItemImage = false;
+    private bool isUploadingRestaurantImage = false;
     private Guid? currentRestaurantId = null;
     private List<MenuItemDto>? menuItems;
     private MenuItemDto? editingMenuItem;
@@ -586,12 +611,14 @@
         {
             if (isAdmin)
             {
-                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/admin/restaurants?skip=0&take=2000");
+                var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>($"WebBff/admin/restaurants?skip=0&take=2000&__ts={ts}");
                 restaurants = response ?? new List<RestaurantDto>();
             }
             else
             {
-                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>("WebBff/vendor/my-restaurants");
+                var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var response = await Http.GetFromJsonAsync<List<RestaurantDto>>($"WebBff/vendor/my-restaurants?__ts={ts}");
                 restaurants = response ?? new List<RestaurantDto>();
             }
 
@@ -713,6 +740,155 @@
         editingMenuItem = null;
         menuItemForm = new MenuItemForm();
         menuItemErrorMessage = string.Empty;
+    }
+
+    private string GetMenuImageDisplayUrl(string? imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl)) return "";
+        if (imageUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || imageUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return imageUrl;
+        var baseUri = Http.BaseAddress?.ToString().TrimEnd('/') ?? (Navigation.BaseUri.TrimEnd('/') + "/api");
+        return $"{baseUri}/WebBff/menu-image?path={Uri.EscapeDataString(imageUrl)}";
+    }
+
+    private void ShowRestaurantFormImageFullSize()
+    {
+        if (string.IsNullOrWhiteSpace(restaurantForm.ImageUrl)) return;
+        DialogService.OpenAsync<MenuImageDialog>("", new Dictionary<string, object>
+        {
+            ["ImageUrl"] = GetMenuImageDisplayUrl(restaurantForm.ImageUrl),
+            ["ItemName"] = restaurantForm.Name
+        }, new DialogOptions { Width = "90vw", Height = "90vh", CloseDialogOnOverlayClick = true });
+    }
+
+    private void RemoveMenuItemImage()
+    {
+        menuItemForm.ImageUrl = "";
+    }
+
+    private void RemoveRestaurantImage()
+    {
+        restaurantForm.ImageUrl = "";
+    }
+
+    private async Task OnRestaurantImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || file.Size == 0) return;
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Image too large", "Max 5MB", 3000);
+            return;
+        }
+        var allowed = new[] { "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif" };
+        if (!allowed.Contains(file.ContentType.ToLowerInvariant()))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Invalid format", "Use JPEG, PNG, WebP or GIF", 3000);
+            return;
+        }
+        isUploadingRestaurantImage = true;
+        errorMessage = string.Empty;
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Authentication required";
+                return;
+            }
+            using var content = new MultipartFormDataContent();
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            if (!string.IsNullOrWhiteSpace(restaurantForm.ImageUrl) && restaurantForm.ImageUrl.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+                content.Add(new StringContent(restaurantForm.ImageUrl), "replacePath");
+            var request = new HttpRequestMessage(HttpMethod.Post, "WebBff/documents/upload-restaurant-image");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = content;
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                if (json.TryGetProperty("imageUrl", out var urlProp))
+                    restaurantForm.ImageUrl = urlProp.GetString() ?? "";
+                else
+                    errorMessage = "Invalid response from server";
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Upload failed: {response.StatusCode}";
+                Logger.LogWarning("Restaurant image upload failed: {Status} {Body}", response.StatusCode, err);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error uploading restaurant image");
+            errorMessage = "Failed to upload image";
+        }
+        finally
+        {
+            isUploadingRestaurantImage = false;
+        }
+    }
+
+    private async Task OnMenuItemImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || file.Size == 0) return;
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Image too large", "Max 5MB", 3000);
+            return;
+        }
+        var allowed = new[] { "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif" };
+        if (!allowed.Contains(file.ContentType.ToLowerInvariant()))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Invalid format", "Use JPEG, PNG, WebP or GIF", 3000);
+            return;
+        }
+        isUploadingMenuItemImage = true;
+        menuItemErrorMessage = string.Empty;
+        try
+        {
+            var token = await AuthService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                menuItemErrorMessage = "Authentication required";
+                return;
+            }
+            using var content = new MultipartFormDataContent();
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            if (!string.IsNullOrWhiteSpace(menuItemForm.ImageUrl) && menuItemForm.ImageUrl.Contains("appimages", StringComparison.OrdinalIgnoreCase))
+                content.Add(new StringContent(menuItemForm.ImageUrl), "replacePath");
+            var request = new HttpRequestMessage(HttpMethod.Post, "WebBff/documents/upload-menu-image");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = content;
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                if (json.TryGetProperty("imageUrl", out var urlProp))
+                    menuItemForm.ImageUrl = urlProp.GetString() ?? "";
+                else
+                    menuItemErrorMessage = "Invalid response from server";
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                menuItemErrorMessage = $"Upload failed: {response.StatusCode}";
+                Logger.LogWarning("Menu image upload failed: {Status} {Body}", response.StatusCode, err);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error uploading menu image");
+            menuItemErrorMessage = "Failed to upload image";
+        }
+        finally
+        {
+            isUploadingMenuItemImage = false;
+        }
     }
 
     private async Task SaveMenuItem()

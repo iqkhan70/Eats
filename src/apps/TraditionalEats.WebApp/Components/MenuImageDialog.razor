@@ -1,0 +1,17 @@
+@using Radzen
+@using Radzen.Blazor
+
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H6">@ItemName</RadzenText>
+    <img src="@ImageUrl" alt="@ItemName" style="max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px;" />
+    <RadzenButton Text="Close" Click="@Close" Variant="Variant.Flat" />
+</RadzenStack>
+
+@code {
+    [Parameter] public string ImageUrl { get; set; } = "";
+    [Parameter] public string ItemName { get; set; } = "";
+
+    [Inject] DialogService DialogService { get; set; } = default!;
+
+    private void Close() => DialogService.Close();
+}

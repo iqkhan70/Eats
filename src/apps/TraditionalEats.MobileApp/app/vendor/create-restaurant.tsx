@@ -10,12 +10,15 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import AppHeader from "../../components/AppHeader";
+import { APP_CONFIG } from "../../config/api.config";
 
 export default function CreateRestaurantScreen() {
   const router = useRouter();
@@ -29,6 +32,62 @@ export default function CreateRestaurantScreen() {
     email: "",
     imageUrl: "",
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const getRestaurantImageDisplayUrl = (imageUrl: string) => {
+    if (!imageUrl) return "";
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))
+      return imageUrl;
+    const base = APP_CONFIG.API_BASE_URL.replace(/\/$/, "");
+    return `${base}/MobileBff/menu-image?path=${encodeURIComponent(imageUrl)}`;
+  };
+
+  const pickAndUploadImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Needed", "Allow access to photos to upload images.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        Alert.alert("Image Too Large", "Max 5MB");
+        return;
+      }
+      setUploadingImage(true);
+      const uri = asset.uri;
+      const rawName = uri.split("/").pop() || "";
+      const hasImageExt = /\.(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(rawName);
+      const fileName = hasImageExt ? rawName : "image.jpg";
+      const mimeType = asset.mimeType && /^image\//i.test(asset.mimeType) ? asset.mimeType : "image/jpeg";
+      const fd = new FormData();
+      fd.append("file", {
+        uri,
+        name: fileName,
+        type: mimeType,
+      } as any);
+      if (formData.imageUrl) fd.append("replacePath", formData.imageUrl);
+      const res = await api.post<{ imageUrl: string }>(
+        "/MobileBff/documents/upload-restaurant-image",
+        fd
+      );
+      const url = res.data?.imageUrl;
+      if (url) setFormData((p) => ({ ...p, imageUrl: url }));
+      else Alert.alert("Upload Failed", "Could not upload image");
+    } catch (error: any) {
+      console.error("Restaurant image upload error:", error);
+      Alert.alert("Upload Failed", error.response?.data?.message || "Failed to upload");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -160,16 +219,39 @@ export default function CreateRestaurantScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Image URL</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.imageUrl}
-              onChangeText={(text) =>
-                setFormData({ ...formData, imageUrl: text })
-              }
-              placeholder="Enter image URL"
-              autoCapitalize="none"
-            />
+            <Text style={styles.label}>Vendor Image</Text>
+            {formData.imageUrl ? (
+              <View style={styles.imagePreviewRow}>
+                <Image
+                  source={{ uri: getRestaurantImageDisplayUrl(formData.imageUrl) }}
+                  style={styles.imagePreview}
+                />
+                <TouchableOpacity
+                  onPress={() => setFormData({ ...formData, imageUrl: "" })}
+                  style={styles.removeImageButton}
+                >
+                  <Ionicons name="close-circle" size={24} color="#c62828" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.uploadButton}
+                onPress={pickAndUploadImage}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color="#6200ee" />
+                ) : (
+                  <>
+                    <Ionicons name="image-outline" size={24} color="#6200ee" />
+                    <Text style={styles.uploadButtonText}>
+                      {uploadingImage ? "Uploading..." : "Upload Image"}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+            <Text style={styles.caption}>JPEG, PNG, WebP or GIF. Max 5MB.</Text>
           </View>
 
           <TouchableOpacity
@@ -271,4 +353,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  imagePreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  imagePreview: {
+    width: 120,
+    height: 80,
+    borderRadius: 8,
+  },
+  removeImageButton: { padding: 4 },
+  uploadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: 16,
+    backgroundColor: "#f0e6ff",
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#6200ee",
+    borderStyle: "dashed",
+  },
+  uploadButtonText: { color: "#6200ee", fontWeight: "600" },
+  caption: { fontSize: 12, color: "#666", marginTop: 4 },
 });

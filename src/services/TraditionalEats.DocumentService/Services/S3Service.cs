@@ -92,6 +92,8 @@ public class S3Service : IS3Service
                 return false;
             }
 
+            _logger.LogInformation("Deleting S3 object. Bucket={Bucket}, Key={Key}", _bucketName, key);
+
             await _s3Client.DeleteObjectAsync(new DeleteObjectRequest
             {
                 BucketName = _bucketName,

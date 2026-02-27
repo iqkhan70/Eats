@@ -10,13 +10,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
+import { APP_CONFIG } from "../../config/api.config";
 
 interface Restaurant {
   restaurantId: string;
@@ -34,6 +36,14 @@ interface MenuCategory {
   categoryId: string;
   name: string;
 }
+
+const getRestaurantImageUrl = (imageUrl?: string) => {
+  if (!imageUrl) return "";
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))
+    return imageUrl;
+  const base = APP_CONFIG.API_BASE_URL.replace(/\/$/, "");
+  return `${base}/MobileBff/menu-image?path=${encodeURIComponent(imageUrl)}`;
+};
 
 function haversineMiles(
   lat1: number,
@@ -77,6 +87,9 @@ export default function RestaurantsScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+  const [fullSizeImageRestaurant, setFullSizeImageRestaurant] =
+    useState<Restaurant | null>(null);
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
 
   // Search
   const [searchText, setSearchText] = useState("");
@@ -254,7 +267,7 @@ export default function RestaurantsScreen() {
         queryParams.radiusMiles = radiusMiles;
 
       const response = await api.get<Restaurant[]>("/MobileBff/restaurants", {
-        params: queryParams,
+        params: { ...queryParams, __ts: Date.now() },
       });
 
       const data = response.data;
@@ -290,6 +303,14 @@ export default function RestaurantsScreen() {
     }
   };
 
+  // Refresh when tab gains focus (e.g. after vendor adds image and returns)
+  useFocusEffect(
+    useCallback(() => {
+      loadRestaurants();
+      loadMenuCategories();
+    }, []),
+  );
+
   const filteredRestaurants = useMemo(() => {
     if (!debouncedSearch) return restaurants;
 
@@ -308,13 +329,21 @@ export default function RestaurantsScreen() {
       onPress={() => router.push(`/restaurants/${item.restaurantId}/menu`)}
       activeOpacity={0.85}
     >
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.restaurantImage} />
-      ) : (
-        <View style={styles.restaurantImagePlaceholder}>
-          <Ionicons name="restaurant" size={40} color="#6200ee" />
-        </View>
-      )}
+      <TouchableOpacity
+        onPress={() => setFullSizeImageRestaurant(item)}
+        activeOpacity={0.9}
+        style={styles.restaurantImagePlaceholder}
+      >
+        <Ionicons name="restaurant" size={40} color="#6200ee" style={{ position: "absolute" }} />
+        {item.imageUrl && !failedImageUrls.has(item.imageUrl) && (
+          <Image
+            source={{ uri: getRestaurantImageUrl(item.imageUrl) }}
+            style={[StyleSheet.absoluteFillObject, { borderRadius: 8 }]}
+            resizeMode="cover"
+            onError={() => setFailedImageUrls((prev) => new Set(prev).add(item.imageUrl!))}
+          />
+        )}
+      </TouchableOpacity>
 
       <View style={styles.restaurantInfo}>
         <Text style={styles.restaurantName}>{item.name}</Text>
@@ -511,6 +540,39 @@ export default function RestaurantsScreen() {
         loadSuggestions={loadSuggestions}
         onSuggestionSelect={handleSearch}
       />
+
+      <Modal
+        visible={!!fullSizeImageRestaurant}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullSizeImageRestaurant(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setFullSizeImageRestaurant(null)}
+        >
+          <View style={styles.modalContent}>
+            {fullSizeImageRestaurant && (
+              <>
+                <Text style={styles.modalTitle}>
+                  {fullSizeImageRestaurant.name}
+                </Text>
+                <Image
+                  source={{
+                    uri: getRestaurantImageUrl(
+                      fullSizeImageRestaurant.imageUrl,
+                    ),
+                  }}
+                  style={styles.fullSizeImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.modalCloseHint}>Tap outside to close</Text>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -646,6 +708,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+    overflow: "hidden",
   },
 
   restaurantInfo: { flex: 1 },
@@ -681,5 +744,32 @@ const styles = StyleSheet.create({
     color: "#c00",
     textAlign: "center",
     paddingHorizontal: 24,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    padding: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 16,
+  },
+  fullSizeImage: {
+    width: 320,
+    height: 320,
+    borderRadius: 8,
+  },
+  modalCloseHint: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 12,
   },
 });
