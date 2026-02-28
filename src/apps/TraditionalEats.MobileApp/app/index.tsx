@@ -1,10 +1,28 @@
-import { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { authService } from '../services/auth';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const checkAuth = async () => {
+    const authenticated = await authService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+    setAuthChecked(true);
+  };
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkAuth();
+    }, []),
+  );
 
   return (
     <View style={styles.container}>
@@ -24,12 +42,14 @@ export default function WelcomeScreen() {
           <Text style={styles.primaryButtonText}>Get Started</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={styles.secondaryButton}
-          onPress={() => router.push('/login')}
-        >
-          <Text style={styles.secondaryButtonText}>Sign In</Text>
-        </TouchableOpacity>
+        {authChecked && !isAuthenticated && (
+          <TouchableOpacity 
+            style={styles.secondaryButton}
+            onPress={() => router.push('/login')}
+          >
+            <Text style={styles.secondaryButtonText}>Sign In</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
