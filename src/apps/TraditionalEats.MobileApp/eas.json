@@ -20,6 +20,7 @@
       }
     },
     "production": {
+      "distribution": "store",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_ENV": "production",
