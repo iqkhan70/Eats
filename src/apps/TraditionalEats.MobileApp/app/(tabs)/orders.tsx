@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
@@ -505,9 +506,10 @@ export default function OrdersScreen() {
       )}
 
       {/* Filter Tabs */}
-      <BlurView
-        intensity={80}
-        tint="light"
+      <LinearGradient
+        colors={["#f97316", "#eab308"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
         style={[
           styles.filterContainer,
           { marginTop: searchQuery.trim() ? 0 : insets.top },
@@ -558,7 +560,7 @@ export default function OrdersScreen() {
             Past Orders
           </Text>
         </TouchableOpacity>
-      </BlurView>
+      </LinearGradient>
 
       {filteredAndSortedOrders.length === 0 ? (
         <FlatList
@@ -803,7 +805,7 @@ const styles = StyleSheet.create({
   },
 
   browseButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 10,
@@ -833,7 +835,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   clearSearchButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#0D99FF",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -925,15 +927,11 @@ const styles = StyleSheet.create({
 
   filterContainer: {
     flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingRight: 72,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.3)",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.3)",
-    gap: 6,
+    gap: 8,
+    borderRadius: 12,
     overflow: "hidden",
   },
   filterTab: {
@@ -942,21 +940,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "rgba(245, 245, 245, 0.8)",
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    borderColor: "rgba(255, 255, 255, 0.5)",
   },
   filterTabActive: {
-    backgroundColor: "#6200ee",
-    borderColor: "#6200ee",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderColor: "rgba(255, 255, 255, 0.8)",
   },
   filterTabText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#666",
+    color: "#333",
   },
   filterTabTextActive: {
-    color: "#fff",
+    color: "#f97316",
     fontWeight: "600",
   },
 

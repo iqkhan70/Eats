@@ -77,6 +77,53 @@ public class AuthController : ControllerBase
     }
 
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpPost("google")]
+    public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.IdToken))
+            return BadRequest(new { message = "ID token is required" });
+        try
+        {
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var (accessToken, refreshToken) = await _authService.LoginWithGoogleAsync(request.IdToken, ipAddress);
+            return Ok(new { accessToken, refreshToken, expiresIn = 900 });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google login failed");
+            return StatusCode(500, new { message = "Google login failed" });
+        }
+    }
+
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpPost("apple")]
+    public async Task<IActionResult> LoginWithApple([FromBody] AppleLoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.IdToken))
+            return BadRequest(new { message = "ID token is required" });
+        try
+        {
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var (accessToken, refreshToken) = await _authService.LoginWithAppleAsync(
+                request.IdToken, request.Email, request.FullName, ipAddress);
+            return Ok(new { accessToken, refreshToken, expiresIn = 900 });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Apple login failed");
+            return StatusCode(500, new { message = "Apple login failed" });
+        }
+    }
+
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
     {
@@ -226,6 +273,8 @@ public class AuthController : ControllerBase
 
 public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
+public record GoogleLoginRequest(string IdToken);
+public record AppleLoginRequest(string IdToken, string? Email, string? FullName);
 public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);

@@ -5,7 +5,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#6200ee",
+        tabBarActiveTintColor: "#f97316",
         tabBarInactiveTintColor: "#666",
         headerShown: false, // Hide headers on tab screens - tabs don't need back buttons
       }}

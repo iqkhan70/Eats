@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
   },
 
   browseButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
   },
   authWarningText: { flex: 1, fontSize: 14, color: "#856404" },
   loginButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,

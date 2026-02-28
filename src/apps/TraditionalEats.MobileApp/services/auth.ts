@@ -43,6 +43,29 @@ class AuthService {
     }
   }
 
+  /**
+   * Exchange a Google or Apple ID token for our JWT. Called after the client obtains the token.
+   */
+  async loginWithExternalToken(
+    provider: 'google' | 'apple',
+    idToken: string,
+    email?: string,
+    fullName?: string
+  ): Promise<AuthResponse> {
+    const endpoint = provider === 'google' ? '/MobileBff/auth/google' : '/MobileBff/auth/apple';
+    const payload =
+      provider === 'google'
+        ? { idToken }
+        : { idToken, email, fullName };
+
+    const response = await api.post<AuthResponse>(endpoint, payload);
+    if (response.data) {
+      await this.storeTokens(response.data.accessToken, response.data.refreshToken);
+      return response.data;
+    }
+    throw new Error('Invalid response from server');
+  }
+
   async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
     try {
       const response = await api.post<{ success: boolean; message: string }>(

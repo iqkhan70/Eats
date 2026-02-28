@@ -60,6 +60,80 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    private async Task TryMergeGuestCartAsync(string loginResponseJson)
+    {
+        try
+        {
+            var loginJson = JsonSerializer.Deserialize<JsonElement>(loginResponseJson);
+            if (!loginJson.TryGetProperty("accessToken", out var tokenEl))
+                return;
+            var accessToken = tokenEl.GetString();
+            if (string.IsNullOrEmpty(accessToken))
+                return;
+
+            var userId = DecodeUserIdFromJwt(accessToken);
+            if (!userId.HasValue)
+                return;
+
+            var guestSessionId = await GetOrCreateSessionIdAsync();
+            var guestCartId = await _cartSessionService.GetCartIdForSessionAsync(guestSessionId);
+            if (!guestCartId.HasValue)
+                return;
+
+            var userCartId = await _cartSessionService.GetCartIdForUserAsync(userId.Value);
+            var orderClient = _httpClientFactory.CreateClient("OrderService");
+            var mergeUrl = userCartId.HasValue
+                ? $"/api/order/cart/merge?guestCartId={guestCartId.Value}&userCartId={userCartId.Value}"
+                : $"/api/order/cart/merge?guestCartId={guestCartId.Value}&userCartId={Guid.Empty}";
+
+            var mergeResponse = await orderClient.PostAsync(mergeUrl, null);
+            if (mergeResponse.IsSuccessStatusCode)
+            {
+                var mergeContent = await mergeResponse.Content.ReadAsStringAsync();
+                var mergedCart = JsonSerializer.Deserialize<JsonElement>(mergeContent);
+                if (mergedCart.TryGetProperty("cartId", out var mergedCartIdElement))
+                {
+                    var finalCartId = Guid.Parse(mergedCartIdElement.GetString()!);
+                    await _cartSessionService.StoreCartIdForUserAsync(userId.Value, finalCartId);
+                    await _cartSessionService.ClearSessionCartAsync(guestSessionId);
+                    _logger.LogInformation("Merged guest cart into user {UserId}", userId.Value);
+                }
+            }
+            else
+            {
+                await _cartSessionService.StoreCartIdForUserAsync(userId.Value, guestCartId.Value);
+                await _cartSessionService.ClearSessionCartAsync(guestSessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to merge guest cart after external login");
+        }
+    }
+
+    private static Guid? DecodeUserIdFromJwt(string jwt)
+    {
+        try
+        {
+            var parts = jwt.Split('.');
+            if (parts.Length != 3) return null;
+            var payload = parts[1];
+            var base64 = payload.Replace('-', '+').Replace('_', '/');
+            switch (base64.Length % 4) { case 2: base64 += "=="; break; case 3: base64 += "="; break; }
+            var bytes = Convert.FromBase64String(base64);
+            var json = System.Text.Encoding.UTF8.GetString(bytes);
+            var doc = JsonSerializer.Deserialize<JsonElement>(json);
+            JsonElement subEl;
+            if (doc.TryGetProperty("sub", out subEl) || doc.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out subEl))
+            {
+                var sub = subEl.GetString();
+                return Guid.TryParse(sub, out var g) ? g : null;
+            }
+            return null;
+        }
+        catch { return null; }
+    }
+
     private void ForwardBearerToken(HttpClient client)
     {
         if (Request.Headers.TryGetValue("Authorization", out var authHeader))
@@ -992,6 +1066,54 @@ public class MobileBffController : ControllerBase
         {
             _logger.LogError(ex, "Error during login");
             return StatusCode(500, new { error = "Failed to login" });
+        }
+    }
+
+    [HttpPost("auth/google")]
+    public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.IdToken))
+            return BadRequest(new { message = "ID token is required" });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/google", request);
+            var content = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                await TryMergeGuestCartAsync(content);
+                return JsonString(content);
+            }
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during Google login");
+            return StatusCode(500, new { error = "Failed to sign in with Google" });
+        }
+    }
+
+    [HttpPost("auth/apple")]
+    public async Task<IActionResult> LoginWithApple([FromBody] AppleLoginRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.IdToken))
+            return BadRequest(new { message = "ID token is required" });
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var response = await client.PostAsJsonAsync("/api/auth/apple", request);
+            var content = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                await TryMergeGuestCartAsync(content);
+                return JsonString(content);
+            }
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during Apple login");
+            return StatusCode(500, new { error = "Failed to sign in with Apple" });
         }
     }
 
@@ -2603,6 +2725,8 @@ public record RetryPaymentRequest(string? SuccessUrl, string? CancelUrl);
 
 public record RegisterRequest(string FirstName, string LastName, string? DisplayName, string Email, string PhoneNumber, string Password, string? Role);
 public record LoginRequest(string Email, string Password);
+public record GoogleLoginRequest(string IdToken);
+public record AppleLoginRequest(string IdToken, string? Email, string? FullName);
 public record RefreshTokenRequest(string RefreshToken);
 public record ForgotPasswordRequest(string Email);
 public record ResetPasswordRequest(string Token, string Email, string NewPassword, string ConfirmPassword);

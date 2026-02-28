@@ -135,6 +135,20 @@ The API base URL is configured in `config/api.config.ts` and can be controlled v
 
 See `MOBILE_API_SETUP.md` for detailed configuration instructions.
 
+### Google & Apple Sign-In
+
+The app supports **Continue with Google** and **Continue with Apple** (iOS only).
+
+**Google Sign-In**:
+1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the Google+ API. Create OAuth 2.0 credentials (Web application for redirect flow, or iOS/Android for native).
+3. Set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` to your app's client ID. For redirect flow, add your redirect URI (e.g. `kram://` or Expo auth URL) to the authorized redirect URIs.
+
+**Apple Sign-In**:
+- Requires iOS (Apple Sign-In is not available on Android).
+- Configure `Apple:ClientId` or `Apple:BundleId` in Identity service config (defaults to `com.kram.mobile`).
+- Ensure `usesAppleSignIn: true` is set in `app.json` (already configured).
+
 ## Upgrading to SDK 54
 
 If you're upgrading from SDK 50, follow these steps:

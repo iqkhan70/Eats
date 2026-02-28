@@ -1,7 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+
+// Orange-to-yellow gradient (Tailwind orange-500 → yellow-500)
+const GRADIENT_COLORS = ['#f97316', '#eab308'] as const;
 
 interface Props {
   title?: string;
@@ -24,7 +28,12 @@ export default function AppHeader({ title, showBack = true, onBack, right }: Pro
   };
 
   return (
-    <View style={styles.header}>
+    <LinearGradient
+      colors={[...GRADIENT_COLORS]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.header}
+    >
       {showBack ? (
         <TouchableOpacity
           onPress={handleBack}
@@ -46,7 +55,7 @@ export default function AppHeader({ title, showBack = true, onBack, right }: Pro
       </Text>
 
       <View style={styles.right}>{right}</View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -58,7 +67,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 14,
     paddingTop: 48,
-    backgroundColor: '#0097a7',
     borderBottomWidth: 0,
   },
   backButton: {

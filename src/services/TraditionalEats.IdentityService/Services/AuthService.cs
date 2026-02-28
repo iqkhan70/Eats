@@ -5,6 +5,8 @@ using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using System.Net.Http.Json;
 using TraditionalEats.BuildingBlocks.Redis;
@@ -17,6 +19,8 @@ namespace TraditionalEats.IdentityService.Services;
 public interface IAuthService
 {
     Task<(string AccessToken, string RefreshToken)> LoginAsync(string email, string password, string? ipAddress);
+    Task<(string AccessToken, string RefreshToken)> LoginWithGoogleAsync(string idToken, string? ipAddress);
+    Task<(string AccessToken, string RefreshToken)> LoginWithAppleAsync(string idToken, string? email, string? fullName, string? ipAddress);
     Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken);
     Task<bool> RegisterAsync(string firstName, string lastName, string? displayName, string email, string phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
@@ -143,6 +147,157 @@ public class AuthService : IAuthService
         var refreshToken = await GenerateRefreshTokenAsync(user.Id);
 
         return (accessToken, refreshToken);
+    }
+
+    public async Task<(string AccessToken, string RefreshToken)> LoginWithGoogleAsync(string idToken, string? ipAddress)
+    {
+        if (string.IsNullOrWhiteSpace(idToken))
+            throw new UnauthorizedAccessException("Google ID token is required");
+
+        using var http = _httpClientFactory.CreateClient();
+        var response = await http.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}");
+        if (!response.IsSuccessStatusCode)
+        {
+            await RecordLoginAttemptAsync(null, null, ipAddress, false, "Google token verification failed");
+            throw new UnauthorizedAccessException("Invalid Google token");
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var email = json.GetProperty("email").GetString();
+        var sub = json.GetProperty("sub").GetString();
+        if (string.IsNullOrEmpty(email))
+        {
+            await RecordLoginAttemptAsync(null, null, ipAddress, false, "Google token missing email");
+            throw new UnauthorizedAccessException("Google token does not contain email");
+        }
+
+        var user = await GetOrCreateExternalUserAsync(email, "Google", sub, null, null);
+        user.LastLoginAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        await RecordLoginAttemptAsync(user.Id, email, ipAddress, true, null);
+
+        var accessToken = GenerateAccessToken(user);
+        var refreshToken = await GenerateRefreshTokenAsync(user.Id);
+        return (accessToken, refreshToken);
+    }
+
+    public async Task<(string AccessToken, string RefreshToken)> LoginWithAppleAsync(string idToken, string? email, string? fullName, string? ipAddress)
+    {
+        if (string.IsNullOrWhiteSpace(idToken))
+            throw new UnauthorizedAccessException("Apple ID token is required");
+
+        var appleClientId = _configuration["Apple:ClientId"] ?? _configuration["Apple:BundleId"] ?? "com.kram.mobile";
+        var configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            "https://appleid.apple.com/.well-known/openid-configuration",
+            new OpenIdConnectConfigurationRetriever(),
+            new HttpDocumentRetriever());
+        var config = await configManager.GetConfigurationAsync(CancellationToken.None);
+
+        var validationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = "https://appleid.apple.com",
+            ValidAudience = appleClientId,
+            IssuerSigningKeys = config.JsonWebKeySet?.GetSigningKeys() ?? [],
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(2),
+        };
+
+        var handler = new JwtSecurityTokenHandler();
+        try
+        {
+            _ = handler.ValidateToken(idToken, validationParameters, out _);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Apple token validation failed");
+            await RecordLoginAttemptAsync(null, email, ipAddress, false, "Apple token validation failed");
+            throw new UnauthorizedAccessException("Invalid Apple token");
+        }
+
+        var token = handler.ReadJwtToken(idToken);
+        var sub = token.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+        var tokenEmail = token.Claims.FirstOrDefault(c => c.Type == "email")?.Value ?? email;
+        if (string.IsNullOrEmpty(tokenEmail) && string.IsNullOrEmpty(email))
+        {
+            await RecordLoginAttemptAsync(null, null, ipAddress, false, "Apple token missing email");
+            throw new UnauthorizedAccessException("Apple token does not contain email. Sign in with Apple requires email.");
+        }
+
+        var userEmail = tokenEmail ?? email!;
+        var user = await GetOrCreateExternalUserAsync(userEmail, "Apple", sub ?? userEmail ?? "apple", fullName, null);
+        user.LastLoginAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        await RecordLoginAttemptAsync(user.Id, userEmail, ipAddress, true, null);
+
+        var accessToken = GenerateAccessToken(user);
+        var refreshToken = await GenerateRefreshTokenAsync(user.Id);
+        return (accessToken, refreshToken);
+    }
+
+    private async Task<User> GetOrCreateExternalUserAsync(string email, string provider, string providerUserId, string? fullName, string? phoneNumber)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user != null)
+            return user;
+
+        var nameParts = fullName?.Split(' ', 2) ?? Array.Empty<string>();
+        var firstName = nameParts.Length > 0 ? nameParts[0] : "User";
+        var lastName = nameParts.Length > 1 ? nameParts[1] : provider;
+
+        user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = normalizedEmail,
+            PhoneNumber = !string.IsNullOrWhiteSpace(phoneNumber) ? _encryption.Encrypt(phoneNumber) : null,
+            Status = "Active",
+            CreatedAt = DateTime.UtcNow,
+            PasswordHash = string.Empty,
+        };
+
+        _context.Users.Add(user);
+
+        var roleEntity = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Customer");
+        if (roleEntity == null)
+        {
+            roleEntity = new Role { Id = Guid.NewGuid(), Name = "Customer" };
+            _context.Roles.Add(roleEntity);
+        }
+        _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleEntity.Id });
+        await _context.SaveChangesAsync();
+
+        try
+        {
+            var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(customerServiceUrl);
+            var response = await client.PostAsJsonAsync("/api/customer/internal", new
+            {
+                UserId = user.Id,
+                FirstName = firstName,
+                LastName = lastName,
+                Email = email,
+                PhoneNumber = phoneNumber ?? "",
+                DisplayName = (string?)null
+            });
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("Customer provisioning failed for external user {Email}", email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Customer provisioning failed for external user {Email}", email);
+        }
+
+        return (await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstAsync(u => u.Id == user.Id));
     }
 
     public async Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken)

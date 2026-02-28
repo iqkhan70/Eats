@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Linking,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "../../services/api";
@@ -246,7 +247,12 @@ export default function VendorDashboardScreen() {
         }
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.header}>
+        <LinearGradient
+          colors={['#f97316', '#eab308']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.header}
+        >
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
@@ -273,7 +279,7 @@ export default function VendorDashboardScreen() {
               <Ionicons name="add" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-        </View>
+        </LinearGradient>
 
         {stripeOnboardingStatus && stripeOnboardingStatus !== "Complete" && (
           <View style={styles.stripeBanner}>
@@ -456,7 +462,6 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   header: {
-    backgroundColor: "#6200ee",
     padding: 16,
     paddingTop: 60,
     flexDirection: "row",

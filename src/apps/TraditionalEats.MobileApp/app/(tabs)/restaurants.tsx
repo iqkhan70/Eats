@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
@@ -413,7 +414,12 @@ export default function RestaurantsScreen() {
 
       {/* Menu category chips */}
       {menuCategories.length > 0 && (
-        <View style={styles.menuCategoryRow}>
+        <LinearGradient
+          colors={["#f97316", "#eab308"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.menuCategoryRow}
+        >
           <Text style={styles.menuCategoryLabel}>Categories</Text>
           <ScrollView
             horizontal
@@ -458,7 +464,7 @@ export default function RestaurantsScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-        </View>
+        </LinearGradient>
       )}
 
       {!!debouncedSearch && (
@@ -639,7 +645,7 @@ const styles = StyleSheet.create({
     color: "#555",
   },
   clearFiltersBtn: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -647,10 +653,16 @@ const styles = StyleSheet.create({
 
   menuCategoryRow: {
     marginTop: 12,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderRadius: 12,
+    overflow: "hidden",
   },
   menuCategoryLabel: {
     fontSize: 12,
-    color: "#666",
+    color: "rgba(255, 255, 255, 0.95)",
     marginBottom: 8,
     fontWeight: "600",
   },
@@ -662,21 +674,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "rgba(255, 255, 255, 0.5)",
   },
   menuChipActive: {
-    backgroundColor: "#6200ee",
-    borderColor: "#6200ee",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderColor: "rgba(255, 255, 255, 0.8)",
   },
   menuChipText: {
     fontSize: 12,
-    color: "#444",
+    color: "#333",
     fontWeight: "600",
   },
   menuChipTextActive: {
-    color: "#fff",
+    color: "#f97316",
   },
   clearFiltersBtnText: {
     color: "#fff",

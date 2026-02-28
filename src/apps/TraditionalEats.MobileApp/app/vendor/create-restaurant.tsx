@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     paddingBottom: 320,
   },
   header: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#0D99FF",
     padding: 16,
     paddingTop: 60,
     flexDirection: "row",

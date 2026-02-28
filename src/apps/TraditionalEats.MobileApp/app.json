@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6200ee"
+      "backgroundColor": "#f97316"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -39,6 +39,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.kram.mobile",
       "buildNumber": "2",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",

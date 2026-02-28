@@ -12,6 +12,7 @@ import {
   Platform,
   Image,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -194,7 +195,12 @@ export default function CreateMenuItemScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      <View style={styles.header}>
+      <LinearGradient
+        colors={["#f97316", "#eab308"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.header}
+      >
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -203,7 +209,7 @@ export default function CreateMenuItemScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add Menu Item</Text>
         <View style={styles.placeholder} />
-      </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.scrollView}
@@ -362,7 +368,6 @@ const styles = StyleSheet.create({
   },
   loadingText: { marginTop: 16, fontSize: 16, color: "#666" },
   header: {
-    backgroundColor: "#6200ee",
     padding: 16,
     paddingTop: 60,
     flexDirection: "row",

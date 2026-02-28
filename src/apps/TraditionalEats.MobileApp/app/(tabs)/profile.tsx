@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authService } from '../../services/auth';
@@ -9,8 +9,10 @@ import { authService } from '../../services/auth';
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const hasRedirectedRef = useRef(false);
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -18,12 +20,14 @@ export default function ProfileScreen() {
   // Refresh whenever screen becomes active (after login/logout, switching tabs, etc.)
   useFocusEffect(
     useCallback(() => {
+      hasRedirectedRef.current = false;
       checkAuthStatus();
     }, [])
   );
 
   const checkAuthStatus = async () => {
     try {
+      setCheckingAuth(true);
       const authenticated = await authService.isAuthenticated();
       setIsAuthenticated(authenticated);
 
@@ -32,7 +36,6 @@ export default function ProfileScreen() {
         setIsAdmin(await authService.isAdmin());
 
         // ✅ IMPORTANT: set user email
-        // Preferred: implement authService.getUserEmail()
         let email: string | null = null;
 
         if (typeof (authService as any).getUserEmail === 'function') {
@@ -47,13 +50,25 @@ export default function ProfileScreen() {
         setIsVendor(false);
         setIsAdmin(false);
         setUserEmail(null);
+
+        // No valid session: redirect directly to sign-in
+        if (!hasRedirectedRef.current) {
+          hasRedirectedRef.current = true;
+          router.replace('/login');
+          return;
+        }
       }
     } catch (e) {
-      // If anything fails, treat as not authenticated
       setIsAuthenticated(false);
       setIsVendor(false);
       setIsAdmin(false);
       setUserEmail(null);
+      if (!hasRedirectedRef.current) {
+        hasRedirectedRef.current = true;
+        router.replace('/login');
+      }
+    } finally {
+      setCheckingAuth(false);
     }
   };
 
@@ -89,7 +104,7 @@ export default function ProfileScreen() {
             setUserEmail(null);
             setIsVendor(false);
             setIsAdmin(false);
-            Alert.alert('Success', 'You have been signed out');
+            router.replace('/login');
           } catch (error: any) {
             Alert.alert('Error', 'Failed to sign out');
           }
@@ -107,31 +122,34 @@ export default function ProfileScreen() {
     { icon: 'settings-outline', label: 'Settings', route: '/profile/settings' },
   ];
 
+  // Redirecting to login - show loading briefly
+  if (checkingAuth || !isAuthenticated) {
+    return (
+      <View style={[styles.container, styles.centerContainer]}>
+        <ActivityIndicator size="large" color="#f97316" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
     <ScrollView style={styles.scrollView}>
-      <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}>
+      <LinearGradient
+        colors={['#f97316', '#eab308']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}
+      >
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={48} color="#fff" />
         </View>
+        <Text style={styles.userName}>Welcome</Text>
+        <Text style={styles.userEmail}>{userEmail ?? '—'}</Text>
+      </LinearGradient>
 
-        {isAuthenticated ? (
-          <>
-            <Text style={styles.userName}>Welcome</Text>
-            {/* ✅ show actual email */}
-            <Text style={styles.userEmail}>{userEmail ?? '—'}</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.userName}>Guest</Text>
-            <Text style={styles.userEmail}>Sign in to access your account</Text>
-          </>
-        )}
-      </BlurView>
-
-      {isAuthenticated ? (
-        <>
-          {(isVendor || isAdmin) && (
+      <>
+        {(isVendor || isAdmin) && (
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Business</Text>
 
@@ -181,26 +199,10 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Sign Out</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <BlurView intensity={80} tint="light" style={styles.menuSection}>
-          {/* ✅ Optional: make the whole menu list still visible but guarded.
-              For now, just show sign in/up actions. */}
-          <TouchableOpacity style={styles.loginButtonWrapper} onPress={() => router.push('/login')}>
-            <BlurView intensity={80} tint="dark" style={styles.loginButton}>
-              <Ionicons name="log-in-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.loginButtonText}>Sign In</Text>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.registerButton} onPress={() => router.push('/register')}>
-            <Text style={styles.registerButtonText}>Don't have an account? Sign Up</Text>
-          </TouchableOpacity>
-        </BlurView>
-      )}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Sign Out</Text>
+        </TouchableOpacity>
+      </>
     </ScrollView>
     </View>
   );
@@ -209,9 +211,10 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   scrollView: { flex: 1 },
+  centerContainer: { justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
 
   header: {
-    backgroundColor: '#6200ee',
     padding: 32,
     alignItems: 'center',
     paddingTop: 60,
@@ -270,22 +273,4 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   logoutButtonText: { fontSize: 16, fontWeight: '600', color: '#d32f2f' },
-
-  loginButtonWrapper: {
-    margin: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  loginButton: {
-    padding: 16,
-    backgroundColor: 'rgba(98, 0, 238, 0.8)',
-    borderRadius: 12,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  loginButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
-
-  registerButton: { margin: 16, marginTop: 0, padding: 16, alignItems: 'center' },
-  registerButtonText: { fontSize: 14, color: '#666' },
 });

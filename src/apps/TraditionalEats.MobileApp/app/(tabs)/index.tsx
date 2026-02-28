@@ -16,6 +16,7 @@ import {
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
@@ -305,12 +306,17 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+        <LinearGradient
+          colors={["#f97316", "#eab308"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.header, { paddingTop: insets.top + 20 }]}
+        >
           <Text style={styles.title}>Welcome to Kram</Text>
           <Text style={styles.subtitle}>
             Discover authentic traditional food
           </Text>
-        </View>
+        </LinearGradient>
 
         {/* Distance slider: 0–100 miles */}
         <BlurView intensity={80} tint="light" style={styles.distanceRow}>
@@ -533,16 +539,16 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "transparent" },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 100 },
 
   header: {
     padding: 20,
-    backgroundColor: "transparent",
+    paddingBottom: 24,
   },
-  title: { fontSize: 24, fontWeight: "bold", color: "#333", marginBottom: 4 },
-  subtitle: { fontSize: 14, color: "#666" },
+  title: { fontSize: 24, fontWeight: "bold", color: "#fff", marginBottom: 4 },
+  subtitle: { fontSize: 14, color: "rgba(255, 255, 255, 0.9)" },
 
   distanceRow: {
     marginTop: 20,
