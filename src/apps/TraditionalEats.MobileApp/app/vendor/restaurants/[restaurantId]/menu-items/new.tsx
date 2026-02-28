@@ -396,8 +396,8 @@ const styles = StyleSheet.create({
     borderColor: "#e0e0e0",
   },
   categoryButtonSelected: {
-    backgroundColor: "#6200ee",
-    borderColor: "#6200ee",
+    backgroundColor: "#f97316",
+    borderColor: "#f97316",
   },
   categoryButtonText: { fontSize: 14, color: "#333", fontWeight: "500" },
   categoryButtonTextSelected: { color: "#fff" },
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   },
   priceInput: { flex: 1, borderWidth: 0, paddingLeft: 0 },
   saveButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     padding: 16,
     borderRadius: 8,
     flexDirection: "row",

@@ -265,7 +265,7 @@ export default function VendorDocumentsScreen() {
     <View style={styles.container}>
       <AppHeader title="My Documents" right={(
         <TouchableOpacity onPress={() => setUploadModalVisible(true)} style={styles.uploadButton}>
-          <Ionicons name="add" size={24} color="#007AFF" />
+          <Ionicons name="add" size={24} color="#f97316" />
         </TouchableOpacity>
       )} />
 
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterButtonActive: {
-    backgroundColor: "#007AFF",
+    backgroundColor: "#f97316",
   },
   filterButtonText: {
     color: "#666",
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   uploadButtonLarge: {
-    backgroundColor: "#007AFF",
+    backgroundColor: "#f97316",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: "#007AFF",
+    backgroundColor: "#f97316",
     alignItems: "center",
   },
   uploadButtonModalDisabled: {

@@ -300,12 +300,16 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 8 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', flex: 1, textAlign: 'center' },
-  addButton: { padding: 8 },
+  addButton: {
+    padding: 8,
+    backgroundColor: '#f97316',
+    borderRadius: 20,
+  },
 
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, minHeight: 400 },
   emptyText: { fontSize: 20, fontWeight: 'bold', color: '#333', marginTop: 16 },
   emptySubtext: { fontSize: 14, color: '#666', marginTop: 8, textAlign: 'center' },
-  addButtonLarge: { marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#6200ee', borderRadius: 8 },
+  addButtonLarge: { marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#f97316', borderRadius: 8 },
   addButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   menuList: { padding: 16 },
@@ -349,7 +353,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#6200ee',
+    backgroundColor: '#f97316',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

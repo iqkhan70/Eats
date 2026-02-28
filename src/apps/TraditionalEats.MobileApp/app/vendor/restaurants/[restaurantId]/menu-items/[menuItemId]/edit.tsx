@@ -430,8 +430,8 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   categoryButtonSelected: {
-    backgroundColor: '#6200ee',
-    borderColor: '#6200ee',
+    backgroundColor: '#f97316',
+    borderColor: '#f97316',
   },
   categoryButtonText: {
     fontSize: 14,
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   saveButton: {
-    backgroundColor: '#6200ee',
+    backgroundColor: '#f97316',
     padding: 16,
     borderRadius: 8,
     flexDirection: 'row',

@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   saveButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     padding: 16,
     borderRadius: 8,
     flexDirection: "row",
