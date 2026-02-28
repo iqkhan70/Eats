@@ -383,7 +383,7 @@ export default function MenuScreen() {
 
                       {item.isAvailable ? (
                         <TouchableOpacity style={[styles.addButton, addingItemId === item.menuItemId && styles.addButtonDisabled]} onPress={() => addToCart(item)} disabled={addingItemId === item.menuItemId}>
-                          {addingItemId === item.menuItemId ? <ActivityIndicator size="small" color="#6200ee" /> : <Ionicons name="add-circle" size={32} color="#6200ee" />}
+                          {addingItemId === item.menuItemId ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="add" size={24} color="#fff" />}
                         </TouchableOpacity>
                       ) : (
                         <View style={styles.unavailableBadge}>
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   categoryChipActive: {
-    backgroundColor: '#6200ee',
+    backgroundColor: '#f97316',
   },
   categoryChipText: {
     fontSize: 14,
@@ -613,7 +613,12 @@ const styles = StyleSheet.create({
   menuItemName: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 4 },
   menuItemDescription: { fontSize: 14, color: '#666', marginBottom: 8 },
   menuItemPrice: { fontSize: 18, fontWeight: 'bold', color: '#6200ee', marginTop: 4 },
-  addButton: { marginLeft: 12 },
+  addButton: {
+    marginLeft: 12,
+    padding: 4,
+    backgroundColor: "#f97316",
+    borderRadius: 16,
+  },
   addButtonDisabled: { opacity: 0.5 },
   unavailableBadge: {
     backgroundColor: '#ffebee',

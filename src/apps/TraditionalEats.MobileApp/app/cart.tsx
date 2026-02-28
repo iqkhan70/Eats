@@ -517,7 +517,7 @@ export default function CartScreen() {
                   style={styles.quantityButton}
                   onPress={() => decreaseQuantity(item)}
                 >
-                  <Ionicons name="remove" size={20} color="#6200ee" />
+                  <Ionicons name="remove" size={20} color="#fff" />
                 </TouchableOpacity>
 
                 <Text style={styles.quantityText}>{item.quantity}</Text>
@@ -526,7 +526,7 @@ export default function CartScreen() {
                   style={styles.quantityButton}
                   onPress={() => increaseQuantity(item)}
                 >
-                  <Ionicons name="add" size={20} color="#6200ee" />
+                  <Ionicons name="add" size={20} color="#fff" />
                 </TouchableOpacity>
               </View>
 
@@ -728,7 +728,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-  quantityButton: { padding: 4 },
+  quantityButton: {
+    padding: 8,
+    backgroundColor: "#f97316",
+    borderRadius: 8,
+  },
   quantityText: {
     fontSize: 16,
     fontWeight: "600",
@@ -791,7 +795,7 @@ const styles = StyleSheet.create({
   },
 
   placeOrderButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     padding: 16,
     borderRadius: 8,
     alignItems: "center",
