@@ -400,6 +400,11 @@ export default function VendorChat({
                   ? parsePaymentRequest(msg.metadataJson)
                   : null;
 
+              const orderPlaced =
+                msg.metadataJson && isOrderPlaced(msg.metadataJson)
+                  ? parseOrderPlaced(msg.metadataJson)
+                  : null;
+
               return (
                 <View
                   key={
