@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  useWindowDimensions,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -32,12 +32,8 @@ export default function OrderChatScreen() {
   // ✅ This returns the real navigation header height (even if you aren't rendering one,
   // it still helps set a correct keyboard offset on iOS)
   const headerHeight = useHeaderHeight();
-  const { height: windowHeight } = useWindowDimensions();
 
   if (!orderId) return null;
-
-  // Keep chat height under ~75% of window so send button is visible without scrolling
-  const chatMaxHeight = Math.round(windowHeight * 0.75);
 
   useEffect(() => {
     if (!orderId) return;
@@ -125,10 +121,11 @@ export default function OrderChatScreen() {
           }
         />
 
-        {/* Chat */}
-        <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
-          <OrderChat orderId={orderId} fullScreen />
-        </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.chatWrapper}>
+            <OrderChat orderId={orderId} fullScreen />
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

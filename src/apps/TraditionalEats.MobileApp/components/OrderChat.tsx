@@ -246,7 +246,8 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
             ref={scrollRef}
             style={styles.messagesScroll}
             contentContainerStyle={styles.messagesContent}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="none"
             showsVerticalScrollIndicator
             onContentSizeChange={() => scrollToBottom(false)}
           >

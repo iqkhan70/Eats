@@ -2,12 +2,11 @@ import React, { useEffect } from "react";
 import {
   SafeAreaView,
   View,
-  Text,
   StyleSheet,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  useWindowDimensions,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -32,8 +31,6 @@ export default function VendorMessageThreadScreen() {
     typeof params.vendorName === "string" ? params.vendorName : "";
 
   const headerHeight = useHeaderHeight();
-  const { height: windowHeight } = useWindowDimensions();
-  const chatMaxHeight = Math.round(windowHeight * 0.75);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -80,18 +77,21 @@ export default function VendorMessageThreadScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <AppHeader
-          title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
-        />
-
-        <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
-          <VendorChat
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.kbInner}>
+            <AppHeader
+              title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
+            />
+            <View style={styles.chatWrapper}>
+              <VendorChat
             conversationId={conversationId}
             viewerRole="Vendor"
             restaurantId={restaurantId || undefined}
             vendorName={vendorName || undefined}
           />
-        </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -100,6 +100,7 @@ export default function VendorMessageThreadScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f5f5f5" },
   kb: { flex: 1 },
+  kbInner: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",

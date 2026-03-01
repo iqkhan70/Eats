@@ -9,7 +9,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  useWindowDimensions,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -29,8 +30,6 @@ export default function RestaurantChatScreen() {
   const restaurantId = params.restaurantId ?? "";
 
   const headerHeight = useHeaderHeight();
-  const { height: windowHeight } = useWindowDimensions();
-  const chatMaxHeight = Math.round(windowHeight * 0.75);
 
   const [loading, setLoading] = useState(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -145,6 +144,8 @@ export default function RestaurantChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.kbInner}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.back()}
@@ -161,7 +162,7 @@ export default function RestaurantChatScreen() {
           <View style={styles.backButton} />
         </View>
 
-        <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
+        <View style={styles.chatWrapper}>
           {loading ? (
             <View style={styles.center}>
               <ActivityIndicator size="large" color="#6200ee" />
@@ -180,6 +181,8 @@ export default function RestaurantChatScreen() {
             </View>
           )}
         </View>
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -188,6 +191,7 @@ export default function RestaurantChatScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f5f5f5" },
   kb: { flex: 1 },
+  kbInner: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",

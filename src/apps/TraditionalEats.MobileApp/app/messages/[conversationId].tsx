@@ -4,8 +4,9 @@ import {
   Platform,
   SafeAreaView,
   StyleSheet,
-  useWindowDimensions,
   View,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -29,8 +30,6 @@ export default function MessageThreadScreen() {
     typeof params.vendorName === "string" ? params.vendorName : "";
 
   const headerHeight = useHeaderHeight();
-  const { height: windowHeight } = useWindowDimensions();
-  const chatMaxHeight = Math.round(windowHeight * 0.75);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -73,18 +72,21 @@ export default function MessageThreadScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <AppHeader
-          title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
-        />
-
-        <View style={[styles.chatWrapper, { maxHeight: chatMaxHeight }]}>
-          <VendorChat
-            conversationId={conversationId}
-            viewerRole="Customer"
-            restaurantId={restaurantId || undefined}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.kbInner}>
+            <AppHeader
+              title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
+            />
+            <View style={styles.chatWrapper}>
+              <VendorChat
+              conversationId={conversationId}
+              viewerRole="Customer"
+              restaurantId={restaurantId || undefined}
             vendorName={vendorName || undefined}
           />
-        </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -93,5 +95,6 @@ export default function MessageThreadScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f5f5f5" },
   kb: { flex: 1 },
+  kbInner: { flex: 1 },
   chatWrapper: { flex: 1, padding: 16 },
 });

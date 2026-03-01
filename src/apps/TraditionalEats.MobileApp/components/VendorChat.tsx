@@ -386,7 +386,8 @@ export default function VendorChat({
             ref={scrollRef}
             style={styles.messagesScroll}
             contentContainerStyle={styles.messagesContent}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="none"
             showsVerticalScrollIndicator
             onContentSizeChange={() => scrollToBottom(false)}
           >
@@ -463,16 +464,31 @@ export default function VendorChat({
                   ) : null}
 
                   {orderPlaced && !isYou ? (
-                    <View style={styles.orderPlacedContainer}>
+                    <TouchableOpacity
+                      style={styles.orderPlacedContainer}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        const path =
+                          viewerRole.toLowerCase() === "customer"
+                            ? `/orders/${orderPlaced.orderId}`
+                            : `/vendor/orders/${orderPlaced.orderId}`;
+                        router.push(path as never);
+                      }}
+                    >
                       <View style={styles.orderPlacedHeader}>
                         <Ionicons
                           name="receipt-outline"
                           size={20}
                           color="#5c6bc0"
                         />
-                        <Text style={styles.orderPlacedTitle}>
+                        <Text style={[styles.orderPlacedTitle, { flex: 1 }]}>
                           Order #{orderPlaced.orderId.slice(0, 8)}
                         </Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color="#5c6bc0"
+                        />
                       </View>
                       {orderPlaced.items.map((item, idx) => (
                         <Text
@@ -503,7 +519,7 @@ export default function VendorChat({
                           {orderPlaced.deliveryAddress}
                         </Text>
                       ) : null}
-                    </View>
+                    </TouchableOpacity>
                   ) : null}
                 </View>
               );
