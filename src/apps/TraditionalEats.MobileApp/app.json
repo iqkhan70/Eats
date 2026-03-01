@@ -40,6 +40,9 @@
       "bundleIdentifier": "com.kram.mobile",
       "buildNumber": "2",
       "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.applesignin": ["Default"]
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
