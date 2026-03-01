@@ -187,6 +187,11 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Apple ID token is required");
 
         var appleClientId = _configuration["Apple:ClientId"] ?? _configuration["Apple:BundleId"] ?? "com.kram.mobile";
+        // Support both production bundle ID and Expo Go (host.exp.Exponent) for development
+        var validAudiences = new List<string> { appleClientId };
+        if (!validAudiences.Contains("host.exp.Exponent"))
+            validAudiences.Add("host.exp.Exponent");
+
         var configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
             "https://appleid.apple.com/.well-known/openid-configuration",
             new OpenIdConnectConfigurationRetriever(),
@@ -196,7 +201,7 @@ public class AuthService : IAuthService
         var validationParameters = new TokenValidationParameters
         {
             ValidIssuer = "https://appleid.apple.com",
-            ValidAudience = appleClientId,
+            ValidAudiences = validAudiences,
             IssuerSigningKeys = config.JsonWebKeySet?.GetSigningKeys() ?? [],
             ValidateIssuer = true,
             ValidateAudience = true,

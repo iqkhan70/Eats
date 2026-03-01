@@ -222,16 +222,6 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => router.push("/(tabs)/profile")}
-              style={styles.backButton}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Ionicons name="chevron-back" size={24} color={TEXT_PRIMARY} />
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.brandSection}>
             <Image
               source={require("../assets/logo.png")}
@@ -625,15 +615,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 40,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-  },
-  backButton: {
-    padding: 4,
   },
   brandSection: {
     alignItems: "center",
