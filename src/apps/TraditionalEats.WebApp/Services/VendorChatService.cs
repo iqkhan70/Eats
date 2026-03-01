@@ -151,5 +151,6 @@ public class VendorChatMessage
     public string? SenderDisplayName { get; set; }
     public string Message { get; set; } = string.Empty;
     public DateTime SentAt { get; set; }
+    public string? MetadataJson { get; set; }
 }
 

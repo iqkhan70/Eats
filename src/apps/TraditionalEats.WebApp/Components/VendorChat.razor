@@ -78,6 +78,29 @@
                                 <RadzenText TextStyle="TextStyle.Body1" Style="white-space: pre-wrap; word-wrap: break-word;">
                                     @message.Message
                                 </RadzenText>
+                                @if (GetOrderPlacedMetadata(message.MetadataJson) is { } orderPlaced)
+                                {
+                                    <div style="margin-top: 0.5rem; padding: 0.75rem; background-color: var(--rz-primary-lighter); border-radius: 6px; border-left: 4px solid var(--rz-primary);">
+                                        <RadzenText TextStyle="TextStyle.Body2" Style="font-weight: bold; color: var(--rz-primary); margin-bottom: 0.5rem;">
+                                            Order #@(orderPlaced.OrderId?.Length >= 8 ? orderPlaced.OrderId.Substring(0, 8) : orderPlaced.OrderId)
+                                        </RadzenText>
+                                        @foreach (var item in orderPlaced.Items ?? new List<OrderPlacedItem>())
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" Style="display: block; color: var(--rz-text-secondary-color);">
+                                                @(item.Quantity)x @item.Name @(item.Modifiers?.Count > 0 ? $"({string.Join(", ", item.Modifiers)})" : "") – $@(item.TotalPrice.ToString("F2"))
+                                            </RadzenText>
+                                        }
+                                        @if (orderPlaced.ServiceFee > 0)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">Service fee: $@(orderPlaced.ServiceFee.ToString("F2"))</RadzenText>
+                                        }
+                                        <RadzenText TextStyle="TextStyle.Body2" Style="font-weight: bold; margin-top: 0.25rem;">Total: $@(orderPlaced.Total.ToString("F2"))</RadzenText>
+                                        @if (!string.IsNullOrWhiteSpace(orderPlaced.DeliveryAddress))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color); font-style: italic; margin-top: 0.25rem;">@orderPlaced.DeliveryAddress</RadzenText>
+                                        }
+                                    </div>
+                                }
                             </RadzenStack>
                         </div>
                     }
@@ -300,6 +323,18 @@
         return message.SenderRole;
     }
 
+    private static OrderPlacedMetadata? GetOrderPlacedMetadata(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson)) return null;
+        try
+        {
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var metadata = JsonSerializer.Deserialize<OrderPlacedMetadata>(metadataJson, opts);
+            return metadata?.Type == "order_placed" ? metadata : null;
+        }
+        catch { return null; }
+    }
+
     private async Task ScrollToBottom()
     {
         try
@@ -316,6 +351,24 @@
         if (!string.IsNullOrWhiteSpace(textFromTextarea))
             newMessage = textFromTextarea;
         await SendMessage();
+    }
+
+    private class OrderPlacedMetadata
+    {
+        public string Type { get; set; } = "";
+        public string? OrderId { get; set; }
+        public List<OrderPlacedItem>? Items { get; set; }
+        public decimal Total { get; set; }
+        public decimal ServiceFee { get; set; }
+        public string? DeliveryAddress { get; set; }
+    }
+
+    private class OrderPlacedItem
+    {
+        public string Name { get; set; } = "";
+        public int Quantity { get; set; }
+        public decimal TotalPrice { get; set; }
+        public List<string>? Modifiers { get; set; }
     }
 
     public async ValueTask DisposeAsync()

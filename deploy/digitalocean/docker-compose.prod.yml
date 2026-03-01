@@ -4,8 +4,17 @@
 # Set REGISTRY=registry.digitalocean.com/cha-registry, REPO_NAME=kram in .env
 # Run: docker compose -f docker-compose.prod.yml --env-file .env up -d
 # name: ensures project/volume names are "kram_*" (used by setup-https.sh)
+#
+# Logging: json-file driver with rotation (10MB per file, 3 files = ~30MB max per container)
+# to prevent disk exhaustion in production.
 
 name: kram
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   # ---------- Data & messaging (internal only) ----------
@@ -31,6 +40,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   redis:
     image: redis:7-alpine
@@ -48,6 +58,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -69,6 +80,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   # ---------- Microservices (internal only, HTTP) ----------
   identity-service:
@@ -107,6 +119,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   customer-service:
     build:
@@ -137,6 +150,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   order-service:
     build:
@@ -170,6 +184,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   catalog-service:
     build:
@@ -196,6 +211,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   notification-service:
     build:
@@ -242,6 +258,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   restaurant-service:
     build:
@@ -268,6 +285,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   payment-service:
     build:
@@ -303,6 +321,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   chat-service:
     build:
@@ -337,6 +356,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   # ---------- Ollama (optional; pull models when needed: docker exec -it <ollama> ollama pull <model>) ----------
   ollama:
@@ -350,6 +370,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   # ---------- AIService (OpenAI + Ollama; light use for now) ----------
   ai-service:
@@ -387,6 +408,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   review-service:
     build:
@@ -455,6 +477,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   # ---------- BFFs (internal only, HTTP) ----------
   web-bff:
@@ -505,6 +528,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   mobile-bff:
     build:
@@ -549,6 +573,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
   # ---------- Edge: Nginx + WebApp static (HTTPS termination; only public-facing) ----------
   edge:
@@ -577,6 +602,7 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    logging: *default-logging
 
 networks:
   internal:

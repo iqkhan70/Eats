@@ -107,6 +107,7 @@ builder.Services.AddAuthorization();
 
 // Application services
 builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddHostedService<OrderPlacedEventHandler>();
 
 var app = builder.Build();
 

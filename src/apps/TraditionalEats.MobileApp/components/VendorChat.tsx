@@ -31,6 +31,11 @@ import {
   parsePaymentRequest,
   type PaymentRequestMetadata,
 } from "../types/paymentRequest";
+import {
+  isOrderPlaced,
+  parseOrderPlaced,
+  type OrderPlacedMetadata,
+} from "../types/orderPlaced";
 
 function isAuthError(message: string): boolean {
   const lower = (message || "").toLowerCase();
@@ -451,6 +456,50 @@ export default function VendorChat({
                       </TouchableOpacity>
                     </View>
                   ) : null}
+
+                  {orderPlaced && !isYou ? (
+                    <View style={styles.orderPlacedContainer}>
+                      <View style={styles.orderPlacedHeader}>
+                        <Ionicons
+                          name="receipt-outline"
+                          size={20}
+                          color="#5c6bc0"
+                        />
+                        <Text style={styles.orderPlacedTitle}>
+                          Order #{orderPlaced.orderId.slice(0, 8)}
+                        </Text>
+                      </View>
+                      {orderPlaced.items.map((item, idx) => (
+                        <Text
+                          key={idx}
+                          style={styles.orderPlacedItem}
+                          numberOfLines={2}
+                        >
+                          {item.quantity}x {item.name}
+                          {item.modifiers?.length
+                            ? ` (${item.modifiers.join(", ")})`
+                            : ""}{" "}
+                          – ${item.totalPrice.toFixed(2)}
+                        </Text>
+                      ))}
+                      {orderPlaced.serviceFee > 0 ? (
+                        <Text style={styles.orderPlacedFee}>
+                          Service fee: ${orderPlaced.serviceFee.toFixed(2)}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.orderPlacedTotal}>
+                        Total: ${orderPlaced.total.toFixed(2)}
+                      </Text>
+                      {orderPlaced.deliveryAddress ? (
+                        <Text
+                          style={styles.orderPlacedAddress}
+                          numberOfLines={2}
+                        >
+                          {orderPlaced.deliveryAddress}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
@@ -662,6 +711,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 13,
+  },
+
+  orderPlacedContainer: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: "#e8eaf6",
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#5c6bc0",
+  },
+  orderPlacedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  orderPlacedTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5c6bc0",
+  },
+  orderPlacedItem: {
+    fontSize: 12,
+    color: "#444",
+    marginBottom: 4,
+  },
+  orderPlacedFee: {
+    fontSize: 11,
+    color: "#666",
+    marginTop: 4,
+  },
+  orderPlacedTotal: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#3949ab",
+    marginTop: 6,
+  },
+  orderPlacedAddress: {
+    fontSize: 11,
+    color: "#666",
+    marginTop: 6,
+    fontStyle: "italic",
   },
 
   inputRow: {
