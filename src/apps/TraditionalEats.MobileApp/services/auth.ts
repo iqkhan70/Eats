@@ -58,12 +58,17 @@ class AuthService {
         ? { idToken }
         : { idToken, email, fullName };
 
-    const response = await api.post<AuthResponse>(endpoint, payload);
-    if (response.data) {
-      await this.storeTokens(response.data.accessToken, response.data.refreshToken);
-      return response.data;
+    try {
+      const response = await api.post<AuthResponse>(endpoint, payload);
+      if (response.data) {
+        await this.storeTokens(response.data.accessToken, response.data.refreshToken);
+        return response.data;
+      }
+      throw new Error('Invalid response from server');
+    } catch (error: any) {
+      const msg = error.response?.data?.message ?? error.response?.data?.error ?? error.message;
+      throw new Error(msg);
     }
-    throw new Error('Invalid response from server');
   }
 
   async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {

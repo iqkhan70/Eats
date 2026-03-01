@@ -24,6 +24,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "376358654488-t8r863kho8nisn594cc9ciche0nf1efa.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "376358654488-44i79p8q8o5l2bkl62o4h21m1i3s9o8a.apps.googleusercontent.com",
         "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "true"
       }
     }

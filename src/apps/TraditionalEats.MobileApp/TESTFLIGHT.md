@@ -21,13 +21,17 @@ Use these steps to build the iOS app against **https://www.kram.tech** and ship 
    ```
    If prompted, confirm using the existing `eas.json`. The project will be linked to your Expo account.
 
-### 1.2 Apple Developer and App Store Connect
+### 1.2 Google Sign-In (required for "Continue with Google")
+
+The production build profile in `eas.json` includes `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` and `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`. If you use different client IDs, update them in `eas.json` → `build.production.env`.
+
+### 1.3 Apple Developer and App Store Connect
 
 1. In [App Store Connect](https://appstoreconnect.apple.com), create an app:
    - **Apps** → **+** → **New App**
-   - Platform: iOS  
-   - Name: **Kram** (or your chosen name)  
-   - Primary language, bundle ID: **com.kram.mobile** (must match `app.json` → `ios.bundleIdentifier`)  
+   - Platform: iOS
+   - Name: **Kram** (or your chosen name)
+   - Primary language, bundle ID: **com.kram.mobile** (must match `app.json` → `ios.bundleIdentifier`)
    - SKU: e.g. `kram-mobile`
 
 2. Note your **Apple ID** (email) and **Team ID** (App Store Connect → **Users and Access** → **Team ID**). You’ll need them for EAS.

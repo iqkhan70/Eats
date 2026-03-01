@@ -142,7 +142,7 @@ The app supports **Continue with Google** and **Continue with Apple** (iOS only)
 **Google Sign-In**:
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
 2. Enable the Google+ API. Create OAuth 2.0 credentials (Web application for redirect flow, or iOS/Android for native).
-3. Set `EXPO_PUBLIC_GOOGLE_CLIENT_ID` to your app's client ID. For redirect flow, add your redirect URI (e.g. `kram://` or Expo auth URL) to the authorized redirect URIs.
+3. Set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` and `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` in `.env` (different values for Web vs iOS OAuth clients).
 
 **Apple Sign-In**:
 - Requires iOS (Apple Sign-In is not available on Android).

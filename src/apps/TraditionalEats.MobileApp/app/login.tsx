@@ -67,43 +67,67 @@ export default function LoginScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
 
-  const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
-  const [, , googlePromptAsync] = useIdTokenAuthRequest({
-    clientId: googleClientId || "placeholder",
-    iosClientId: googleClientId || "placeholder",
-    androidClientId: googleClientId || "placeholder",
-    webClientId: googleClientId || "placeholder",
+  const googleWebClientId = (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "").trim();
+  const googleIosClientId = (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "").trim();
+  // Use Web client for Expo Go (redirect flow); iOS client for TestFlight. Fallback to the other if one is missing.
+  const effectiveIos = googleIosClientId || googleWebClientId;
+  const effectiveWeb = googleWebClientId || googleIosClientId;
+  const fallback = effectiveIos || effectiveWeb || "placeholder";
+  const [, googleResponse, googlePromptAsync] = useIdTokenAuthRequest({
+    iosClientId: effectiveIos || fallback,
+    webClientId: effectiveWeb || fallback,
+    clientId: effectiveWeb || effectiveIos || fallback,
+    androidClientId: effectiveWeb || fallback,
   });
 
+  // id_token arrives asynchronously after code exchange; use response state
+  const googleSignInPending = React.useRef(false);
+  useEffect(() => {
+    if (!googleResponse || !googleSignInPending.current) return;
+    if (googleResponse.type === "cancel") {
+      googleSignInPending.current = false;
+      setSocialLoading(false);
+      return;
+    }
+    if (googleResponse.type !== "success") return;
+    const idToken = googleResponse.params?.id_token ?? googleResponse.authentication?.idToken;
+    if (!idToken) {
+      Alert.alert("Sign In Failed", "Could not get sign-in token from Google. Try again.");
+      googleSignInPending.current = false;
+      setSocialLoading(false);
+      return;
+    }
+    googleSignInPending.current = false;
+    authService
+      .loginWithExternalToken("google", idToken)
+      .then(() => router.replace("/(tabs)"))
+      .catch((err: Error) => {
+        Alert.alert("Sign In Failed", err.message || "Could not sign in with Google");
+      })
+      .finally(() => setSocialLoading(false));
+  }, [googleResponse]);
+
   const handleContinueWithGoogle = async () => {
-    if (!googleClientId) {
+    const hasConfig = googleWebClientId || googleIosClientId;
+    if (!hasConfig) {
       Alert.alert(
         "Not Configured",
-        "Google Sign-In is not configured. Set EXPO_PUBLIC_GOOGLE_CLIENT_ID in your environment.",
+        "Google Sign-In is not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID in your .env.",
       );
       return;
     }
     try {
+      googleSignInPending.current = true;
       setSocialLoading(true);
-      const result = await googlePromptAsync();
-      if (result?.type === "success" && result.params?.id_token) {
-        await authService.loginWithExternalToken(
-          "google",
-          result.params.id_token,
-        );
-        router.replace("/(tabs)");
-      } else if (result?.type === "cancel") {
-        // User cancelled, no need to show error
-      } else {
-        Alert.alert("Sign In Failed", "Could not sign in with Google");
-      }
+      await googlePromptAsync();
+      // Success/cancel handled by useEffect watching googleResponse
     } catch (error: any) {
+      googleSignInPending.current = false;
+      setSocialLoading(false);
       Alert.alert(
         "Sign In Failed",
         error.message || "Could not sign in with Google",
       );
-    } finally {
-      setSocialLoading(false);
     }
   };
 

@@ -14,9 +14,11 @@ The JS bundle is built during the Xcode "Bundle React Native code" phase. If `EX
 
 ```bash
 export EXPO_PUBLIC_ENV=production
+export EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+export EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your-ios-client-id.apps.googleusercontent.com
 ```
 
-This file is gitignored. For production Xcode archives, keep this in place. **Do not** put `EXPO_PUBLIC_ENV=ip` or anything else in `.xcode.env.local` when archiving for TestFlight.
+This file is gitignored. For production Xcode archives, keep this in place. **Do not** put `EXPO_PUBLIC_ENV=ip` or anything else in `.xcode.env.local` when archiving for TestFlight. Google Sign-In requires both client IDs; without them you get "OAuth Client was not found".
 
 ---
 
