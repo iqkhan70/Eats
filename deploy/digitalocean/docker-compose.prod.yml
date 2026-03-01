@@ -342,6 +342,9 @@ services:
       ASPNETCORE_URLS: http://+:5012
       ConnectionStrings__ChatDb: "server=mysql;port=3306;database=traditional_eats_chat;user=root;password=${MYSQL_ROOT_PASSWORD};"
       Redis__ConnectionString: "redis:6379"
+      RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER:-Kram}
       Jwt__Audience: ${JWT_AUDIENCE:-Kram}
@@ -351,6 +354,7 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
       order-service: { condition: service_started }
       restaurant-service: { condition: service_started }
     networks:
