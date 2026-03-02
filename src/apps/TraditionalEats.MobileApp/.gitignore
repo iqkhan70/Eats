@@ -3,8 +3,9 @@
 
 # Xcode
 build/
-ios/Pods/
-ios/build/
+# Prebuild output – EAS Build generates these in the cloud; no need to commit
+ios/
+android/
 *.xcframework
 *.pbxuser
 !default.pbxuser
