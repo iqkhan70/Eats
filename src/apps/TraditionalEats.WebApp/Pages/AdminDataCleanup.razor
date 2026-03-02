@@ -1,0 +1,282 @@
+@page "/admin/cleanup"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+@inject IJSRuntime jsRuntime
+
+<PageTitle>Data Cleanup - Admin - Kram</PageTitle>
+
+<RadzenStack Gap="1.25rem" Style="padding: 1rem; max-width: 900px; margin: 0 auto;">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
+        <RadzenButton Icon="arrow_back" ButtonStyle="ButtonStyle.Light" Click="@(() => NavigationManager.NavigateTo("/admin"))" />
+        <RadzenText TextStyle="TextStyle.H4">Data Cleanup Jobs</RadzenText>
+    </RadzenStack>
+    <RadzenAlert Severity="AlertSeverity.Warning" AllowClose="false">
+        These operations permanently delete or archive data. Use with caution. Run Job 2 before Job 3 to archive old orders first.
+    </RadzenAlert>
+
+    @if (!isAdmin)
+    {
+        <RadzenAlert Severity="AlertSeverity.Error">Admin access required.</RadzenAlert>
+    }
+    else
+    {
+        <!-- Job 1: Chat cleanup -->
+        <RadzenCard>
+            <RadzenStack Gap="0.75rem">
+                <RadzenText TextStyle="TextStyle.H6">Job 1: Clean up old chats</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Delete order chats and vendor conversations older than:</RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                    @foreach (var m in new[] { 3, 6, 12, 24 })
+                    {
+                        <RadzenButton Text="@(m == 24 ? "2 years" : m + " months")" 
+                            ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" 
+                            Click="@(() => RunChatCleanup(m))" 
+                            Disabled="@cleanupRunning" />
+                    }
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+
+        <!-- Job 2: Archive orders and payments -->
+        <RadzenCard>
+            <RadzenStack Gap="0.75rem">
+                <RadzenText TextStyle="TextStyle.H6">Job 2: Archive orders and payments</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Move orders and tied payments older than X into history tables:</RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                    <RadzenButton Text="6 months" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" Click="@(() => RunArchive(6))" Disabled="@cleanupRunning" />
+                    <RadzenButton Text="1 year" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" Click="@(() => RunArchive(12))" Disabled="@cleanupRunning" />
+                    <RadzenButton Text="2 years" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" Click="@(() => RunArchive(24))" Disabled="@cleanupRunning" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+
+        <!-- Job 3: Clean history tables -->
+        <RadzenCard>
+            <RadzenStack Gap="0.75rem">
+                <RadzenText TextStyle="TextStyle.H6">Job 3: Clean order & payment history</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Permanently delete records from history tables older than:</RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                    <RadzenButton Text="1 year" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" Click="@(() => RunHistoryCleanup(1))" Disabled="@cleanupRunning" />
+                    <RadzenButton Text="2 years" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" Click="@(() => RunHistoryCleanup(2))" Disabled="@cleanupRunning" />
+                    <RadzenButton Text="3 years" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined" Click="@(() => RunHistoryCleanup(3))" Disabled="@cleanupRunning" />
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+
+        @if (cleanupRunning)
+        {
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+        }
+
+        @if (lastResult != null)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="0.5rem">
+                    <RadzenText TextStyle="TextStyle.H6">
+                        <i class="rz-icon rz-icon-check_circle" style="color: var(--rz-success); margin-right: 0.25rem;"></i>
+                        Last run result
+                    </RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" Style="white-space: pre-wrap;">@lastResult</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        }
+
+        <RadzenButton Icon="history" Text="View audit log" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined"
+            Click="@(() => NavigationManager.NavigateTo("/admin/cleanup/audit-log"))" />
+    }
+</RadzenStack>
+
+@code {
+    private bool isAdmin = false;
+    private bool cleanupRunning = false;
+    private string? lastResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAdmin = await AuthService.IsAdminAsync();
+    }
+
+    private async Task RunChatCleanup(int months)
+    {
+        if (!await Confirm($"Delete chats older than {months} months?")) return;
+        cleanupRunning = true;
+        lastResult = null;
+        try
+        {
+            var resp = await Http.PostAsync($"WebBff/admin/cleanup/chats?olderThanMonths={months}", null);
+            var json = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                lastResult = FormatChatResult(json, months);
+                NotificationService.Notify(NotificationSeverity.Success, "Chat cleanup done", lastResult);
+            }
+            else
+            {
+                lastResult = $"Chat cleanup failed (HTTP {(int)resp.StatusCode}):\n{json}";
+                NotificationService.Notify(NotificationSeverity.Error, "Chat cleanup failed", json);
+            }
+        }
+        catch (Exception ex)
+        {
+            lastResult = $"Chat cleanup error: {ex.Message}";
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally { cleanupRunning = false; StateHasChanged(); }
+    }
+
+    private async Task RunArchive(int months)
+    {
+        if (!await Confirm($"Archive orders and payments older than {months} months to history tables?")) return;
+        cleanupRunning = true;
+        lastResult = null;
+        try
+        {
+            var resp = await Http.PostAsync($"WebBff/admin/archive/orders-and-payments?olderThanMonths={months}", null);
+            var json = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                lastResult = FormatArchiveResult(json, months);
+                NotificationService.Notify(NotificationSeverity.Success, "Archive done", lastResult);
+            }
+            else
+            {
+                lastResult = $"Archive failed (HTTP {(int)resp.StatusCode}):\n{json}";
+                NotificationService.Notify(NotificationSeverity.Error, "Archive failed", json);
+            }
+        }
+        catch (Exception ex)
+        {
+            lastResult = $"Archive error: {ex.Message}";
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally { cleanupRunning = false; StateHasChanged(); }
+    }
+
+    private async Task RunHistoryCleanup(int years)
+    {
+        if (!await Confirm($"Permanently delete order and payment history older than {years} year(s)?")) return;
+        cleanupRunning = true;
+        lastResult = null;
+        try
+        {
+            var orderResp = await Http.PostAsync($"WebBff/admin/cleanup/order-history?olderThanYears={years}", null);
+            var paymentResp = await Http.PostAsync($"WebBff/admin/cleanup/payment-history?olderThanYears={years}", null);
+            var orderJson = orderResp.IsSuccessStatusCode ? await orderResp.Content.ReadAsStringAsync() : null;
+            var paymentJson = paymentResp.IsSuccessStatusCode ? await paymentResp.Content.ReadAsStringAsync() : null;
+            if (orderResp.IsSuccessStatusCode && paymentResp.IsSuccessStatusCode)
+            {
+                lastResult = FormatHistoryResult(orderJson, paymentJson, years);
+                NotificationService.Notify(NotificationSeverity.Success, "History cleanup done", lastResult);
+            }
+            else
+            {
+                var orderErr = orderResp.IsSuccessStatusCode ? "" : await orderResp.Content.ReadAsStringAsync();
+                var paymentErr = paymentResp.IsSuccessStatusCode ? "" : await paymentResp.Content.ReadAsStringAsync();
+                lastResult = $"History cleanup partial:\n" +
+                    $"Order: {(orderResp.IsSuccessStatusCode ? "OK" : "Failed")}\n" +
+                    $"Payment: {(paymentResp.IsSuccessStatusCode ? "OK" : "Failed")}" +
+                    (string.IsNullOrEmpty(orderErr) ? "" : $"\nOrder error: {orderErr}") +
+                    (string.IsNullOrEmpty(paymentErr) ? "" : $"\nPayment error: {paymentErr}");
+                NotificationService.Notify(NotificationSeverity.Warning, "Partial", lastResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            lastResult = $"History cleanup error: {ex.Message}";
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally { cleanupRunning = false; StateHasChanged(); }
+    }
+
+    private static string FormatChatResult(string json, int months)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return $"Chat cleanup (older than {months} months):\n(Empty response received)";
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            var orderMsg = GetInt(r, "deletedOrderMessages");
+            var part = GetInt(r, "deletedParticipants");
+            var vendorMsg = GetInt(r, "deletedVendorMessages");
+            var conv = GetInt(r, "deletedConversations");
+            var total = GetInt(r, "totalDeleted");
+            if (total == 0) total = orderMsg + part + vendorMsg + conv;
+            var emptyNote = total == 0 ? "\n(No records matched — nothing to delete)\n" : "";
+            return $"Chat cleanup (older than {months} months):{emptyNote}\n" +
+                $"• Order chat messages deleted: {orderMsg}\n" +
+                $"• Order chat participants removed: {part}\n" +
+                $"• Vendor chat messages deleted: {vendorMsg}\n" +
+                $"• Vendor conversations removed: {conv}\n" +
+                $"• Total records removed: {total}";
+        }
+        catch
+        {
+            return $"Chat cleanup (older than {months} months):\n(Response could not be parsed)\nRaw: {json}";
+        }
+    }
+
+    private static int GetInt(System.Text.Json.JsonElement el, string propertyName)
+    {
+        if (el.TryGetProperty(propertyName, out var p)) return p.GetInt32();
+        var pascal = char.ToUpperInvariant(propertyName[0]) + propertyName[1..];
+        if (el.TryGetProperty(pascal, out p)) return p.GetInt32();
+        return 0;
+    }
+
+    private static string FormatArchiveResult(string json, int months)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            var orders = r.TryGetProperty("archivedOrders", out var p) ? p.GetInt32() : 0;
+            var payments = r.TryGetProperty("archivedPayments", out p) ? p.GetInt32() : 0;
+            var emptyNote = orders == 0 && payments == 0 ? "\n(No records matched — nothing to archive)\n" : "";
+            return $"Archived to history tables (older than {months} months):{emptyNote}\n" +
+                $"• Orders moved to order_history: {orders}\n" +
+                $"• Payments moved to payment_history: {payments}\n" +
+                "• Refunds tied to those orders were removed from the main tables";
+        }
+        catch { return json; }
+    }
+
+    private static string FormatHistoryResult(string? orderJson, string? paymentJson, int years)
+    {
+        var orderCount = 0;
+        var paymentCount = 0;
+        try
+        {
+            if (!string.IsNullOrEmpty(orderJson))
+            {
+                using var od = System.Text.Json.JsonDocument.Parse(orderJson);
+                if (od.RootElement.TryGetProperty("deletedCount", out var p)) orderCount = p.GetInt32();
+            }
+        }
+        catch { /* ignore */ }
+        try
+        {
+            if (!string.IsNullOrEmpty(paymentJson))
+            {
+                using var pd = System.Text.Json.JsonDocument.Parse(paymentJson);
+                if (pd.RootElement.TryGetProperty("deletedCount", out var p)) paymentCount = p.GetInt32();
+            }
+        }
+        catch { /* ignore */ }
+        var emptyNote = orderCount == 0 && paymentCount == 0 ? "\n(No records matched — nothing to delete)\n" : "";
+        return $"Permanently deleted from history tables (older than {years} year(s)):{emptyNote}\n" +
+            $"• Order history records removed: {orderCount}\n" +
+            $"• Payment history records removed: {paymentCount}";
+    }
+
+    private async Task<bool> Confirm(string message)
+    {
+        return await jsRuntime.InvokeAsync<bool>("confirm", message);
+    }
+}

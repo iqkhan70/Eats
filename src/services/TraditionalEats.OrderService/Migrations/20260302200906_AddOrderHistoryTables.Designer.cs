@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TraditionalEats.OrderService.Data;
 
@@ -11,9 +12,11 @@ using TraditionalEats.OrderService.Data;
 namespace TraditionalEats.OrderService.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    partial class OrderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260302200906_AddOrderHistoryTables")]
+    partial class AddOrderHistoryTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,55 +24,6 @@ namespace TraditionalEats.OrderService.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
-
-            modelBuilder.Entity("TraditionalEats.OrderService.Entities.AdminCleanupAuditLog", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1024)
-                        .HasColumnType("varchar(1024)");
-
-                    b.Property<int>("JobType")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ParametersJson")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("varchar(512)");
-
-                    b.Property<DateTime>("RanAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("RanByEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("varchar(256)");
-
-                    b.Property<string>("RanByUserId")
-                        .HasMaxLength(128)
-                        .HasColumnType("varchar(128)");
-
-                    b.Property<string>("ResultJson")
-                        .HasMaxLength(2048)
-                        .HasColumnType("varchar(2048)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("varchar(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("JobType");
-
-                    b.HasIndex("RanAt");
-
-                    b.ToTable("admin_cleanup_audit_log", (string)null);
-                });
 
             modelBuilder.Entity("TraditionalEats.OrderService.Entities.Cart", b =>
                 {

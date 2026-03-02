@@ -149,6 +149,12 @@
                         <div class="tile-sub">View and manage all vendor documents</div>
                     </button>
 
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/cleanup"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-delete_sweep"></i></div>
+                        <div class="tile-title">Data Cleanup</div>
+                        <div class="tile-sub">Archive old chats, orders, payments; clean history tables</div>
+                    </button>
+
                     <button class="admin-tile" @onclick="@(() => NotifyComingSoon("Order Management"))">
                         <div class="tile-icon"><i class="rz-icon rz-icon-receipt_long"></i></div>
                         <div class="tile-title">Order Management</div>

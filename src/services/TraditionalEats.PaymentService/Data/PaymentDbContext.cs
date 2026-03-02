@@ -10,6 +10,7 @@ public class PaymentDbContext : DbContext
     }
 
     public DbSet<PaymentIntent> PaymentIntents { get; set; }
+    public DbSet<PaymentHistory> PaymentHistory { get; set; }
     public DbSet<Refund> Refunds { get; set; }
     public DbSet<Vendor> Vendors { get; set; }
 
@@ -22,6 +23,17 @@ public class PaymentDbContext : DbContext
             entity.HasKey(e => e.PaymentIntentId);
             entity.HasIndex(e => e.OrderId);
             entity.HasIndex(e => e.ProviderIntentId);
+            entity.Property(e => e.Status).HasMaxLength(50);
+            entity.Property(e => e.Provider).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<PaymentHistory>(entity =>
+        {
+            entity.ToTable("payment_history");
+            entity.HasKey(e => e.PaymentIntentId);
+            entity.HasIndex(e => e.OrderId);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.ArchivedAt);
             entity.Property(e => e.Status).HasMaxLength(50);
             entity.Property(e => e.Provider).HasMaxLength(50);
         });

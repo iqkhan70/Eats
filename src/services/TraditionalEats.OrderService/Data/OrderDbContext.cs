@@ -12,9 +12,13 @@ public class OrderDbContext : DbContext
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
     public DbSet<OrderStatusHistory> OrderStatusHistory { get; set; }
+    public DbSet<OrderHistory> OrderHistory { get; set; }
+    public DbSet<OrderItemHistory> OrderItemHistory { get; set; }
+    public DbSet<OrderStatusHistoryArchive> OrderStatusHistoryArchive { get; set; }
     public DbSet<Cart> Carts { get; set; }
     public DbSet<CartItem> CartItems { get; set; }
     public DbSet<OrderIdempotencyKey> OrderIdempotencyKeys { get; set; }
+    public DbSet<AdminCleanupAuditLog> AdminCleanupAuditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +53,30 @@ public class OrderDbContext : DbContext
             entity.Property(e => e.Status).HasMaxLength(50);
         });
 
+        modelBuilder.Entity<OrderHistory>(entity =>
+        {
+            entity.ToTable("order_history");
+            entity.HasKey(e => e.OrderId);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.ArchivedAt);
+            entity.Property(e => e.Status).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<OrderItemHistory>(entity =>
+        {
+            entity.ToTable("order_item_history");
+            entity.HasKey(e => e.OrderItemId);
+            entity.HasIndex(e => e.OrderId);
+        });
+
+        modelBuilder.Entity<OrderStatusHistoryArchive>(entity =>
+        {
+            entity.ToTable("order_status_history_archive");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.OrderId);
+            entity.Property(e => e.Status).HasMaxLength(50);
+        });
+
         modelBuilder.Entity<Cart>(entity =>
         {
             entity.HasKey(e => e.CartId);
@@ -69,6 +97,20 @@ public class OrderDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Key).IsUnique();
             entity.HasIndex(e => e.OrderId);
+        });
+
+        modelBuilder.Entity<AdminCleanupAuditLog>(entity =>
+        {
+            entity.ToTable("admin_cleanup_audit_log");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.RanAt);
+            entity.HasIndex(e => e.JobType);
+            entity.Property(e => e.ParametersJson).HasMaxLength(512);
+            entity.Property(e => e.ResultJson).HasMaxLength(2048);
+            entity.Property(e => e.RanByUserId).HasMaxLength(128);
+            entity.Property(e => e.RanByEmail).HasMaxLength(256);
+            entity.Property(e => e.Status).HasMaxLength(32);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(1024);
         });
     }
 }

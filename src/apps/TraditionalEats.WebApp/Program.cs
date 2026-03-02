@@ -38,8 +38,18 @@ builder.Services.AddScoped(sp =>
     var baseUri = new Uri(navigationManager.BaseUri);
     var isHttps = baseUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
 
+    var isLocalhost = string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+        || baseUri.Host == "127.0.0.1";
+
     Uri apiBaseUri;
-    if (isHttps && !string.IsNullOrEmpty(configuredApiUrlHttps) && configuredApiUrlHttps.StartsWith("https"))
+    // When app is on localhost, always use localhost for BFF to avoid CORS/connection issues.
+    if (isLocalhost)
+    {
+        var port = isHttps ? apiPortHttps : apiPortHttp;
+        var scheme = isHttps ? "https" : "http";
+        apiBaseUri = new UriBuilder(scheme, baseUri.Host, port, "/api/").Uri;
+    }
+    else if (isHttps && !string.IsNullOrEmpty(configuredApiUrlHttps) && configuredApiUrlHttps.StartsWith("https"))
     {
         apiBaseUri = new Uri(configuredApiUrlHttps);
     }
@@ -49,20 +59,7 @@ builder.Services.AddScoped(sp =>
     }
     else
     {
-        // No API URL configured: use same-origin /api/ when not on localhost (production behind Nginx).
-        // On localhost, use host + BFF ports so dev works without editing appsettings.
-        var isLocalhost = string.Equals(baseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
-            || baseUri.Host == "127.0.0.1";
-        if (isLocalhost)
-        {
-            var port = isHttps ? apiPortHttps : apiPortHttp;
-            var scheme = isHttps ? "https" : "http";
-            apiBaseUri = new UriBuilder(scheme, baseUri.Host, port, "/api/").Uri;
-        }
-        else
-        {
-            apiBaseUri = new Uri(new Uri(baseUri.GetLeftPart(UriPartial.Authority)), "api/");
-        }
+        apiBaseUri = new Uri(new Uri(baseUri.GetLeftPart(UriPartial.Authority)), "api/");
     }
 
     // Create HttpClient with message handler that adds auth tokens and cart session ID

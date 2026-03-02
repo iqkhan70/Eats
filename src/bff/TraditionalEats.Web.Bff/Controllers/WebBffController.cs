@@ -90,6 +90,26 @@ public class WebBffController : ControllerBase
             StatusCode = statusCode
         };
 
+    /// <summary>Record cleanup audit to OrderService. Fire-and-forget; logs but does not fail the main request.</summary>
+    private async Task RecordCleanupAuditAsync(int jobType, string parametersJson, string? resultJson, bool success, string? errorMessage = null)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var email = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+            var body = new { jobType, parametersJson, resultJson, status = success ? "Success" : "Failed", errorMessage, ranByUserId = userId, ranByEmail = email };
+            var response = await client.PostAsJsonAsync("/api/AdminArchive/audit/cleanup", body, JsonOptions);
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("Audit record failed: {Status}", response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record cleanup audit");
+        }
+    }
+
     private async Task<string> GetOrCreateSessionIdAsync()
     {
         // Try header (Blazor WASM)
@@ -2982,6 +3002,146 @@ public class WebBffController : ControllerBase
         {
             _logger.LogError(ex, "Error updating document status");
             return StatusCode(500, new { message = "Failed to update document status" });
+        }
+    }
+
+    // ----------------------------
+    // Admin data cleanup jobs
+    // ----------------------------
+
+    /// <summary>Get admin cleanup audit log.</summary>
+    [HttpGet("admin/cleanup/audit-log")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetCleanupAuditLog([FromQuery] int skip = 0, [FromQuery] int take = 50)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync($"/api/AdminArchive/audit/cleanup?skip={skip}&take={take}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get audit log failed");
+            return StatusCode(500, new { message = "Get audit log failed" });
+        }
+    }
+
+    /// <summary>Job 1: Delete chats older than 3, 6, 12, or 24 months.</summary>
+    [HttpPost("admin/cleanup/chats")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminCleanupChats([FromQuery] int olderThanMonths = 6)
+    {
+        var parametersJson = $"{{\"olderThanMonths\":{olderThanMonths}}}";
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync($"/api/AdminCleanup/cleanup/chats?olderThanMonths={olderThanMonths}", null);
+            var content = await response.Content.ReadAsStringAsync();
+            await RecordCleanupAuditAsync(1, parametersJson, content, response.IsSuccessStatusCode, response.IsSuccessStatusCode ? null : content);
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Chat cleanup failed");
+            await RecordCleanupAuditAsync(1, parametersJson, null, false, ex.Message);
+            return StatusCode(500, new { message = "Chat cleanup failed" });
+        }
+    }
+
+    /// <summary>Job 2: Archive orders and payments older than 6, 12, or 24 months to history tables.</summary>
+    [HttpPost("admin/archive/orders-and-payments")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminArchiveOrdersAndPayments([FromQuery] int olderThanMonths = 12)
+    {
+        var parametersJson = $"{{\"olderThanMonths\":{olderThanMonths}}}";
+        try
+        {
+            var orderClient = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(orderClient);
+            var orderResponse = await orderClient.PostAsync($"/api/AdminArchive/archive/orders?olderThanMonths={olderThanMonths}", null);
+            if (!orderResponse.IsSuccessStatusCode)
+            {
+                var err = await orderResponse.Content.ReadAsStringAsync();
+                await RecordCleanupAuditAsync(2, parametersJson, err, false, err);
+                return StatusCode((int)orderResponse.StatusCode, err);
+            }
+            var orderJson = await orderResponse.Content.ReadFromJsonAsync<JsonElement>();
+            var orderIds = orderJson.TryGetProperty("orderIds", out var arr)
+                ? arr.EnumerateArray().Select(e => Guid.Parse(e.GetString() ?? "")).ToList()
+                : new List<Guid>();
+            if (orderIds.Count == 0)
+            {
+                var result = JsonSerializer.Serialize(new { archivedOrders = 0, archivedPayments = 0 });
+                await RecordCleanupAuditAsync(2, parametersJson, result, true);
+                return Ok(new { archivedOrders = 0, archivedPayments = 0 });
+            }
+            var paymentClient = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(paymentClient);
+            var paymentResponse = await paymentClient.PostAsJsonAsync("/api/AdminArchive/archive/payments", new { orderIds });
+            var paymentJson = paymentResponse.IsSuccessStatusCode
+                ? await paymentResponse.Content.ReadFromJsonAsync<JsonElement>()
+                : (JsonElement?)null;
+            var archivedPayments = paymentJson?.TryGetProperty("archivedCount", out var pc) == true ? pc.GetInt32() : 0;
+            var archivedOrders = orderJson.TryGetProperty("archivedCount", out var oc) ? oc.GetInt32() : orderIds.Count;
+            var resultJson = JsonSerializer.Serialize(new { archivedOrders, archivedPayments });
+            await RecordCleanupAuditAsync(2, parametersJson, resultJson, true);
+            return Ok(new { archivedOrders, archivedPayments });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Order/payment archive failed");
+            await RecordCleanupAuditAsync(2, parametersJson, null, false, ex.Message);
+            return StatusCode(500, new { message = "Order/payment archive failed" });
+        }
+    }
+
+    /// <summary>Job 3a: Delete order history older than 1, 2, or 3 years.</summary>
+    [HttpPost("admin/cleanup/order-history")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminCleanupOrderHistory([FromQuery] int olderThanYears = 2)
+    {
+        var parametersJson = $"{{\"olderThanYears\":{olderThanYears},\"scope\":\"order\"}}";
+        try
+        {
+            var client = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync($"/api/AdminArchive/cleanup/order-history?olderThanYears={olderThanYears}", null);
+            var content = await response.Content.ReadAsStringAsync();
+            await RecordCleanupAuditAsync(3, parametersJson, content, response.IsSuccessStatusCode, response.IsSuccessStatusCode ? null : content);
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Order history cleanup failed");
+            await RecordCleanupAuditAsync(3, parametersJson, null, false, ex.Message);
+            return StatusCode(500, new { message = "Order history cleanup failed" });
+        }
+    }
+
+    /// <summary>Job 3b: Delete payment history older than 1, 2, or 3 years.</summary>
+    [HttpPost("admin/cleanup/payment-history")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AdminCleanupPaymentHistory([FromQuery] int olderThanYears = 2)
+    {
+        var parametersJson = $"{{\"olderThanYears\":{olderThanYears},\"scope\":\"payment\"}}";
+        try
+        {
+            var client = _httpClientFactory.CreateClient("PaymentService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync($"/api/AdminArchive/cleanup/payment-history?olderThanYears={olderThanYears}", null);
+            var content = await response.Content.ReadAsStringAsync();
+            await RecordCleanupAuditAsync(3, parametersJson, content, response.IsSuccessStatusCode, response.IsSuccessStatusCode ? null : content);
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Payment history cleanup failed");
+            await RecordCleanupAuditAsync(3, parametersJson, null, false, ex.Message);
+            return StatusCode(500, new { message = "Payment history cleanup failed" });
         }
     }
 
