@@ -61,20 +61,24 @@ If this fails, fix the error before archiving.
 
 ---
 
-## 5. Clean rebuild
+## 5. Clean rebuild (required if archive still uses local API)
+
+Xcode can cache the JS bundle. Do a full clean before archiving:
 
 ```bash
 cd src/apps/TraditionalEats.MobileApp
 
-# Clean
+# 1. Ensure production env in .xcode.env.local (first line)
+#    Must have: export EXPO_PUBLIC_ENV=production
+
+# 2. Clean everything
 rm -rf ios/build
 rm -rf ~/Library/Developer/Xcode/DerivedData/Kram-*
-cd ios && pod install && cd ..
 
-# Ensure production env
-echo 'export EXPO_PUBLIC_ENV=production' >> ios/.xcode.env.local
+# 3. Verify bundle uses production (run this, check output for www.kram.tech)
+EXPO_PUBLIC_ENV=production npx expo export --platform ios 2>&1 | head -5
 
-# Rebuild in Xcode: Product → Clean Build Folder, then Product → Archive
+# 4. In Xcode: Product → Clean Build Folder (⇧⌘K), then Product → Archive
 ```
 
 ---
