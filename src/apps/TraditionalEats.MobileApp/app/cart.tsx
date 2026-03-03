@@ -47,6 +47,11 @@ export default function CartScreen() {
   const [paymentReady, setPaymentReady] = useState(true); // Default to true, check when cart loads
   const [checkingPayment, setCheckingPayment] = useState(false);
 
+  // Service fee from config (rate, minimum, cap) - fetched from MobileBff
+  const [serviceFeeRate, setServiceFeeRate] = useState(0.06);
+  const [serviceFeeMinimum, setServiceFeeMinimum] = useState(1);
+  const [serviceFeeCap, setServiceFeeCap] = useState(7);
+
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
 
@@ -193,9 +198,25 @@ export default function CartScreen() {
     }
   };
 
+  const loadServiceFeeConfig = async () => {
+    try {
+      const res = await api.get<{ rate: number; minimum: number; cap: number }>(
+        "/MobileBff/config/service-fee",
+      );
+      if (res.data) {
+        setServiceFeeRate(res.data.rate);
+        setServiceFeeMinimum(res.data.minimum ?? 1);
+        setServiceFeeCap(res.data.cap);
+      }
+    } catch {
+      // Use defaults if config fetch fails
+    }
+  };
+
   const loadCart = async () => {
     try {
       setLoading(true);
+      await loadServiceFeeConfig();
       const cartData = await cartService.getCart();
 
       // Ensure items array exists
@@ -547,7 +568,11 @@ export default function CartScreen() {
         {(() => {
           const amountBeforeServiceFee =
             cart.subtotal + cart.tax + cart.deliveryFee;
-          const serviceFee = Math.min(amountBeforeServiceFee * 0.02, 5);
+          const rawFee = amountBeforeServiceFee * serviceFeeRate;
+          const serviceFee = Math.max(
+            serviceFeeMinimum,
+            Math.min(rawFee, serviceFeeCap),
+          );
           const totalWithServiceFee = amountBeforeServiceFee + serviceFee;
           return (
             <View style={styles.summary}>

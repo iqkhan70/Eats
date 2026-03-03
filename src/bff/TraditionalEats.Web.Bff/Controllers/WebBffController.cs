@@ -1627,6 +1627,17 @@ public class WebBffController : ControllerBase
         return Ok(new { status = "healthy", service = "WebBff" });
     }
 
+    /// <summary>Service fee config for cart display. From ServiceFee:Rate, ServiceFee:Minimum, ServiceFee:Cap (env: ServiceFee__*).</summary>
+    [HttpGet("config/service-fee")]
+    [AllowAnonymous]
+    public IActionResult GetServiceFeeConfig()
+    {
+        var rate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.06m);
+        var minimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.00m);
+        var cap = _configuration.GetValue<decimal>("ServiceFee:Cap", 7.00m);
+        return Ok(new { rate, minimum, cap });
+    }
+
     // ----------------------------
     // Vendor restaurants
     // ----------------------------
