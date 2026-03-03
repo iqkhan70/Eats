@@ -543,6 +543,10 @@ services:
         PROJECT_NAME: TraditionalEats.Mobile.Bff
     image: ${REGISTRY:-registry.digitalocean.com/cha-registry}/${REPO_NAME:-kram}:mobile-bff
     platform: linux/amd64
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       PROJECT_NAME: TraditionalEats.Mobile.Bff
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
