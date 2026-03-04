@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -136,13 +136,14 @@ export default function RestaurantsScreen() {
       Keyboard.dismiss();
 
       const nextParams: any = { ...params };
+      delete nextParams.category; // Clear vendor category (from home) when selecting menu category
       if (!categoryId) {
         delete nextParams.menuCategoryId;
       } else {
         nextParams.menuCategoryId = categoryId;
       }
 
-      router.replace({ pathname: "/restaurants", params: nextParams } as any);
+      router.replace({ pathname: "/(tabs)/restaurants", params: nextParams } as any);
     },
     [params, router],
   );
@@ -209,22 +210,6 @@ export default function RestaurantsScreen() {
     [menuCategories],
   );
 
-  useEffect(() => {
-    loadRestaurants();
-    loadMenuCategories();
-    // If user changes filters (location/category), usually it’s nicer to clear the search
-    setSearchText("");
-    setDebouncedSearch("");
-  }, [
-    params.location,
-    params.category,
-    params.menuCategoryId,
-    params.zip,
-    params.latitude,
-    params.longitude,
-    params.radiusMiles,
-  ]);
-
   const loadMenuCategories = useCallback(async () => {
     try {
       const res = await api.get<MenuCategory[]>("/MobileBff/categories", {
@@ -247,17 +232,17 @@ export default function RestaurantsScreen() {
     setSearchText("");
     setDebouncedSearch("");
     Keyboard.dismiss();
-    router.replace("/restaurants"); // ✅ back to ALL restaurants (no params)
+    router.replace("/(tabs)/restaurants");
   };
 
-  const loadRestaurants = async () => {
+  const loadRestaurants = useCallback(async () => {
     try {
       setLoading(true);
       setLoadError(null);
 
       const queryParams: Record<string, string | number> = {};
       if (activeLocation) queryParams.location = activeLocation;
-      if (activeCategory) queryParams.cuisineType = activeCategory;
+      if (activeCategory) queryParams.category = activeCategory;
       if (activeMenuCategoryId) queryParams.menuCategoryId = activeMenuCategoryId;
       if (zipParam) queryParams.zip = zipParam;
       if (centerLat != null && !Number.isNaN(centerLat))
@@ -302,14 +287,42 @@ export default function RestaurantsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    activeLocation,
+    activeCategory,
+    activeMenuCategoryId,
+    zipParam,
+    centerLat,
+    centerLon,
+    radiusMiles,
+  ]);
 
-  // Refresh when tab gains focus (e.g. after vendor adds image and returns)
+  useEffect(() => {
+    loadRestaurants();
+    loadMenuCategories();
+    setSearchText("");
+    setDebouncedSearch("");
+  }, [
+    params.location,
+    params.category,
+    params.menuCategoryId,
+    params.zip,
+    params.latitude,
+    params.longitude,
+    params.radiusMiles,
+    loadRestaurants,
+  ]);
+
+  // Keep ref to latest loadRestaurants to avoid stale closure when returning from catalog
+  const loadRestaurantsRef = useRef(loadRestaurants);
+  loadRestaurantsRef.current = loadRestaurants;
+
+  // Refresh when tab gains focus (e.g. after returning from catalog)
   useFocusEffect(
     useCallback(() => {
-      loadRestaurants();
+      loadRestaurantsRef.current();
       loadMenuCategories();
-    }, []),
+    }, [loadMenuCategories]),
   );
 
   const filteredRestaurants = useMemo(() => {

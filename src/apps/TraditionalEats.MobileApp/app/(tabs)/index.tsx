@@ -74,11 +74,9 @@ export default function HomeScreen() {
     Keyboard.dismiss();
 
     const loc = (location ?? "").trim();
-    const qs: string[] = [];
-    if (category?.trim())
-      qs.push(`category=${encodeURIComponent(category.trim())}`);
-    if (menuCategoryId?.trim())
-      qs.push(`menuCategoryId=${encodeURIComponent(menuCategoryId.trim())}`);
+    const params: Record<string, string | number> = {};
+    if (category?.trim()) params.category = category.trim();
+    if (menuCategoryId?.trim()) params.menuCategoryId = menuCategoryId.trim();
 
     const zipMatch = loc.match(ZIP_REGEX);
     if (zipMatch && loc) {
@@ -89,22 +87,20 @@ export default function HomeScreen() {
           { params: { zip } },
         );
         const miles = Math.round(Math.max(1, Math.min(100, distanceMiles)));
-        qs.push(`latitude=${data.latitude}`);
-        qs.push(`longitude=${data.longitude}`);
-        qs.push(`radiusMiles=${miles}`);
-        qs.push(`zip=${encodeURIComponent(zip)}`);
+        params.latitude = data.latitude;
+        params.longitude = data.longitude;
+        params.radiusMiles = miles;
+        params.zip = zip;
       } catch {
-        qs.push(`location=${encodeURIComponent(loc)}`);
+        params.location = loc;
+        params.radiusMiles = Math.round(Math.max(1, Math.min(100, distanceMiles)));
       }
     } else if (loc) {
-      qs.push(`location=${encodeURIComponent(loc)}`);
-      qs.push(
-        `radiusMiles=${Math.round(Math.max(1, Math.min(100, distanceMiles)))}`,
-      );
+      params.location = loc;
+      params.radiusMiles = Math.round(Math.max(1, Math.min(100, distanceMiles)));
     }
 
-    const query = qs.length ? `?${qs.join("&")}` : "";
-    router.push(`/(tabs)/restaurants${query}`);
+    router.push({ pathname: "/(tabs)/restaurants", params } as any);
   };
 
   const loadSuggestions = useCallback(

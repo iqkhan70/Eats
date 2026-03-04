@@ -26,6 +26,7 @@ public class RestaurantDbContext : DbContext
             entity.HasIndex(e => new { e.Latitude, e.Longitude }); // Bounding-box / distance queries
             entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.VendorType).HasMaxLength(100).HasDefaultValue("Food");
             entity.Property(e => e.CuisineType).HasMaxLength(100);
             entity.Property(e => e.PhoneNumber).HasMaxLength(50);
             entity.Property(e => e.Email).HasMaxLength(255);

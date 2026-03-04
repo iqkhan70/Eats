@@ -10,7 +10,7 @@ public interface IRestaurantService
 {
     Task<Guid> CreateRestaurantAsync(Guid ownerId, CreateRestaurantDto dto);
     Task<RestaurantDto?> GetRestaurantAsync(Guid restaurantId);
-    Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20);
+    Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? vendorType, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20);
     Task<bool> UpdateRestaurantAsync(Guid restaurantId, Guid ownerId, UpdateRestaurantDto dto);
     Task<Guid> AddDeliveryZoneAsync(Guid restaurantId, Guid ownerId, CreateDeliveryZoneDto dto);
     Task<List<DeliveryZoneDto>> GetDeliveryZonesAsync(Guid restaurantId);
@@ -89,6 +89,7 @@ public class RestaurantService : IRestaurantService
             OwnerId = ownerId,
             Name = dto.Name,
             Description = dto.Description,
+            VendorType = dto.VendorType ?? "Food",
             CuisineType = dto.CuisineType,
             ImageUrl = dto.ImageUrl,
             PhoneNumber = dto.PhoneNumber,
@@ -138,7 +139,7 @@ public class RestaurantService : IRestaurantService
         return dto;
     }
 
-    public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20)
+    public async Task<List<RestaurantDto>> GetRestaurantsAsync(string? location, string? vendorType, string? cuisineType, double? latitude, double? longitude, double? radiusMiles = null, string? zip = null, int skip = 0, int take = 20)
     {
         // List endpoint: no Include(DeliveryZones/Hours) — list view doesn't need them; reduces data and query cost
         var query = _context.Restaurants
@@ -149,7 +150,7 @@ public class RestaurantService : IRestaurantService
         if (!latitude.HasValue || !longitude.HasValue)
         {
             if (!string.IsNullOrWhiteSpace(location))
-                query = query.Where(r => r.Address.Contains(location) || r.Name.Contains(location));
+                query = query.Where(r => (r.Address != null && r.Address.Contains(location)) || (r.Name != null && r.Name.Contains(location)));
         }
         else
         {
@@ -166,10 +167,17 @@ public class RestaurantService : IRestaurantService
                 r.Longitude >= lon - deltaLon && r.Longitude <= lon + deltaLon);
         }
 
-        // Filter by cuisine type
+        // Filter by category (vendor type): Food, Education, Home Care, etc.
+        if (!string.IsNullOrWhiteSpace(vendorType))
+        {
+            var vt = vendorType.Trim();
+            query = query.Where(r => r.VendorType != null && string.Equals(r.VendorType.Trim(), vt, StringComparison.OrdinalIgnoreCase));
+        }
+        // Filter by cuisine (within food vendors): Italian, Traditional, etc.
         if (!string.IsNullOrWhiteSpace(cuisineType))
         {
-            query = query.Where(r => r.CuisineType != null && r.CuisineType.Contains(cuisineType));
+            var ct = cuisineType.Trim();
+            query = query.Where(r => r.CuisineType != null && string.Equals(r.CuisineType.Trim(), ct, StringComparison.OrdinalIgnoreCase));
         }
 
         var restaurants = await query.ToListAsync();
@@ -235,6 +243,7 @@ public class RestaurantService : IRestaurantService
 
         if (dto.Name != null) restaurant.Name = dto.Name;
         if (dto.Description != null) restaurant.Description = dto.Description;
+        if (dto.VendorType != null) restaurant.VendorType = dto.VendorType;
         if (dto.CuisineType != null) restaurant.CuisineType = dto.CuisineType;
         if (dto.ImageUrl != null) restaurant.ImageUrl = dto.ImageUrl;
         if (dto.PhoneNumber != null) restaurant.PhoneNumber = dto.PhoneNumber;
@@ -414,14 +423,14 @@ public class RestaurantService : IRestaurantService
 
         // Get unique addresses and restaurant names that match the query
         var addresses = await _context.Restaurants
-            .Where(r => r.IsActive && r.Address.ToLower().Contains(searchTerm))
+            .Where(r => r.IsActive && r.Address != null && r.Address.ToLower().Contains(searchTerm))
             .Select(r => r.Address)
             .Distinct()
             .Take(maxResults)
             .ToListAsync();
 
         var restaurantNames = await _context.Restaurants
-            .Where(r => r.IsActive && r.Name.ToLower().Contains(searchTerm))
+            .Where(r => r.IsActive && r.Name != null && r.Name.ToLower().Contains(searchTerm))
             .Select(r => r.Name)
             .Distinct()
             .Take(maxResults)
@@ -503,6 +512,7 @@ public class RestaurantService : IRestaurantService
 
         if (dto.Name != null) restaurant.Name = dto.Name;
         if (dto.Description != null) restaurant.Description = dto.Description;
+        if (dto.VendorType != null) restaurant.VendorType = dto.VendorType;
         if (dto.CuisineType != null) restaurant.CuisineType = dto.CuisineType;
         if (dto.ImageUrl != null) restaurant.ImageUrl = dto.ImageUrl;
         if (dto.PhoneNumber != null) restaurant.PhoneNumber = dto.PhoneNumber;
@@ -636,6 +646,7 @@ public class RestaurantService : IRestaurantService
             OwnerId = restaurant.OwnerId,
             Name = restaurant.Name,
             Description = restaurant.Description,
+            VendorType = restaurant.VendorType,
             CuisineType = restaurant.CuisineType,
             ImageUrl = restaurant.ImageUrl,
             PhoneNumber = restaurant.PhoneNumber,
@@ -673,6 +684,7 @@ public class RestaurantService : IRestaurantService
 public record CreateRestaurantDto(
     string Name,
     string? Description,
+    string? VendorType,
     string? CuisineType,
     string? ImageUrl,
     string? PhoneNumber,
@@ -684,6 +696,7 @@ public record CreateRestaurantDto(
 public record UpdateRestaurantDto(
     string? Name,
     string? Description,
+    string? VendorType,
     string? CuisineType,
     string? ImageUrl,
     string? PhoneNumber,
@@ -699,6 +712,7 @@ public record RestaurantDto
     public Guid OwnerId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string VendorType { get; set; } = "Food";
     public string? CuisineType { get; set; }
     public string? ImageUrl { get; set; }
     public string? PhoneNumber { get; set; }

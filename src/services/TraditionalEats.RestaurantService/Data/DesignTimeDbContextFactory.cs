@@ -22,7 +22,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<Restaurant
         var optionsBuilder = new DbContextOptionsBuilder<RestaurantDbContext>();
         optionsBuilder.UseMySql(
             connectionString,
-            new MySqlServerVersion(new Version(8, 0, 0)));
+            new MySqlServerVersion(new Version(8, 0, 0)),
+            mySqlOptions => mySqlOptions.EnableStringComparisonTranslations());
 
         return new RestaurantDbContext(optionsBuilder.Options);
     }

@@ -67,6 +67,7 @@ public class RestaurantController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetRestaurants(
         [FromQuery] string? location,
+        [FromQuery] string? vendorType,
         [FromQuery] string? cuisineType,
         [FromQuery] double? latitude,
         [FromQuery] double? longitude,
@@ -77,7 +78,7 @@ public class RestaurantController : ControllerBase
     {
         try
         {
-            var restaurants = await _restaurantService.GetRestaurantsAsync(location, cuisineType, latitude, longitude, radiusMiles, zip, skip, take);
+            var restaurants = await _restaurantService.GetRestaurantsAsync(location, vendorType, cuisineType, latitude, longitude, radiusMiles, zip, skip, take);
             return Ok(restaurants);
         }
         catch (Exception ex)

@@ -220,6 +220,7 @@ public class MobileBffController : ControllerBase
     [HttpGet("restaurants")]
     public async Task<IActionResult> GetRestaurants(
         [FromQuery] string? location,
+        [FromQuery] string? category,
         [FromQuery] string? cuisineType,
         [FromQuery] Guid? menuCategoryId,
         [FromQuery] double? latitude,
@@ -235,6 +236,7 @@ public class MobileBffController : ControllerBase
 
             var queryParams = new List<string>();
             if (!string.IsNullOrEmpty(location)) queryParams.Add($"location={Uri.EscapeDataString(location)}");
+            if (!string.IsNullOrEmpty(category)) queryParams.Add($"vendorType={Uri.EscapeDataString(category)}");
             if (!string.IsNullOrEmpty(cuisineType)) queryParams.Add($"cuisineType={Uri.EscapeDataString(cuisineType)}");
             if (latitude.HasValue) queryParams.Add($"latitude={latitude.Value}");
             if (longitude.HasValue) queryParams.Add($"longitude={longitude.Value}");

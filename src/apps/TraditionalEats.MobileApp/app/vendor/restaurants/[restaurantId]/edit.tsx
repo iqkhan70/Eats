@@ -21,10 +21,13 @@ import { authService } from "../../../../services/auth";
 import AppHeader from "../../../../components/AppHeader";
 import { APP_CONFIG } from "../../../../config/api.config";
 
+const VENDOR_CATEGORIES = ["Food", "Education", "Home Care", "Builds and Repairs", "Events", "Other"];
+
 interface Restaurant {
   restaurantId: string;
   name: string;
   description?: string;
+  vendorType?: string;
   cuisineType?: string;
   address?: string;
   phoneNumber?: string;
@@ -44,6 +47,7 @@ export default function EditRestaurantScreen() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    vendorType: "Food",
     cuisineType: "",
     address: "",
     phoneNumber: "",
@@ -141,6 +145,7 @@ export default function EditRestaurantScreen() {
         setFormData({
           name: found.name || "",
           description: found.description || "",
+          vendorType: found.vendorType || "Food",
           cuisineType: found.cuisineType || "",
           address: found.address || "",
           phoneNumber: found.phoneNumber || "",
@@ -234,14 +239,39 @@ export default function EditRestaurantScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Type of Service</Text>
+            <Text style={styles.label}>Category</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+              {VENDOR_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.categoryChip,
+                    formData.vendorType === cat && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setFormData({ ...formData, vendorType: cat })}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      formData.vendorType === cat && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Cuisine</Text>
             <TextInput
               style={styles.input}
               value={formData.cuisineType}
               onChangeText={(text) =>
                 setFormData({ ...formData, cuisineType: text })
               }
-              placeholder="e.g., Italian, Mexican, Chinese"
+              placeholder="e.g., Italian, Traditional, Asian (for Food vendors)"
             />
           </View>
 
@@ -437,6 +467,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   removeImageButton: { padding: 4 },
+  categoryRow: { flexDirection: "row", gap: 8, paddingVertical: 4 },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: "#e9e9e9",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  categoryChipActive: {
+    backgroundColor: "#f97316",
+    borderColor: "#f97316",
+  },
+  categoryChipText: { fontSize: 14, color: "#555" },
+  categoryChipTextActive: { color: "#fff", fontWeight: "600" },
   uploadButton: {
     flexDirection: "row",
     alignItems: "center",

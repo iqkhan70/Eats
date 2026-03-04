@@ -6,6 +6,9 @@ public class Restaurant
     public Guid OwnerId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    /// <summary>Category from "What are you looking for" (Food, Education, Home Care, etc.).</summary>
+    public string VendorType { get; set; } = "Food";
+    /// <summary>Cuisine within food vendors (e.g. Italian, Traditional, Asian).</summary>
     public string? CuisineType { get; set; }
     public string? ImageUrl { get; set; }
     public string? PhoneNumber { get; set; }

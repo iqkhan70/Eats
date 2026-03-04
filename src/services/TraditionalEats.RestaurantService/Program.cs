@@ -21,7 +21,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<RestaurantDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("RestaurantDb"),
-        new MySqlServerVersion(new Version(8, 0, 0))));
+        new MySqlServerVersion(new Version(8, 0, 0)),
+        mySqlOptions => mySqlOptions.EnableStringComparisonTranslations()));
 
 // Redis
 builder.Services.AddRedis(builder.Configuration);
