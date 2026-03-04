@@ -62,7 +62,8 @@ export default function EditRestaurantScreen() {
 
   const pickAndUploadImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Photo Access Needed",
@@ -70,7 +71,7 @@ export default function EditRestaurantScreen() {
           [
             { text: "Open Settings", onPress: () => Linking.openSettings() },
             { text: "Cancel", style: "cancel" },
-          ]
+          ],
         );
         return;
       }
@@ -91,7 +92,10 @@ export default function EditRestaurantScreen() {
       const rawName = uri.split("/").pop() || "";
       const hasImageExt = /\.(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(rawName);
       const fileName = hasImageExt ? rawName : "image.jpg";
-      const mimeType = asset.mimeType && /^image\//i.test(asset.mimeType) ? asset.mimeType : "image/jpeg";
+      const mimeType =
+        asset.mimeType && /^image\//i.test(asset.mimeType)
+          ? asset.mimeType
+          : "image/jpeg";
       const fd = new FormData();
       fd.append("file", {
         uri,
@@ -101,14 +105,17 @@ export default function EditRestaurantScreen() {
       if (formData.imageUrl) fd.append("replacePath", formData.imageUrl);
       const res = await api.post<{ imageUrl: string }>(
         "/MobileBff/documents/upload-restaurant-image",
-        fd
+        fd,
       );
       const url = res.data?.imageUrl;
       if (url) setFormData((p) => ({ ...p, imageUrl: url }));
       else Alert.alert("Upload Failed", "Could not upload image");
     } catch (error: any) {
       console.error("Restaurant image upload error:", error);
-      Alert.alert("Upload Failed", error.response?.data?.message || "Failed to upload");
+      Alert.alert(
+        "Upload Failed",
+        error.response?.data?.message || "Failed to upload",
+      );
     } finally {
       setUploadingImage(false);
     }
@@ -227,7 +234,7 @@ export default function EditRestaurantScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Cuisine Type</Text>
+            <Text style={styles.label}>Type of Service</Text>
             <TextInput
               style={styles.input}
               value={formData.cuisineType}
@@ -280,7 +287,9 @@ export default function EditRestaurantScreen() {
             {formData.imageUrl ? (
               <View style={styles.imagePreviewRow}>
                 <Image
-                  source={{ uri: getRestaurantImageDisplayUrl(formData.imageUrl) }}
+                  source={{
+                    uri: getRestaurantImageDisplayUrl(formData.imageUrl),
+                  }}
                   style={styles.imagePreview}
                 />
                 <TouchableOpacity
