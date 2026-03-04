@@ -87,7 +87,7 @@
                 <RadzenDataGridColumn TItem="RestaurantDto" Title="Actions" Sortable="false" Filterable="false"
                     Width="150px">
                     <Template Context="restaurant">
-                        <RadzenButton Text="View Menu" Icon="menu" Click="@(() => ViewMenu(restaurant.RestaurantId))"
+                        <RadzenButton Text="View Catalog" Icon="list" Click="@(() => ViewCatalog(restaurant.RestaurantId))"
                             Variant="Variant.Flat" Size="ButtonSize.Small" />
                     </Template>
                 </RadzenDataGridColumn>
@@ -285,9 +285,9 @@
         NavigationManager.NavigateTo("/restaurants" + (string.IsNullOrEmpty(qs) ? "" : "?" + qs));
     }
 
-    private void ViewMenu(Guid restaurantId)
+    private void ViewCatalog(Guid restaurantId)
     {
-        NavigationManager.NavigateTo($"/restaurants/{restaurantId}/menu");
+        NavigationManager.NavigateTo($"/restaurants/{restaurantId}/catalog");
     }
 
     private string GetMenuImageDisplayUrl(string? imageUrl)

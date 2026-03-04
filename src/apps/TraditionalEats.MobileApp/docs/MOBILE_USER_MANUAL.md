@@ -73,20 +73,20 @@ You can browse and add items to the cart without signing in. You must **sign in*
 - **Welcome** section at the top.
 - **Distance slider** – “Within X miles.” Adjust the slider (1–100 miles) to control how far from your location vendors are shown.  
   Location is used only if you allow it; otherwise use search or categories.
-- **Popular categories** – Tap a category (e.g. Traditional, Fast Food, Desserts, Vegetarian) to open the **Vendors** tab filtered by that category.
-- **Nearby vendors** – If location is allowed, a list of vendors within the selected distance is shown. Tap a vendor to open its **menu**. Tap **View All** to see the full list on the Vendors tab with the same distance filter.
-- **Search bar (bottom)** – Type a **ZIP code**, **address**, or **vendor/cuisine name**, then search. Results open on the Vendors tab (or you may go straight to a vendor/menu depending on the result).
+- **What are you looking for?** – Tap a category (e.g. Food, Education, Home Care) to open the **Vendors** tab filtered by that category.
+- **Nearby vendors** – If location is allowed, a list of vendors within the selected distance is shown. Tap a vendor to open its **catalog**. Tap **View All** to see the full list on the Vendors tab with the same distance filter.
+- **Search bar (bottom)** – Type a **ZIP code**, **address**, or **vendor name**, then search. Results open on the Vendors tab (or you may go straight to a vendor/catalog depending on the result).
 
 ### 2.2 Vendors tab
 
 - **Search** – Use the bottom search bar to search by vendor name, cuisine, or location (e.g. ZIP or address). Suggestions may appear as you type.
 - **Filters** – If you came from Home with a category or location, the active filters appear at the top (e.g. “Category: Italian”, “Within 25 mi”). Tap **Clear** to remove filters and see all vendors.
-- **List** – Each card shows vendor name, cuisine type, address, distance (if location is set), and rating/review count. Tap a card to open that vendor’s **menu**.
+- **List** – Each card shows vendor name, cuisine type, address, distance (if location is set), and rating/review count. Tap a card to open that vendor’s **catalog**.
 
-### 2.3 Vendor menu
+### 2.3 Vendor catalog
 
-- **Tabs** – **Menu** and **Reviews**.
-- **Menu tab**
+- **Tabs** – **Catalog** and **Reviews**.
+- **Catalog tab**
   - Categories (if any) to filter items.
   - Each item shows name, description, price, and dietary tags.  
   - **Add to cart** (+ button) to add one. Use **−** / **+** to change quantity, then add.  
@@ -95,7 +95,7 @@ You can browse and add items to the cart without signing in. You must **sign in*
   - Average rating and number of reviews.
   - List of reviews. If you have a delivered/completed order from this vendor and haven’t reviewed yet, you can **Write a review** (rating + optional text).
 
-From the menu screen you can go to **Cart** (tab or button) or back to Vendors/Home.
+From the catalog screen you can go to **Cart** (tab or button) or back to Vendors/Home.
 
 ---
 

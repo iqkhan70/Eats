@@ -196,7 +196,7 @@ export default function VendorDashboardScreen() {
   };
 
   const handleManageMenu = (restaurantId: string) => {
-    router.push(`/vendor/restaurants/${restaurantId}/menu`);
+    router.push(`/vendor/restaurants/${restaurantId}/catalog`);
   };
 
   const handleDeleteRestaurant = (restaurant: Restaurant) => {
@@ -376,7 +376,7 @@ export default function VendorDashboardScreen() {
                       size={18}
                       color="#fff"
                     />
-                    <Text style={styles.menuButtonText}>Menu</Text>
+                    <Text style={styles.menuButtonText}>Catalog</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity

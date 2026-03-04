@@ -56,7 +56,6 @@ export default function HomeScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const [showAllCategories, setShowAllCategories] = useState(false);
   const [distanceMiles, setDistanceMiles] = useState(25);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [nearbyRestaurants, setNearbyRestaurants] = useState<Restaurant[]>([]);
@@ -66,8 +65,6 @@ export default function HomeScreen() {
   const [fullSizeImageRestaurant, setFullSizeImageRestaurant] =
     useState<Restaurant | null>(null);
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
-
-  const initialCategoryCount = 6;
 
   const navigateToRestaurants = async (
     location?: string,
@@ -266,7 +263,7 @@ export default function HomeScreen() {
   const navigateToRestaurantDetails = (restaurant?: Restaurant) => {
     if (restaurant) {
       // Navigate to the specific restaurant's menu page
-      router.push(`/restaurants/${restaurant.restaurantId}/menu`);
+      router.push(`/restaurants/${restaurant.restaurantId}/catalog`);
     } else {
       // "View All" button - navigate to restaurants list with filters
       if (userLocation) {
@@ -277,22 +274,16 @@ export default function HomeScreen() {
     }
   };
 
-  const categories = [
-    { id: 1, name: "Traditional", icon: "restaurant" },
-    { id: 2, name: "Fast Food", icon: "fast-food" },
-    { id: 3, name: "Desserts", icon: "ice-cream" },
-    { id: 4, name: "Beverages", icon: "cafe" },
-    { id: 5, name: "Vegetarian", icon: "leaf" },
-    { id: 6, name: "Vegan", icon: "flower" },
-    { id: 7, name: "Seafood", icon: "fish" },
-    { id: 8, name: "BBQ", icon: "flame" },
-    { id: 9, name: "Italian", icon: "pizza" },
-    { id: 10, name: "Asian", icon: "restaurant" },
+  const vendorTypeCategories = [
+    { id: 1, name: "Food", icon: "restaurant" },
+    { id: 2, name: "Education", icon: "school" },
+    { id: 3, name: "Home Care", icon: "home" },
+    { id: 4, name: "Builds and Repairs", icon: "construct" },
+    { id: 5, name: "Events", icon: "calendar" },
+    { id: 6, name: "Other", icon: "ellipsis-horizontal" },
   ];
 
-  const displayedCategories = showAllCategories
-    ? categories
-    : categories.slice(0, initialCategoryCount);
+  const displayedCategories = vendorTypeCategories;
 
   return (
     <KeyboardAvoidingView
@@ -330,15 +321,15 @@ export default function HomeScreen() {
             step={1}
             value={distanceMiles}
             onValueChange={setDistanceMiles}
-            minimumTrackTintColor="#6200ee"
+            minimumTrackTintColor="#f97316"
             maximumTrackTintColor="#e0e0e0"
-            thumbTintColor="#6200ee"
+            thumbTintColor="#f97316"
           />
         </BlurView>
 
         {/* Content */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Popular Categories</Text>
+          <Text style={styles.sectionTitle}>What are you looking for?</Text>
 
           <View style={styles.categoryGrid}>
             {displayedCategories.map((category) => (
@@ -352,7 +343,7 @@ export default function HomeScreen() {
                   <Ionicons
                     name={category.icon as any}
                     size={36}
-                    color="#6200ee"
+                    color="#f97316"
                   />
                   <Text style={styles.categoryName}>{category.name}</Text>
                 </BlurView>
@@ -360,23 +351,6 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {categories.length > initialCategoryCount && (
-            <TouchableOpacity
-              style={styles.showMoreButton}
-              onPress={() => setShowAllCategories(!showAllCategories)}
-            >
-              <Text style={styles.showMoreText}>
-                {showAllCategories
-                  ? "Show Less"
-                  : `Show All (${categories.length})`}
-              </Text>
-              <Ionicons
-                name={showAllCategories ? "chevron-up" : "chevron-down"}
-                size={20}
-                color="#6200ee"
-              />
-            </TouchableOpacity>
-          )}
         </View>
 
         <View style={styles.section}>
@@ -388,7 +362,7 @@ export default function HomeScreen() {
                 style={styles.viewAllButton}
               >
                 <Text style={styles.viewAllText}>View All</Text>
-                <Ionicons name="chevron-forward" size={16} color="#6200ee" />
+                <Ionicons name="chevron-forward" size={16} color="#f97316" />
               </TouchableOpacity>
             )}
           </View>
@@ -404,7 +378,7 @@ export default function HomeScreen() {
 
           {!locationPermissionDenied && !userLocation && (
             <View style={styles.locationPrompt}>
-              <ActivityIndicator size="small" color="#6200ee" />
+              <ActivityIndicator size="small" color="#f97316" />
               <Text style={styles.locationPromptText}>
                 Getting your location...
               </Text>
@@ -413,7 +387,7 @@ export default function HomeScreen() {
 
           {loadingRestaurants && userLocation && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#6200ee" />
+              <ActivityIndicator size="small" color="#f97316" />
               <Text style={styles.loadingText}>Loading vendors...</Text>
             </View>
           )}
@@ -444,7 +418,7 @@ export default function HomeScreen() {
                     activeOpacity={0.9}
                     style={styles.restaurantImagePlaceholder}
                   >
-                    <Ionicons name="restaurant" size={24} color="#6200ee" style={{ position: "absolute" }} />
+                    <Ionicons name="restaurant" size={24} color="#f97316" style={{ position: "absolute" }} />
                     {restaurant.imageUrl && !failedImageUrls.has(restaurant.imageUrl) && (
                       <Image
                         source={{ uri: getRestaurantImageUrl(restaurant.imageUrl) }}
@@ -586,7 +560,7 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6200ee",
+    color: "#f97316",
     marginRight: 4,
   },
 
@@ -663,7 +637,7 @@ const styles = StyleSheet.create({
   restaurantAddress: { fontSize: 14, color: "#666", marginBottom: 4 },
   cuisineType: {
     fontSize: 12,
-    color: "#6200ee",
+    color: "#f97316",
     fontWeight: "500",
     marginBottom: 4,
   },
@@ -729,7 +703,7 @@ const styles = StyleSheet.create({
   showMoreText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6200ee",
+    color: "#f97316",
     marginRight: 4,
   },
 

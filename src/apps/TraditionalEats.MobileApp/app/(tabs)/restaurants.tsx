@@ -327,7 +327,7 @@ export default function RestaurantsScreen() {
   const renderRestaurant = ({ item }: { item: Restaurant }) => (
     <TouchableOpacity
       style={styles.restaurantCard}
-      onPress={() => router.push(`/restaurants/${item.restaurantId}/menu`)}
+      onPress={() => router.push(`/restaurants/${item.restaurantId}/catalog`)}
       activeOpacity={0.85}
     >
       <TouchableOpacity
@@ -335,7 +335,7 @@ export default function RestaurantsScreen() {
         activeOpacity={0.9}
         style={styles.restaurantImagePlaceholder}
       >
-        <Ionicons name="restaurant" size={40} color="#6200ee" style={{ position: "absolute" }} />
+        <Ionicons name="restaurant" size={40} color="#f97316" style={{ position: "absolute" }} />
         {item.imageUrl && !failedImageUrls.has(item.imageUrl) && (
           <Image
             source={{ uri: getRestaurantImageUrl(item.imageUrl) }}
@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
   cuisineType: { fontSize: 14, color: "#666", marginBottom: 4 },
 
   address: { fontSize: 12, color: "#999", marginBottom: 4 },
-  distanceText: { fontSize: 12, color: "#6200ee", marginBottom: 8 },
+  distanceText: { fontSize: 12, color: "#f97316", marginBottom: 8 },
 
   ratingContainer: { flexDirection: "row", alignItems: "center" },
 

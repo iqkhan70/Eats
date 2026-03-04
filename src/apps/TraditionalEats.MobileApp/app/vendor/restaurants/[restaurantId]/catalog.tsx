@@ -25,10 +25,9 @@ interface MenuItem {
   isAvailable: boolean;
 }
 
-export default function ManageMenuScreen() {
+export default function ManageCatalogScreen() {
   const router = useRouter();
 
-  // ✅ include refreshedAt so returning from new/edit triggers reload
   const params = useLocalSearchParams<{
     restaurantId?: string;
     refreshedAt?: string;
@@ -58,7 +57,6 @@ export default function ManageMenuScreen() {
     if (!restaurantId) return;
 
     try {
-      // show loader on automatic refresh; keep pull-to-refresh smooth
       if (!refreshing) setLoading(true);
 
       const response = await api.get<any[]>(
@@ -83,7 +81,6 @@ export default function ManageMenuScreen() {
 
       setMenuItems(mapped);
 
-      // restaurant name lookup (optional)
       try {
         const restaurantsResponse = await api.get<any[]>(
           '/MobileBff/vendor/my-restaurants',
@@ -100,11 +97,11 @@ export default function ManageMenuScreen() {
         // ignore
       }
     } catch (error: any) {
-      console.error('Error loading menu items:', error);
+      console.error('Error loading catalog items:', error);
       if (error.response?.status === 404) {
         setMenuItems([]);
       } else {
-        Alert.alert('Error', 'Failed to load menu items');
+        Alert.alert('Error', 'Failed to load catalog items');
       }
     } finally {
       setLoading(false);
@@ -112,11 +109,8 @@ export default function ManageMenuScreen() {
     }
   }, [restaurantId, refreshing]);
 
-  // ✅ ONE effect: initial load + refresh when refreshedAt changes
   useEffect(() => {
     if (!restaurantId) return;
-
-    // when coming back from new/edit, refreshedAt changes and triggers this
     loadMenuItems();
   }, [restaurantId, refreshedAt, loadMenuItems]);
 
@@ -138,17 +132,16 @@ export default function ManageMenuScreen() {
 
       Alert.alert(
         'Success',
-        `Menu item ${!item.isAvailable ? 'enabled' : 'disabled'} successfully`
+        `Catalog item ${!item.isAvailable ? 'enabled' : 'disabled'} successfully`
       );
 
       await loadMenuItems();
     } catch (error: any) {
       console.error('Error toggling availability:', error);
-      Alert.alert('Error', 'Failed to update menu item availability');
+      Alert.alert('Error', 'Failed to update catalog item availability');
     }
   };
 
-  // ✅ correct routes (no string interpolation errors)
   const handleEditItem = (item: MenuItem) => {
     router.push({
       pathname: '/vendor/restaurants/[restaurantId]/menu-items/[menuItemId]/edit',
@@ -166,8 +159,8 @@ export default function ManageMenuScreen() {
   if (loading && menuItems.length === 0) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6200ee" />
-        <Text style={styles.loadingText}>Loading menu items...</Text>
+        <ActivityIndicator size="large" color="#f97316" />
+        <Text style={styles.loadingText}>Loading catalog items...</Text>
       </View>
     );
   }
@@ -188,10 +181,9 @@ export default function ManageMenuScreen() {
         </TouchableOpacity>
 
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {restaurantName || 'Menu Items'}
+          {restaurantName || 'Catalog Items'}
         </Text>
 
-        {/* ✅ TOP + BUTTON */}
         <TouchableOpacity onPress={handleAddItem} style={styles.addButton}>
           <Ionicons name="add" size={24} color="#fff" />
         </TouchableOpacity>
@@ -199,11 +191,11 @@ export default function ManageMenuScreen() {
 
       {menuItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="restaurant-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No menu items yet</Text>
-          <Text style={styles.emptySubtext}>Add your first menu item to get started</Text>
+          <Ionicons name="list" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No catalog items yet</Text>
+          <Text style={styles.emptySubtext}>Add your first catalog item to get started</Text>
           <TouchableOpacity style={styles.addButtonLarge} onPress={handleAddItem}>
-            <Text style={styles.addButtonText}>Add Menu Item</Text>
+            <Text style={styles.addButtonText}>Add Catalog Item</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -243,7 +235,6 @@ export default function ManageMenuScreen() {
                 ) : null}
 
                 <View style={styles.actionButtons}>
-                  {/* ✅ DISABLE / ENABLE */}
                   <TouchableOpacity
                     style={[styles.actionButton, styles.toggleButton]}
                     onPress={() => handleToggleAvailability(item)}
@@ -263,12 +254,11 @@ export default function ManageMenuScreen() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* ✅ EDIT */}
                   <TouchableOpacity
                     style={[styles.actionButton, styles.editButton]}
                     onPress={() => handleEditItem(item)}
                   >
-                    <Ionicons name="create-outline" size={18} color="#6200ee" />
+                    <Ionicons name="create-outline" size={18} color="#f97316" />
                     <Text style={styles.editButtonText}>Edit</Text>
                   </TouchableOpacity>
                 </View>
@@ -278,7 +268,6 @@ export default function ManageMenuScreen() {
         </View>
       )}
 
-      {/* ✅ FAB + BUTTON */}
       <TouchableOpacity style={styles.fab} onPress={handleAddItem}>
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
@@ -327,7 +316,7 @@ const styles = StyleSheet.create({
   menuItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   menuItemInfo: { flex: 1 },
   menuItemName: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  menuItemPrice: { fontSize: 16, fontWeight: '600', color: '#6200ee' },
+  menuItemPrice: { fontSize: 16, fontWeight: '600', color: '#f97316' },
 
   availabilityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   availableBadge: { backgroundColor: '#e8f5e9' },
@@ -343,8 +332,8 @@ const styles = StyleSheet.create({
   toggleButton: { backgroundColor: '#f5f5f5', borderWidth: 1, borderColor: '#e0e0e0' },
   toggleButtonText: { fontSize: 14, fontWeight: '600' },
 
-  editButton: { backgroundColor: '#f3e5f5', borderWidth: 1, borderColor: '#6200ee' },
-  editButtonText: { color: '#6200ee', fontSize: 14, fontWeight: '600' },
+  editButton: { backgroundColor: '#fff3e0', borderWidth: 1, borderColor: '#f97316' },
+  editButtonText: { color: '#f97316', fontSize: 14, fontWeight: '600' },
 
   fab: {
     position: 'absolute',

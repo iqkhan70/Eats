@@ -156,7 +156,7 @@
                                 <Template Context="r">
                                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.35rem" JustifyContent="JustifyContent.Center">
                                         <RadzenButton Icon="restaurant_menu" Size="ButtonSize.Small" Variant="Variant.Outlined"
-                                                      Click="@(() => ManageMenuItems(r.RestaurantId))" Title="Manage Menu Items" />
+                                                      Click="@(() => ManageMenuItems(r.RestaurantId))" Title="Manage Catalog" />
                                         <RadzenButton Icon="edit" Size="ButtonSize.Small" Variant="Variant.Flat"
                                                       Click="@(() => EditRestaurant(r))" Title="Edit Vendor" />
                                         <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Danger"
@@ -198,7 +198,7 @@
                                     </RadzenStack>
                                 </RadzenStack>
 
-                                <RadzenButton Text="Manage Menu Items" Icon="restaurant_menu"
+                                <RadzenButton Text="Manage Catalog" Icon="list"
                                               Variant="Variant.Outlined" Size="ButtonSize.Small"
                                               Click="@(() => ManageMenuItems(restaurant.RestaurantId))"
                                               Style="width: 100%;" />
@@ -295,17 +295,17 @@
         <RadzenCard Style="max-width: 1100px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1001;">
             <RadzenStack Gap="1rem">
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
-                    <RadzenText TextStyle="TextStyle.H3">Manage Menu Items - @GetRestaurantName(currentRestaurantId)</RadzenText>
+                    <RadzenText TextStyle="TextStyle.H3">Manage Catalog - @GetRestaurantName(currentRestaurantId)</RadzenText>
                     <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseMenuItemsModal" />
                 </RadzenStack>
 
-                <RadzenButton Text="+ Add Menu Item" Icon="add" Click="ShowCreateMenuItemForm" Variant="Variant.Filled" Size="ButtonSize.Small" />
+                <RadzenButton Text="+ Add Catalog Item" Icon="add" Click="ShowCreateMenuItemForm" Variant="Variant.Filled" Size="ButtonSize.Small" />
 
                 @if (menuItemsLoading)
                 {
                     <RadzenStack JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center" Style="padding: 2rem;">
                         <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
-                        <RadzenText>Loading menu items...</RadzenText>
+                        <RadzenText>Loading catalog items...</RadzenText>
                     </RadzenStack>
                 }
                 else if (menuItems == null || !menuItems.Any())
@@ -361,7 +361,7 @@
         <RadzenCard Style="max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; z-index: 1003;">
             <RadzenStack Gap="1rem">
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
-                    <RadzenText TextStyle="TextStyle.H3">@(editingMenuItem != null ? "Edit Menu Item" : "Create Menu Item")</RadzenText>
+                    <RadzenText TextStyle="TextStyle.H3">@(editingMenuItem != null ? "Edit Catalog Item" : "Create Catalog Item")</RadzenText>
                     <RadzenButton Icon="close" Size="ButtonSize.Small" Variant="Variant.Flat" Click="CloseMenuItemForm" />
                 </RadzenStack>
 
@@ -948,7 +948,7 @@
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                menuItemErrorMessage = $"Failed to save menu item: {response.StatusCode}";
+                menuItemErrorMessage = $"Failed to save catalog item: {response.StatusCode}";
                 Logger.LogError("SaveMenuItem failed: {Status} {Body}", response.StatusCode, errorContent);
 
                 NotificationService.Notify(new NotificationMessage

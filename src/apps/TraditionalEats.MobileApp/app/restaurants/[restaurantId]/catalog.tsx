@@ -1,0 +1,635 @@
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Modal } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '../../../services/api';
+import { cartService } from '../../../services/cart';
+import ReviewDisplay, { Review } from '../../../components/ReviewDisplay';
+import ReviewRating from '../../../components/ReviewRating';
+import { authService } from '../../../services/auth';
+import AppHeader from '../../../components/AppHeader';
+import { APP_CONFIG } from '../../../config/api.config';
+
+interface MenuItem {
+  menuItemId: string;
+  restaurantId: string;
+  categoryId: string;
+  categoryName?: string;
+  name: string;
+  description?: string;
+  price: number;
+  imageUrl?: string;
+  isAvailable: boolean;
+  dietaryTags: string[];
+}
+
+interface Category {
+  categoryId: string;
+  name: string;
+  description?: string;
+}
+
+export default function CatalogScreen() {
+  const router = useRouter();
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{
+    restaurantId?: string;
+    refreshedAt?: string;
+    categoryId?: string;
+  }>();
+
+  const restaurantId = params.restaurantId as string;
+  const refreshedAt = params.refreshedAt;
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
+
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentCartId, setCurrentCartId] = useState<string | null>(null);
+  const [addingItemId, setAddingItemId] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [restaurantRating, setRestaurantRating] = useState<{
+    averageRating: number;
+    totalReviews: number;
+  } | null>(null);
+  const [activeTab, setActiveTab] = useState<'catalog' | 'reviews'>('catalog');
+  const [userCanReview, setUserCanReview] = useState(false);
+  const [fullSizeImageItem, setFullSizeImageItem] = useState<MenuItem | null>(null);
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
+
+  const isAddingToCartRef = useRef(false);
+
+  const getMenuImageDisplayUrl = (imageUrl?: string) => {
+    if (!imageUrl) return '';
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))
+      return imageUrl;
+    const base = APP_CONFIG.API_BASE_URL.replace(/\/$/, '');
+    return `${base}/MobileBff/menu-image?path=${encodeURIComponent(imageUrl)}`;
+  };
+
+  const loadMenu = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const queryParams: any = {};
+      if (selectedCategoryId) queryParams.categoryId = selectedCategoryId;
+
+      queryParams.__ts = Date.now();
+
+      const response = await api.get<MenuItem[]>(
+        `/MobileBff/restaurants/${restaurantId}/menu`,
+        {
+          params: queryParams,
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        }
+      );
+
+      const mappedItems = (response.data || []).map((item: any) => ({
+        menuItemId: item.menuItemId || item.id,
+        restaurantId: item.restaurantId,
+        categoryId: item.categoryId,
+        categoryName: item.categoryName,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        imageUrl: item.imageUrl,
+        isAvailable: item.isAvailable ?? true,
+        dietaryTags: item.dietaryTags || [],
+      }));
+
+      setMenuItems(mappedItems);
+    } catch (error: any) {
+      console.error('Error loading catalog:', error);
+      setMenuItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId, selectedCategoryId]);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await api.get<Category[]>('/MobileBff/categories', {
+        params: { __ts: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
+      setCategories(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading categories:', error);
+      setCategories([]);
+    }
+  }, []);
+
+  const loadReviews = useCallback(async () => {
+    try {
+      setLoadingReviews(true);
+      const response = await api.get<Review[]>(
+        `/MobileBff/reviews/restaurant/${restaurantId}?skip=0&take=10`
+      );
+      setReviews(response.data || []);
+    } catch (error: any) {
+      console.error('Error loading reviews:', error);
+      setReviews([]);
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [restaurantId]);
+
+  const loadRestaurantRating = useCallback(async () => {
+    try {
+      const response = await api.get<{
+        restaurantId: string;
+        averageRating: number;
+        totalReviews: number;
+      }>(`/MobileBff/reviews/restaurant/${restaurantId}/rating`);
+      setRestaurantRating({
+        averageRating: response.data.averageRating,
+        totalReviews: response.data.totalReviews,
+      });
+    } catch (error: any) {
+      console.error('Error loading restaurant rating:', error);
+    }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await authService.getAccessToken();
+        setUserCanReview(!!token);
+      } catch {
+        setUserCanReview(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!restaurantId) return;
+    loadMenu();
+    loadCategories();
+    loadReviews();
+    loadRestaurantRating();
+    setCurrentCartId(null);
+  }, [restaurantId, loadMenu, loadCategories, loadReviews, loadRestaurantRating]);
+
+  useEffect(() => {
+    if (!restaurantId) return;
+    if (refreshedAt) {
+      loadMenu();
+    }
+  }, [refreshedAt, restaurantId, loadMenu]);
+
+  const filterByCategory = (categoryId: string | null) => {
+    setSelectedCategoryId(categoryId);
+  };
+
+  const addToCart = async (item: MenuItem) => {
+    if (!item.isAvailable) return;
+
+    if (isAddingToCartRef.current) return;
+
+    try {
+      isAddingToCartRef.current = true;
+      setAddingItemId(item.menuItemId);
+
+      let cart = await cartService.getCart();
+      let cartIdToUse: string | null = null;
+
+      if (cart && cart.cartId) {
+        cartIdToUse = cart.cartId;
+        if (cart.restaurantId && cart.restaurantId !== restaurantId) {
+          cartIdToUse = await cartService.createCart(restaurantId);
+        }
+      } else {
+        cartIdToUse = await cartService.createCart(restaurantId);
+      }
+
+      if (!cartIdToUse || cartIdToUse.trim() === '') throw new Error('Failed to create or retrieve cart');
+      if (!item.menuItemId || item.menuItemId.trim() === '') throw new Error('MenuItem ID is missing');
+
+      await cartService.addItemToCart(cartIdToUse, item.menuItemId, item.name, item.price, 1);
+
+      setCurrentCartId(cartIdToUse);
+      setTimeout(() => {
+        Alert.alert(
+          'Added to cart',
+          `${item.name} added to cart.`,
+          [
+            { text: 'View cart', onPress: () => router.push('/(tabs)/cart') },
+            { text: 'Continue shopping', style: 'cancel' },
+          ],
+          { cancelable: true }
+        );
+      }, 100);
+    } catch (error: any) {
+      console.error('Error adding to cart:', error);
+      setTimeout(() => {
+        Alert.alert('Error', error.message || 'Failed to add item to cart');
+      }, 100);
+    } finally {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      isAddingToCartRef.current = false;
+      setAddingItemId(null);
+    }
+  };
+
+  const menuItemsByCategory = menuItems.reduce((acc, item) => {
+    const categoryName = item.categoryName || 'Other';
+    if (!acc[categoryName]) acc[categoryName] = [];
+    acc[categoryName].push(item);
+    return acc;
+  }, {} as Record<string, MenuItem[]>);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <AppHeader title="Catalog" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#f97316" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <AppHeader
+        title="Catalog"
+        right={(
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => router.push(`/restaurants/${restaurantId}/chat`)}
+              style={styles.iconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chatbubbles-outline" size={24} color="#333" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/cart')}
+              style={styles.iconButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="cart-outline" size={24} color="#333" />
+              {currentCartId ? <View style={styles.cartDot} /> : null}
+            </TouchableOpacity>
+          </View>
+        )}
+      />
+
+      <ScrollView style={styles.container}>
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'catalog' && styles.tabActive]}
+            onPress={() => setActiveTab('catalog')}
+          >
+            <Ionicons name="list" size={20} color={activeTab === 'catalog' ? '#f97316' : '#666'} />
+            <Text style={[styles.tabText, activeTab === 'catalog' && styles.tabTextActive]}>Catalog</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'reviews' && styles.tabActive]}
+            onPress={() => setActiveTab('reviews')}
+          >
+            <Ionicons name="star" size={20} color={activeTab === 'reviews' ? '#f97316' : '#666'} />
+            <Text style={[styles.tabText, activeTab === 'reviews' && styles.tabTextActive]}>Reviews</Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'catalog' ? (
+          <>
+            <ScrollView horizontal contentContainerStyle={styles.categoriesScroll} showsHorizontalScrollIndicator={false}>
+              <TouchableOpacity style={[styles.categoryChip, selectedCategoryId === null && styles.categoryChipActive]} onPress={() => filterByCategory(null)}>
+                <Text style={[styles.categoryChipText, selectedCategoryId === null && styles.categoryChipTextActive]}>All</Text>
+              </TouchableOpacity>
+              {categories.map(category => (
+                <TouchableOpacity key={category.categoryId} style={[styles.categoryChip, selectedCategoryId === category.categoryId && styles.categoryChipActive]} onPress={() => filterByCategory(category.categoryId)}>
+                  <Text style={[styles.categoryChipText, selectedCategoryId === category.categoryId && styles.categoryChipTextActive]}>{category.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {Object.entries(menuItemsByCategory).map(([categoryName, items]) => (
+              <View key={categoryName} style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>{categoryName}</Text>
+                {items.map(item => (
+                  <TouchableOpacity key={item.menuItemId} style={styles.menuItemCard} activeOpacity={0.8}>
+                    <View style={styles.menuItemContent}>
+                      <TouchableOpacity
+                        onPress={() => { if (item.imageUrl && !failedImageUrls.has(item.imageUrl)) setFullSizeImageItem(item); }}
+                        activeOpacity={0.9}
+                        style={[styles.menuItemImage, { justifyContent: "center", alignItems: "center" }]}
+                      >
+                        <Ionicons name="list" size={40} color="#f97316" style={{ position: "absolute" }} />
+                        {item.imageUrl && !failedImageUrls.has(item.imageUrl) && (
+                          <Image
+                            source={{ uri: getMenuImageDisplayUrl(item.imageUrl) }}
+                            style={[StyleSheet.absoluteFillObject, { borderRadius: 8 }]}
+                            resizeMode="cover"
+                            onError={() => setFailedImageUrls((prev) => new Set(prev).add(item.imageUrl!))}
+                          />
+                        )}
+                      </TouchableOpacity>
+                      <View style={styles.menuItemDetails}>
+                        <Text style={styles.menuItemName}>{item.name}</Text>
+                        {item.description && <Text style={styles.menuItemDescription}>{item.description}</Text>}
+                        <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                      </View>
+
+                      {item.isAvailable ? (
+                        <TouchableOpacity style={[styles.addButton, addingItemId === item.menuItemId && styles.addButtonDisabled]} onPress={() => addToCart(item)} disabled={addingItemId === item.menuItemId}>
+                          {addingItemId === item.menuItemId ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="add" size={24} color="#fff" />}
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.unavailableBadge}>
+                          <Text style={styles.unavailableText}>Unavailable</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
+
+            {menuItems.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="list" size={64} color="#ccc" />
+                <Text style={styles.emptyText}>No catalog items found</Text>
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={styles.reviewsSection}>
+              <View style={styles.reviewsHeader}>
+                <View style={styles.reviewsHeaderLeft}>
+                  <Text style={styles.reviewsTitle}>Reviews</Text>
+                  {restaurantRating && restaurantRating.totalReviews > 0 && (
+                    <View style={styles.ratingContainer}>
+                      <ReviewRating value={Math.round(restaurantRating.averageRating)} editable={false} showValue={true} size={24} />
+                      <Text style={styles.ratingText}>{restaurantRating.averageRating.toFixed(1)} ({restaurantRating.totalReviews} reviews)</Text>
+                    </View>
+                  )}
+                </View>
+                {userCanReview && (
+                  <View style={styles.reviewInfo}>
+                    <Ionicons name="information-circle-outline" size={16} color="#666" />
+                    <Text style={styles.reviewInfoText}>Write reviews from your order history</Text>
+                  </View>
+                )}
+              </View>
+
+              {loadingReviews ? (
+                <View style={styles.reviewsLoadingContainer}>
+                  <ActivityIndicator size="large" color="#f97316" />
+                  <Text style={styles.loadingText}>Loading reviews...</Text>
+                </View>
+              ) : (
+                <ReviewDisplay reviews={reviews} />
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={!!fullSizeImageItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullSizeImageItem(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setFullSizeImageItem(null)}
+        >
+          <View style={styles.modalContent}>
+            {fullSizeImageItem && (
+              <>
+                <Text style={styles.modalTitle}>{fullSizeImageItem.name}</Text>
+                <Image
+                  source={{ uri: getMenuImageDisplayUrl(fullSizeImageItem.imageUrl) }}
+                  style={styles.fullSizeImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.modalCloseHint}>Tap outside to close</Text>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  fullSizeImage: {
+    width: 320,
+    height: 320,
+    borderRadius: 8,
+  },
+  modalCloseHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 12,
+  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  backButton: { marginRight: 12 },
+  title: { flex: 1, fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  iconButton: { padding: 2, marginRight: 8 },
+  cartDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#f97316',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingHorizontal: 16,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    gap: 6,
+  },
+  tabActive: {
+    borderBottomColor: '#f97316',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  tabTextActive: {
+    color: '#f97316',
+    fontWeight: '600',
+  },
+  categoriesScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+  },
+  categoryChipActive: {
+    backgroundColor: '#f97316',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    color: '#fff',
+  },
+  categorySection: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+  },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  scrollView: { flex: 1 },
+  categoryFilter: { maxHeight: 50, marginVertical: 12 },
+  categoryFilterContent: { paddingHorizontal: 16, gap: 8 },
+  menuItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  menuItemContent: { flexDirection: 'row', alignItems: 'flex-start' },
+  menuItemImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    marginRight: 12,
+    overflow: "hidden",
+  },
+  menuItemIcon: { marginRight: 12 },
+  menuItemDetails: { flex: 1 },
+  menuItemName: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 4 },
+  menuItemDescription: { fontSize: 14, color: '#666', marginBottom: 8 },
+  menuItemPrice: { fontSize: 18, fontWeight: 'bold', color: '#f97316', marginTop: 4 },
+  addButton: {
+    marginLeft: 12,
+    padding: 4,
+    backgroundColor: "#f97316",
+    borderRadius: 16,
+  },
+  addButtonDisabled: { opacity: 0.5 },
+  unavailableBadge: {
+    backgroundColor: '#ffebee',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 12,
+  },
+  unavailableText: { fontSize: 12, color: '#c62828', fontWeight: '500' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
+  emptyText: { fontSize: 16, color: '#999', marginTop: 16 },
+  reviewsSection: { marginTop: 24, paddingHorizontal: 16, paddingBottom: 24 },
+  reviewsHeader: {
+    marginBottom: 20,
+  },
+  reviewsHeaderLeft: {
+    gap: 12,
+  },
+  reviewsTitle: { fontSize: 24, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingText: { fontSize: 16, fontWeight: '500', color: '#333' },
+  reviewsLoadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  reviewInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  reviewInfoText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+});

@@ -162,7 +162,7 @@ export default function CreateMenuItemScreen() {
 
       // ✅ go back to menu list + force refresh
       router.replace({
-        pathname: "/vendor/restaurants/[restaurantId]/menu",
+        pathname: "/vendor/restaurants/[restaurantId]/catalog",
         params: {
           restaurantId,
           refreshedAt: Date.now().toString(),
@@ -257,7 +257,7 @@ export default function CreateMenuItemScreen() {
               style={styles.input}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="Enter menu item name"
+              placeholder="Enter item name"
               autoFocus
             />
           </View>

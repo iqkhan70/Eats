@@ -190,7 +190,7 @@ export default function EditMenuItemScreen() {
           text: 'OK', 
           onPress: () => {
             router.replace({
-              pathname: '/vendor/restaurants/[restaurantId]/menu', // ⚠️ adjust to your real path
+              pathname: '/vendor/restaurants/[restaurantId]/catalog', // ⚠️ adjust to your real path
               params: {
                 restaurantId,
                 _ts: Date.now().toString(), // cache buster
@@ -212,7 +212,7 @@ export default function EditMenuItemScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#6200ee" />
-        <Text style={styles.loadingText}>Loading menu item...</Text>
+        <Text style={styles.loadingText}>Loading catalog item...</Text>
       </View>
     );
   }
@@ -267,7 +267,7 @@ export default function EditMenuItemScreen() {
             style={styles.input}
             value={formData.name}
             onChangeText={(text) => setFormData({ ...formData, name: text })}
-            placeholder="Enter menu item name"
+            placeholder="Enter item name"
           />
           {!formData.name.trim() && (
             <Text style={styles.errorText}>Item name is required</Text>
