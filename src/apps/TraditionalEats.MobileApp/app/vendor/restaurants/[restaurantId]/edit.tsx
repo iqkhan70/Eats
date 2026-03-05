@@ -21,7 +21,14 @@ import { authService } from "../../../../services/auth";
 import AppHeader from "../../../../components/AppHeader";
 import { APP_CONFIG } from "../../../../config/api.config";
 
-const VENDOR_CATEGORIES = ["Food", "Education", "Home Care", "Builds and Repairs", "Events", "Other"];
+const VENDOR_CATEGORIES = [
+  "Food",
+  "Education",
+  "Home Care",
+  "Builds and Repairs",
+  "Events",
+  "Other",
+];
 
 interface Restaurant {
   restaurantId: string;
@@ -240,7 +247,11 @@ export default function EditRestaurantScreen() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryRow}
+            >
               {VENDOR_CATEGORIES.map((cat) => (
                 <TouchableOpacity
                   key={cat}
@@ -253,7 +264,8 @@ export default function EditRestaurantScreen() {
                   <Text
                     style={[
                       styles.categoryChipText,
-                      formData.vendorType === cat && styles.categoryChipTextActive,
+                      formData.vendorType === cat &&
+                        styles.categoryChipTextActive,
                     ]}
                   >
                     {cat}
@@ -339,7 +351,7 @@ export default function EditRestaurantScreen() {
                   <ActivityIndicator size="small" color="#6200ee" />
                 ) : (
                   <>
-                    <Ionicons name="image-outline" size={24} color="#6200ee" />
+                    <Ionicons name="image-outline" size={24} color="#f97316" />
                     <Text style={styles.uploadButtonText}>
                       {uploadingImage ? "Uploading..." : "Upload Image"}
                     </Text>
@@ -491,9 +503,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0e6ff",
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#6200ee",
+    borderColor: "#f97316",
     borderStyle: "dashed",
   },
-  uploadButtonText: { color: "#6200ee", fontWeight: "600" },
+  uploadButtonText: { color: "#f97316", fontWeight: "700" },
   caption: { fontSize: 12, color: "#666", marginTop: 4 },
 });

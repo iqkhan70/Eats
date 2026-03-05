@@ -300,7 +300,7 @@ export default function CreateRestaurantScreen() {
                   <ActivityIndicator size="small" color="#6200ee" />
                 ) : (
                   <>
-                    <Ionicons name="image-outline" size={24} color="#6200ee" />
+                    <Ionicons name="image-outline" size={24} color="#f97316" />
                     <Text style={styles.uploadButtonText}>
                       {uploadingImage ? "Uploading..." : "Upload Image"}
                     </Text>
@@ -445,9 +445,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0e6ff",
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#6200ee",
+    borderColor: "#f97316",
     borderStyle: "dashed",
   },
-  uploadButtonText: { color: "#6200ee", fontWeight: "600" },
+  uploadButtonText: { color: "#f97316", fontWeight: "700" },
   caption: { fontSize: 12, color: "#666", marginTop: 4 },
 });

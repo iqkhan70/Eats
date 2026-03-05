@@ -59,7 +59,8 @@ export default function CreateMenuItemScreen() {
 
   const pickAndUploadImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Photo Access Needed",
@@ -67,7 +68,7 @@ export default function CreateMenuItemScreen() {
           [
             { text: "Open Settings", onPress: () => Linking.openSettings() },
             { text: "Cancel", style: "cancel" },
-          ]
+          ],
         );
         return;
       }
@@ -88,7 +89,10 @@ export default function CreateMenuItemScreen() {
       const rawName = uri.split("/").pop() || "";
       const hasImageExt = /\.(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(rawName);
       const fileName = hasImageExt ? rawName : "image.jpg";
-      const mimeType = asset.mimeType && /^image\//i.test(asset.mimeType) ? asset.mimeType : "image/jpeg";
+      const mimeType =
+        asset.mimeType && /^image\//i.test(asset.mimeType)
+          ? asset.mimeType
+          : "image/jpeg";
       const formData2 = new FormData();
       formData2.append("file", {
         uri,
@@ -98,14 +102,17 @@ export default function CreateMenuItemScreen() {
       if (formData.imageUrl) formData2.append("replacePath", formData.imageUrl);
       const res = await api.post<{ imageUrl: string }>(
         "/MobileBff/documents/upload-menu-image",
-        formData2
+        formData2,
       );
       const url = res.data?.imageUrl;
       if (url) setFormData((p) => ({ ...p, imageUrl: url }));
       else Alert.alert("Upload Failed", "Could not upload image");
     } catch (error: any) {
       console.error("Image upload error:", error);
-      Alert.alert("Upload Failed", error.response?.data?.message || "Failed to upload");
+      Alert.alert(
+        "Upload Failed",
+        error.response?.data?.message || "Failed to upload",
+      );
     } finally {
       setUploadingImage(false);
     }
@@ -320,7 +327,7 @@ export default function CreateMenuItemScreen() {
                   <ActivityIndicator size="small" color="#6200ee" />
                 ) : (
                   <>
-                    <Ionicons name="image-outline" size={24} color="#6200ee" />
+                    <Ionicons name="image-outline" size={24} color="#f97316" />
                     <Text style={styles.uploadButtonText}>
                       {uploadingImage ? "Uploading..." : "Upload Image"}
                     </Text>
@@ -458,9 +465,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0e6ff",
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#6200ee",
+    borderColor: "#f97316",
     borderStyle: "dashed",
   },
-  uploadButtonText: { color: "#6200ee", fontWeight: "600" },
+  uploadButtonText: { color: "#f97316", fontWeight: "700" },
   caption: { fontSize: 12, color: "#666", marginTop: 4 },
 });
