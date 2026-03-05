@@ -153,7 +153,7 @@ public class PaymentController : ControllerBase
                 request.CancelUrl);
             return Ok(new { url });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found") || ex.Message.Contains("not connected") || ex.Message.Contains("incomplete"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found") || ex.Message.Contains("no longer exists") || ex.Message.Contains("not connected") || ex.Message.Contains("incomplete"))
         {
             return BadRequest(new { message = ex.Message });
         }

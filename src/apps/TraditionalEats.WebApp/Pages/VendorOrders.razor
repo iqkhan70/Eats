@@ -628,7 +628,7 @@
     {
         var restaurantName =
         restaurants.FirstOrDefault(r => r.RestaurantId == o.RestaurantId)?.Name
-        ?? o.RestaurantId.ToString();
+        ?? "Restaurant no longer exists";
 
         var itemsSummary = (o.Items ?? new List<OrderItemDto>())
         .Select(i => $"{i.Quantity}x {i.Name}")

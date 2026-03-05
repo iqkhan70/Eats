@@ -183,6 +183,8 @@ export default function OrdersScreen() {
     }
   }, [isAuthenticated, router]);
 
+  const RESTAURANT_UNAVAILABLE = "Restaurant no longer exists";
+
   const loadRestaurantName = useCallback(async (restaurantId: string) => {
     if (!restaurantId) return;
 
@@ -197,8 +199,14 @@ export default function OrdersScreen() {
         if (prev[restaurantId] === name) return prev;
         return { ...prev, [restaurantId]: name };
       });
-    } catch {
-      return;
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 404) {
+        setRestaurantNamesById((prev) => {
+          if (prev[restaurantId] === RESTAURANT_UNAVAILABLE) return prev;
+          return { ...prev, [restaurantId]: RESTAURANT_UNAVAILABLE };
+        });
+      }
     }
   }, []);
 

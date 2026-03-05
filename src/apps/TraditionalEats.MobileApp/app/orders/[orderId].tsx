@@ -149,6 +149,8 @@ export default function OrderDetailsScreen() {
     }
   }, [params.restaurantName]);
 
+  const RESTAURANT_UNAVAILABLE = "Restaurant no longer exists";
+
   useEffect(() => {
     const rid = order?.restaurantId;
     if (!rid) return;
@@ -161,8 +163,8 @@ export default function OrderDetailsScreen() {
         );
         const name = (res.data as any)?.name;
         if (typeof name === "string" && name.trim()) setRestaurantName(name);
-      } catch {
-        return;
+      } catch (e: any) {
+        if (e?.response?.status === 404) setRestaurantName(RESTAURANT_UNAVAILABLE);
       }
     })();
   }, [order?.restaurantId, restaurantName]);
@@ -558,7 +560,8 @@ export default function OrderDetailsScreen() {
                 </View>
               )}
 
-              {order.paymentStatus === "Failed" && (
+              {order.paymentStatus === "Failed" &&
+                restaurantName !== RESTAURANT_UNAVAILABLE && (
                 <View style={styles.paymentRetryContainer}>
                   {!!order.paymentFailureReason?.trim() && (
                     <Text style={styles.paymentFailureText}>
@@ -738,8 +741,9 @@ export default function OrderDetailsScreen() {
               })}
             </View>
 
-            {/* Reorder Button - Only show for past orders */}
-            {isPastOrder(order.status) && (
+            {/* Reorder Button - Only show for past orders, hide when restaurant no longer exists */}
+            {isPastOrder(order.status) &&
+              restaurantName !== RESTAURANT_UNAVAILABLE && (
               <TouchableOpacity
                 style={[
                   styles.reorderButton,

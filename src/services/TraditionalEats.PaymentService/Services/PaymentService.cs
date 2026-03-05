@@ -426,7 +426,7 @@ public class PaymentService : IPaymentService
             {
                 _logger.LogWarning("Restaurant {RestaurantId} not found when creating checkout. Status={Status}, Url={Url}",
                     restaurantId, restaurantResponse.StatusCode, restaurantUrl);
-                throw new InvalidOperationException($"Restaurant not found (HTTP {restaurantResponse.StatusCode})");
+                throw new InvalidOperationException("Restaurant no longer exists. This order cannot be paid.");
             }
         }
         catch (HttpRequestException ex)

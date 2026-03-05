@@ -139,7 +139,13 @@
 
             try
             {
-                var json = await Http.GetStringAsync($"WebBff/restaurants/{id}");
+                var response = await Http.GetAsync($"WebBff/restaurants/{id}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    next[id] = "Restaurant no longer exists";
+                    continue;
+                }
+                var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.ValueKind == JsonValueKind.Object)
                 {
@@ -159,6 +165,7 @@
             }
             catch
             {
+                next[id] = "Restaurant no longer exists";
             }
         }
 
@@ -173,7 +180,7 @@
         if (vendorNameByRestaurantId.TryGetValue(restaurantId, out var name) && !string.IsNullOrWhiteSpace(name))
             return name;
 
-        return restaurantId.ToString();
+        return "Restaurant no longer exists";
     }
 
     private void OpenConversation(ConversationDto c)
