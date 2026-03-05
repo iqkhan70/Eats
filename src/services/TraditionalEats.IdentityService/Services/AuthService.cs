@@ -645,11 +645,12 @@ public class AuthService : IAuthService
         var jwtIssuer = _configuration["Jwt:Issuer"] ?? "TraditionalEats";
         var jwtAudience = _configuration["Jwt:Audience"] ?? "TraditionalEats";
 
+        var expirationMinutes = _configuration.GetValue("Jwt:AccessTokenExpirationMinutes", 60);
         var token = new JwtSecurityToken(
             issuer: jwtIssuer,
             audience: jwtAudience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(15),
+            expires: DateTime.UtcNow.AddMinutes(expirationMinutes),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

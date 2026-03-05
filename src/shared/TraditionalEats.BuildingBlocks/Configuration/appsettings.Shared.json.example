@@ -10,7 +10,8 @@
     "Key": "YOUR_JWT_SECRET_KEY_HERE_AT_LEAST_32_CHARACTERS",
     "Secret": "YOUR_JWT_SECRET_KEY_HERE_AT_LEAST_32_CHARACTERS",
     "Issuer": "TraditionalEats",
-    "Audience": "TraditionalEats"
+    "Audience": "TraditionalEats",
+    "AccessTokenExpirationMinutes": 60
   },
   "RabbitMQ": {
     "HostName": "localhost",

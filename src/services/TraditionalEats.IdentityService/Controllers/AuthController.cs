@@ -9,13 +9,17 @@ namespace TraditionalEats.IdentityService.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService, IConfiguration configuration, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _configuration = configuration;
         _logger = logger;
     }
+
+    private int GetExpiresInSeconds() => _configuration.GetValue("Jwt:AccessTokenExpirationMinutes", 60) * 60;
 
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("register")]
@@ -62,7 +66,7 @@ public class AuthController : ControllerBase
             {
                 accessToken,
                 refreshToken,
-                expiresIn = 900 // 15 minutes
+                expiresIn = GetExpiresInSeconds()
             });
         }
         catch (UnauthorizedAccessException ex)
@@ -86,7 +90,7 @@ public class AuthController : ControllerBase
         {
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var (accessToken, refreshToken) = await _authService.LoginWithGoogleAsync(request.IdToken, ipAddress);
-            return Ok(new { accessToken, refreshToken, expiresIn = 900 });
+            return Ok(new { accessToken, refreshToken, expiresIn = GetExpiresInSeconds() });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -110,7 +114,7 @@ public class AuthController : ControllerBase
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var (accessToken, refreshToken) = await _authService.LoginWithAppleAsync(
                 request.IdToken, request.Email, request.FullName, ipAddress);
-            return Ok(new { accessToken, refreshToken, expiresIn = 900 });
+            return Ok(new { accessToken, refreshToken, expiresIn = GetExpiresInSeconds() });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -135,7 +139,7 @@ public class AuthController : ControllerBase
             {
                 accessToken,
                 refreshToken,
-                expiresIn = 900
+                expiresIn = GetExpiresInSeconds()
             });
         }
         catch (UnauthorizedAccessException ex)

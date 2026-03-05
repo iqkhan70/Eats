@@ -108,6 +108,7 @@ services:
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER:-Kram}
       Jwt__Audience: ${JWT_AUDIENCE:-Kram}
+      Jwt__AccessTokenExpirationMinutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:-60}
       AppSettings__BaseUrl: ${APP_BASE_URL}
       Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:-YourSuperSecretEncryptionKeyThatIsAtLeast32CharactersLong!}
       Services__CustomerService: "http://customer-service:5001"
