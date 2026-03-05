@@ -1,10 +1,18 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { authService } from '../../services/auth';
+import React, { useState, useCallback, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { authService } from "../../services/auth";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -22,7 +30,7 @@ export default function ProfileScreen() {
     useCallback(() => {
       hasRedirectedRef.current = false;
       checkAuthStatus();
-    }, [])
+    }, []),
   );
 
   const checkAuthStatus = async () => {
@@ -38,9 +46,9 @@ export default function ProfileScreen() {
         // ✅ IMPORTANT: set user email
         let email: string | null = null;
 
-        if (typeof (authService as any).getUserEmail === 'function') {
+        if (typeof (authService as any).getUserEmail === "function") {
           email = await (authService as any).getUserEmail();
-        } else if (typeof (authService as any).getCurrentUser === 'function') {
+        } else if (typeof (authService as any).getCurrentUser === "function") {
           const u = await (authService as any).getCurrentUser();
           email = u?.email ?? u?.userEmail ?? null;
         }
@@ -54,7 +62,7 @@ export default function ProfileScreen() {
         // No valid session: redirect directly to sign-in
         if (!hasRedirectedRef.current) {
           hasRedirectedRef.current = true;
-          router.replace('/login');
+          router.replace("/login");
           return;
         }
       }
@@ -65,7 +73,7 @@ export default function ProfileScreen() {
       setUserEmail(null);
       if (!hasRedirectedRef.current) {
         hasRedirectedRef.current = true;
-        router.replace('/login');
+        router.replace("/login");
       }
     } finally {
       setCheckingAuth(false);
@@ -79,12 +87,12 @@ export default function ProfileScreen() {
   const requireAuth = (action: () => void) => {
     if (!isAuthenticated) {
       Alert.alert(
-        'Sign in required',
-        'Please sign in to access your profile.',
+        "Sign in required",
+        "Please sign in to access your profile.",
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/login') },
-        ]
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign In", onPress: () => router.push("/login") },
+        ],
       );
       return;
     }
@@ -92,11 +100,11 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Sign Out',
-        style: 'destructive',
+        text: "Sign Out",
+        style: "destructive",
         onPress: async () => {
           try {
             await authService.logout();
@@ -104,9 +112,9 @@ export default function ProfileScreen() {
             setUserEmail(null);
             setIsVendor(false);
             setIsAdmin(false);
-            router.replace('/login');
+            router.replace("/login");
           } catch (error: any) {
-            Alert.alert('Error', 'Failed to sign out');
+            Alert.alert("Error", "Failed to sign out");
           }
         },
       },
@@ -114,12 +122,32 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { icon: 'person-outline', label: 'Personal Information', route: '/profile/personal' },
-    { icon: 'location-outline', label: 'Addresses', route: '/profile/addresses' },
-    { icon: 'card-outline', label: 'Payment Methods', route: '/profile/payments' },
-    { icon: 'notifications-outline', label: 'Notifications', route: '/profile/notifications' },
-    { icon: 'help-circle-outline', label: 'Help & Support', route: '/profile/support' },
-    { icon: 'settings-outline', label: 'Settings', route: '/profile/settings' },
+    {
+      icon: "person-outline",
+      label: "Personal Information",
+      route: "/profile/personal",
+    },
+    {
+      icon: "location-outline",
+      label: "Addresses",
+      route: "/profile/addresses",
+    },
+    {
+      icon: "card-outline",
+      label: "Payment Methods",
+      route: "/profile/payments",
+    },
+    {
+      icon: "notifications-outline",
+      label: "Notifications",
+      route: "/profile/notifications",
+    },
+    {
+      icon: "help-circle-outline",
+      label: "Help & Support",
+      route: "/profile/support",
+    },
+    { icon: "settings-outline", label: "Settings", route: "/profile/settings" },
   ];
 
   // Redirecting to login - show loading briefly
@@ -134,32 +162,32 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-    <ScrollView style={styles.scrollView}>
-      <LinearGradient
-        colors={['#f97316', '#eab308']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}
-      >
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={48} color="#fff" />
-        </View>
-        <Text style={styles.userName}>Welcome</Text>
-        <Text style={styles.userEmail}>{userEmail ?? '—'}</Text>
-      </LinearGradient>
+      <ScrollView style={styles.scrollView}>
+        <LinearGradient
+          colors={["#f97316", "#eab308"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}
+        >
+          <View style={styles.avatarContainer}>
+            <Ionicons name="person" size={48} color="#fff" />
+          </View>
+          <Text style={styles.userName}>Welcome</Text>
+          <Text style={styles.userEmail}>{userEmail ?? "—"}</Text>
+        </LinearGradient>
 
-      <>
-        {(isVendor || isAdmin) && (
+        <>
+          {(isVendor || isAdmin) && (
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Business</Text>
 
               {isVendor && (
                 <TouchableOpacity
                   style={styles.menuItem}
-                  onPress={() => requireAuth(() => router.push('/vendor'))}
+                  onPress={() => requireAuth(() => router.push("/vendor"))}
                 >
                   <View style={styles.menuItemLeft}>
-                    <Ionicons name="restaurant" size={24} color="#6200ee" />
+                    <Ionicons name="restaurant" size={24} color="#f97316" />
                     <Text style={styles.menuItemLabel}>Vendor Dashboard</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
@@ -169,11 +197,17 @@ export default function ProfileScreen() {
               {isAdmin && (
                 <TouchableOpacity
                   style={styles.menuItem}
-                  onPress={() => requireAuth(() => router.push('/admin'))}
+                  onPress={() => requireAuth(() => router.push("/admin"))}
                 >
                   <View style={styles.menuItemLeft}>
-                    <Ionicons name="shield-checkmark" size={24} color="#d32f2f" />
-                    <Text style={[styles.menuItemLabel, { color: '#d32f2f' }]}>Admin Dashboard</Text>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={24}
+                      color="#d32f2f"
+                    />
+                    <Text style={[styles.menuItemLabel, { color: "#d32f2f" }]}>
+                      Admin Dashboard
+                    </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
@@ -188,7 +222,9 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 key={index}
                 style={styles.menuItem}
-                onPress={() => requireAuth(() => router.push(item.route as any))}
+                onPress={() =>
+                  requireAuth(() => router.push(item.route as any))
+                }
               >
                 <View style={styles.menuItemLeft}>
                   <Ionicons name={item.icon as any} size={24} color="#333" />
@@ -199,78 +235,83 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
-      </>
-    </ScrollView>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
   scrollView: { flex: 1 },
-  centerContainer: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
+  centerContainer: { justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 
   header: {
     padding: 32,
-    alignItems: 'center',
+    alignItems: "center",
     paddingTop: 60,
   },
   avatarContainer: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
   },
-  userName: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
-  userEmail: { fontSize: 14, color: 'rgba(255, 255, 255, 0.85)' },
+  userName: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  userEmail: { fontSize: 14, color: "rgba(255, 255, 255, 0.85)" },
 
-  menuSection: { 
-    backgroundColor: 'rgba(255, 255, 255, 0.7)', 
-    marginTop: 16, 
+  menuSection: {
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    marginTop: 16,
     paddingVertical: 8,
     borderRadius: 16,
     marginHorizontal: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
 
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
-  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
-  menuItemLabel: { fontSize: 16, color: '#333', marginLeft: 16 },
+  menuItemLeft: { flexDirection: "row", alignItems: "center" },
+  menuItemLabel: { fontSize: 16, color: "#333", marginLeft: 16 },
 
   sectionTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
     marginBottom: 8,
     marginTop: 8,
     paddingHorizontal: 16,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
 
   logoutButton: {
     margin: 16,
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
-  logoutButtonText: { fontSize: 16, fontWeight: '600', color: '#d32f2f' },
+  logoutButtonText: { fontSize: 16, fontWeight: "600", color: "#d32f2f" },
 });

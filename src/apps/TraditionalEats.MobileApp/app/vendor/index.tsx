@@ -248,7 +248,7 @@ export default function VendorDashboardScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <LinearGradient
-          colors={['#f97316', '#eab308']}
+          colors={["#f97316", "#eab308"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.header}

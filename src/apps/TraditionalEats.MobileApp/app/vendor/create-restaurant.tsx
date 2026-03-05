@@ -18,7 +18,14 @@ import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { api } from "../../services/api";
 
-const VENDOR_CATEGORIES = ["Food", "Education", "Home Care", "Builds and Repairs", "Events", "Other"];
+const VENDOR_CATEGORIES = [
+  "Food",
+  "Education",
+  "Home Care",
+  "Builds and Repairs",
+  "Events",
+  "Other",
+];
 import { authService } from "../../services/auth";
 import AppHeader from "../../components/AppHeader";
 import { APP_CONFIG } from "../../config/api.config";
@@ -189,7 +196,11 @@ export default function CreateRestaurantScreen() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryRow}
+            >
               {VENDOR_CATEGORIES.map((cat) => (
                 <TouchableOpacity
                   key={cat}
@@ -202,7 +213,8 @@ export default function CreateRestaurantScreen() {
                   <Text
                     style={[
                       styles.categoryChipText,
-                      formData.vendorType === cat && styles.categoryChipTextActive,
+                      formData.vendorType === cat &&
+                        styles.categoryChipTextActive,
                     ]}
                   >
                     {cat}
@@ -382,7 +394,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   saveButton: {
-    backgroundColor: "#6200ee",
+    backgroundColor: "#f97316",
     padding: 16,
     borderRadius: 8,
     flexDirection: "row",
