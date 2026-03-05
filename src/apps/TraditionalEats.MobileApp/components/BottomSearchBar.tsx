@@ -19,6 +19,11 @@ import { BlurView } from "expo-blur";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+// Tab content area ends at the top of the tab bar, so we only need a small gap.
+// bottom is relative to the content area bottom (= top of tab bar).
+const PILL_GAP_ABOVE_TAB = 4;
+const DEFAULT_BOTTOM_OFFSET = PILL_GAP_ABOVE_TAB;
+
 interface BottomSearchBarProps {
   onSearch: (query: string) => void;
   placeholder?: string;
@@ -44,9 +49,10 @@ export default function BottomSearchBar({
   onSuggestionSelect,
   onClear,
   initialValue = "",
-  bottomOffset = 70,
+  bottomOffset = DEFAULT_BOTTOM_OFFSET,
 }: BottomSearchBarProps) {
   const insets = useSafeAreaInsets();
+  const effectiveBottomOffset = bottomOffset;
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchText, setSearchText] = useState(initialValue);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -220,7 +226,7 @@ export default function BottomSearchBar({
         style={[
           styles.pillContainer,
           {
-            bottom: insets.bottom + bottomOffset,
+            bottom: effectiveBottomOffset,
             opacity: pillOpacity,
             height: pillHeight,
           },
