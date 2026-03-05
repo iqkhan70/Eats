@@ -84,6 +84,10 @@ class ApiClient {
           const isOrderDetail403 =
             url.includes('/orders/') && method === 'GET' && status === 403;
 
+          // Don't log 404 for restaurant fetch - deleted restaurant is handled gracefully; UI shows "Restaurant no longer exists"
+          const isRestaurant404 =
+            url.includes('/restaurants/') && method === 'GET' && status === 404;
+
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
           // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
@@ -95,7 +99,8 @@ class ApiClient {
             isLogin401 ||
             (isAuthEndpoint && isUnauthorized) ||
             isStripeRefreshOnboardingStatus ||
-            isOrderDetail403;
+            isOrderDetail403 ||
+            isRestaurant404;
 
           if (!shouldSuppress) {
             console.error('❌ API Error:', {
