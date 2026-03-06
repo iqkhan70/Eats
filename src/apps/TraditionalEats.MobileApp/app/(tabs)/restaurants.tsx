@@ -425,61 +425,6 @@ export default function RestaurantsScreen() {
         </View>
       )}
 
-      {/* Menu category chips */}
-      {menuCategories.length > 0 && (
-        <LinearGradient
-          colors={["#f97316", "#eab308"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.menuCategoryRow}
-        >
-          <Text style={styles.menuCategoryLabel}>Categories</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.menuCategoryChips}
-          >
-            <TouchableOpacity
-              style={[
-                styles.menuChip,
-                !activeMenuCategoryId && styles.menuChipActive,
-              ]}
-              onPress={() => setMenuCategoryFilter("")}
-            >
-              <Text
-                style={[
-                  styles.menuChipText,
-                  !activeMenuCategoryId && styles.menuChipTextActive,
-                ]}
-              >
-                All
-              </Text>
-            </TouchableOpacity>
-
-            {menuCategories.map((c) => (
-              <TouchableOpacity
-                key={c.categoryId}
-                style={[
-                  styles.menuChip,
-                  activeMenuCategoryId === c.categoryId && styles.menuChipActive,
-                ]}
-                onPress={() => setMenuCategoryFilter(c.categoryId)}
-              >
-                <Text
-                  style={[
-                    styles.menuChipText,
-                    activeMenuCategoryId === c.categoryId &&
-                      styles.menuChipTextActive,
-                  ]}
-                >
-                  {c.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </LinearGradient>
-      )}
-
       {!!debouncedSearch && (
         <Text style={styles.resultsText}>
           Showing {filteredRestaurants.length} result
@@ -511,9 +456,69 @@ export default function RestaurantsScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
-      {/* Search Query Indicator - Outside FlatList for better visibility */}
+      {/* Header bar - extends to top like orders */}
+      <LinearGradient
+          colors={["#f97316", "#eab308"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.menuCategoryRowTop, { paddingTop: insets.top + 12 }]}
+        >
+          {menuCategories.length > 0 ? (
+            <>
+              <Text style={styles.menuCategoryLabel}>Categories</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.menuCategoryChips}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.menuChip,
+                    !activeMenuCategoryId && styles.menuChipActive,
+                  ]}
+                  onPress={() => setMenuCategoryFilter("")}
+                >
+                  <Text
+                    style={[
+                      styles.menuChipText,
+                      !activeMenuCategoryId && styles.menuChipTextActive,
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+
+                {menuCategories.map((c) => (
+                  <TouchableOpacity
+                    key={c.categoryId}
+                    style={[
+                      styles.menuChip,
+                      activeMenuCategoryId === c.categoryId &&
+                        styles.menuChipActive,
+                    ]}
+                    onPress={() => setMenuCategoryFilter(c.categoryId)}
+                  >
+                    <Text
+                      style={[
+                        styles.menuChipText,
+                        activeMenuCategoryId === c.categoryId &&
+                          styles.menuChipTextActive,
+                      ]}
+                    >
+                      {c.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          ) : (
+            <Text style={styles.menuCategoryLabel}>Vendors</Text>
+          )}
+        </LinearGradient>
+
+      {/* Search Query Indicator */}
       {debouncedSearch && debouncedSearch.trim() && (
-        <View style={[styles.searchIndicator, { marginTop: insets.top + 10, paddingTop: 12 }]}>
+        <View style={styles.searchIndicator}>
           <Text style={styles.searchIndicatorText}>
             Searching: "{debouncedSearch}"
           </Text>
@@ -671,6 +676,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     borderRadius: 12,
+    overflow: "hidden",
+  },
+  menuCategoryRowTop: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     overflow: "hidden",
   },
   menuCategoryLabel: {

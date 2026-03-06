@@ -520,7 +520,7 @@ export default function OrdersScreen() {
         end={{ x: 1, y: 0 }}
         style={[
           styles.filterContainer,
-          { marginTop: searchQuery.trim() ? 0 : insets.top },
+          { paddingTop: insets.top + 12 },
         ]}
       >
         <TouchableOpacity
@@ -939,7 +939,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingRight: 72,
     gap: 8,
-    borderRadius: 12,
     overflow: "hidden",
   },
   filterTab: {
