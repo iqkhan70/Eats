@@ -382,6 +382,12 @@
         if (isAuthenticated)
         {
             isAdmin = await AuthService.IsAdminAsync();
+            var isCoordinator = await AuthService.IsCoordinatorAsync();
+            if (isCoordinator && !isAdmin)
+            {
+                NavigationManager.NavigateTo("/admin/vendor-approvals", replace: true);
+                return;
+            }
             userRoles = await AuthService.GetUserRolesAsync();
             userEmail = await GetUserEmailAsync();
         }

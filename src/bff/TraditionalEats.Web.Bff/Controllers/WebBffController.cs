@@ -2071,7 +2071,7 @@ public class WebBffController : ControllerBase
     }
 
     [HttpGet("admin/vendor-approvals")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Coordinator")]
     public async Task<IActionResult> GetPendingVendorApprovals()
     {
         try
@@ -2090,7 +2090,7 @@ public class WebBffController : ControllerBase
     }
 
     [HttpPost("admin/vendor-approvals/{requestId:guid}/approve")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Coordinator")]
     public async Task<IActionResult> ApproveVendorRequest(Guid requestId)
     {
         try

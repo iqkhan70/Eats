@@ -528,8 +528,8 @@ public class AuthService : IAuthService
         if (user.UserRoles.Any(ur => ur.Role.Name == "Vendor"))
             return new VendorRequestResult(false, "User is already a vendor");
 
-        if (user.UserRoles.Any(ur => ur.Role.Name == "Admin"))
-            return new VendorRequestResult(false, "Admins cannot request vendor status");
+        if (user.UserRoles.Any(ur => ur.Role.Name == "Admin" || ur.Role.Name == "Coordinator"))
+            return new VendorRequestResult(false, "Admins and coordinators cannot request vendor status");
 
         var existing = await _context.VendorApprovalRequests
             .FirstOrDefaultAsync(r => r.UserId == userId && r.Status == "Pending");

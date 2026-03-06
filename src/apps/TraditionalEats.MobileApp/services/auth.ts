@@ -310,6 +310,21 @@ class AuthService {
   }
 
   /**
+   * Check if user is a coordinator (can approve vendor requests only)
+   */
+  async isCoordinator(): Promise<boolean> {
+    return await this.isInRole('Coordinator');
+  }
+
+  /**
+   * Check if user can approve vendor requests (Admin or Coordinator)
+   */
+  async canApproveVendors(): Promise<boolean> {
+    const roles = await this.getUserRoles();
+    return roles.includes('Admin') || roles.includes('Coordinator');
+  }
+
+  /**
    * Check if user is a vendor
    */
   async isVendor(): Promise<boolean> {

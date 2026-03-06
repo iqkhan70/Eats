@@ -300,7 +300,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("vendor-approvals")]
-    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Coordinator")]
     public async Task<IActionResult> GetPendingVendorApprovals()
     {
         try
@@ -316,7 +316,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("vendor-approvals/{requestId:guid}/approve")]
-    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Coordinator")]
     public async Task<IActionResult> ApproveVendorRequest(Guid requestId)
     {
         var adminIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

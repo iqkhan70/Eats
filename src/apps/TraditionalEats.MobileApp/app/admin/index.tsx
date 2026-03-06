@@ -33,8 +33,14 @@ export default function AdminDashboardScreen() {
       setUserRoles(roles);
       
       const admin = await authService.isAdmin();
+      const coordinator = await authService.isCoordinator();
       setIsAdmin(admin);
       
+      if (coordinator && !admin) {
+        router.replace('/admin/vendor-approvals');
+        setLoading(false);
+        return;
+      }
       if (!admin) {
         Alert.alert('Access Denied', 'You must be an admin to access this page.');
         router.back();

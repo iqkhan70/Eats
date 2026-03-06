@@ -25,6 +25,7 @@ export default function ProfileScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isCoordinator, setIsCoordinator] = useState(false);
   const [vendorRequestPending, setVendorRequestPending] = useState(false);
   const [submittingVendorRequest, setSubmittingVendorRequest] = useState(false);
 
@@ -45,11 +46,13 @@ export default function ProfileScreen() {
       if (authenticated) {
         const vendor = await authService.isVendor();
         const admin = await authService.isAdmin();
+        const coordinator = await authService.isCoordinator();
         setIsVendor(vendor);
         setIsAdmin(admin);
+        setIsCoordinator(coordinator);
 
-        // Check vendor request status only for regular users (not vendor, not admin)
-        if (!vendor && !admin) {
+        // Check vendor request status only for regular users (not vendor, not admin, not coordinator)
+        if (!vendor && !admin && !coordinator) {
           try {
             const res = await api.get<{ hasRequest?: boolean; status?: string }>(
               "/MobileBff/auth/vendor-request/status",
@@ -79,6 +82,7 @@ export default function ProfileScreen() {
       } else {
         setIsVendor(false);
         setIsAdmin(false);
+        setIsCoordinator(false);
         setVendorRequestPending(false);
         setUserEmail(null);
 
@@ -93,6 +97,7 @@ export default function ProfileScreen() {
       setIsAuthenticated(false);
       setIsVendor(false);
       setIsAdmin(false);
+      setIsCoordinator(false);
       setVendorRequestPending(false);
       setUserEmail(null);
       if (!hasRedirectedRef.current) {
@@ -124,7 +129,7 @@ export default function ProfileScreen() {
   };
 
   const handleBecomeVendor = async () => {
-    if (!isAuthenticated || isVendor || isAdmin || vendorRequestPending) return;
+    if (!isAuthenticated || isVendor || isAdmin || isCoordinator || vendorRequestPending) return;
     try {
       setSubmittingVendorRequest(true);
       await api.post("/MobileBff/auth/vendor-request");
@@ -152,6 +157,7 @@ export default function ProfileScreen() {
             setUserEmail(null);
             setIsVendor(false);
             setIsAdmin(false);
+            setIsCoordinator(false);
             router.replace("/login");
           } catch (error: any) {
             Alert.alert("Error", "Failed to sign out");
@@ -217,8 +223,8 @@ export default function ProfileScreen() {
         </LinearGradient>
 
         <>
-          {/* Become a Vendor - only for regular users, not vendor, not admin, not pending */}
-          {!isVendor && !isAdmin && (
+          {/* Become a Vendor - only for regular users, not vendor, not admin, not coordinator, not pending */}
+          {!isVendor && !isAdmin && !isCoordinator && (
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Business</Text>
               {vendorRequestPending ? (
@@ -248,7 +254,7 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {(isVendor || isAdmin) && (
+          {(isVendor || isAdmin || isCoordinator) && (
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Business</Text>
 
@@ -278,6 +284,25 @@ export default function ProfileScreen() {
                     />
                     <Text style={[styles.menuItemLabel, { color: "#d32f2f" }]}>
                       Admin Dashboard
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
+
+              {isCoordinator && !isAdmin && (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => requireAuth(() => router.push("/admin/vendor-approvals"))}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons
+                      name="storefront-outline"
+                      size={24}
+                      color="#0d6efd"
+                    />
+                    <Text style={[styles.menuItemLabel, { color: "#0d6efd" }]}>
+                      Vendor Approvals
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#666" />

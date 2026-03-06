@@ -50,6 +50,12 @@
                                 Variant="Variant.Flat" Size="ButtonSize.Small"
                                 Style="background-color: #dc3545; color: white;" />
                         }
+                        else if (isCoordinator)
+                        {
+                            <RadzenButton Text="Vendor Approvals" Click="@(() => NavigationManager.NavigateTo("/admin/vendor-approvals"))"
+                                Variant="Variant.Flat" Size="ButtonSize.Small"
+                                Style="background-color: #0d6efd; color: white;" />
+                        }
                         <RadzenButton Text="Profile" Click="@(() => NavigationManager.NavigateTo("/profile"))"
                             Variant="Variant.Flat" Size="ButtonSize.Small" />
                         <RadzenButton Text="Logout" Icon="logout" Click="@HandleLogout" Variant="Variant.Flat"
@@ -90,6 +96,7 @@
     private bool sidebarExpanded = false;
     private bool isAuthenticated = false;
     private bool isAdmin = false;
+    private bool isCoordinator = false;
     private bool isVendor = false;
     private int cartItemCount = 0;
 
@@ -130,11 +137,13 @@
         if (isAuthenticated)
         {
             isAdmin = await AuthService.IsAdminAsync();
+            isCoordinator = await AuthService.IsCoordinatorAsync();
             isVendor = await AuthService.IsVendorAsync();
         }
         else
         {
             isAdmin = false;
+            isCoordinator = false;
             isVendor = false;
         }
     }
@@ -166,6 +175,7 @@
         await AuthService.ClearTokensAsync();
         isAuthenticated = false;
         isAdmin = false;
+        isCoordinator = false;
         isVendor = false;
         cartItemCount = 0;
         NavigationManager.NavigateTo("/");

@@ -13,6 +13,7 @@ public static class SeedData
             new Role { Id = Guid.NewGuid(), Name = "Customer", Description = "Regular customer who can place orders" },
             new Role { Id = Guid.NewGuid(), Name = "Vendor", Description = "Restaurant owner who can manage their restaurant and menu" },
             new Role { Id = Guid.NewGuid(), Name = "Admin", Description = "Administrator with full system access" },
+            new Role { Id = Guid.NewGuid(), Name = "Coordinator", Description = "Can approve vendor requests only; no other admin access" },
             new Role { Id = Guid.NewGuid(), Name = "Driver", Description = "Delivery driver" }
         };
 

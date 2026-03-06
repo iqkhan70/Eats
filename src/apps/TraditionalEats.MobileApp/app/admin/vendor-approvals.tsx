@@ -47,13 +47,13 @@ export default function AdminVendorApprovalsScreen() {
     useCallback(() => {
       let mounted = true;
       const run = async () => {
-        const admin = await authService.isAdmin();
+        const canApprove = await authService.canApproveVendors();
         if (!mounted) return;
-        setIsAdmin(admin);
-        if (!admin) {
+        setIsAdmin(canApprove);
+        if (!canApprove) {
           Alert.alert(
             "Access Denied",
-            "You must be an admin to access this page.",
+            "You must be an Admin or Coordinator to access this page.",
           );
           router.back();
           return;

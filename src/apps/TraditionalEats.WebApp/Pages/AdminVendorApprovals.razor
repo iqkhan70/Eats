@@ -16,10 +16,10 @@
         <RadzenText TextStyle="TextStyle.H1">Vendor Approval Queue</RadzenText>
     </RadzenStack>
 
-    @if (!isAuthenticated || !isAdmin)
+    @if (!isAuthenticated || !canApproveVendors)
     {
         <RadzenCard>
-            <RadzenText>Access denied. Admin role required.</RadzenText>
+            <RadzenText>Access denied. Admin or Coordinator role required.</RadzenText>
         </RadzenCard>
     }
     else if (loading)
@@ -62,7 +62,7 @@
 
 @code {
     private bool isAuthenticated = false;
-    private bool isAdmin = false;
+    private bool canApproveVendors = false;
     private bool loading = true;
     private Guid? approvingId = null;
     private List<VendorApprovalDto> approvals = new();
@@ -72,8 +72,8 @@
         isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (isAuthenticated)
         {
-            isAdmin = await AuthService.IsAdminAsync();
-            if (isAdmin)
+            canApproveVendors = await AuthService.CanApproveVendorsAsync();
+            if (canApproveVendors)
             {
                 await LoadApprovals();
             }

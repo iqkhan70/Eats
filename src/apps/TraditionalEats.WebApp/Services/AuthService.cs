@@ -131,6 +131,19 @@ public class AuthService
         return await IsInRoleAsync("Admin");
     }
 
+    public async Task<bool> IsCoordinatorAsync()
+    {
+        return await IsInRoleAsync("Coordinator");
+    }
+
+    /// <summary>True if user can approve vendor requests (Admin or Coordinator).</summary>
+    public async Task<bool> CanApproveVendorsAsync()
+    {
+        var roles = await GetUserRolesAsync();
+        return roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)
+            || roles.Contains("Coordinator", StringComparer.OrdinalIgnoreCase);
+    }
+
     public async Task<bool> IsVendorAsync()
     {
         return await IsInRoleAsync("Vendor");

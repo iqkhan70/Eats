@@ -13,7 +13,8 @@ The TraditionalEats platform supports a flexible multi-role system where users c
 1. **Customer** - Can place orders, view menu, manage cart
 2. **Vendor** - Can manage restaurants and menu items
 3. **Admin** - Full system access, can manage users and roles
-4. **Driver** - Can view and manage delivery assignments (future)
+4. **Coordinator** - Can approve vendor requests only; no other admin access (users, categories, documents, etc. are hidden)
+5. **Driver** - Can view and manage delivery assignments (future)
 
 ## How It Works
 
