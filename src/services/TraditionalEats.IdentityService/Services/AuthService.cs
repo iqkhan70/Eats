@@ -37,10 +37,13 @@ public interface IAuthService
 
 public record VendorRequestResult(bool Success, string? Message);
 public record VendorRequestStatus(string Status, DateTime RequestedAt); // Status: Pending, Approved, Rejected
-public record VendorApprovalDto(Guid Id, Guid UserId, string UserEmail, DateTime RequestedAt);
+public record VendorApprovalDto(Guid Id, Guid UserId, string UserEmail, string? FirstName, string? LastName, DateTime RequestedAt);
 
 public record ForgotPasswordResult(bool Success, string Message);
 public record ResetPasswordResult(bool Success, string Message);
+
+/// <summary>Matches CustomerService GET /api/customer/by-user/{userId} response (camelCase).</summary>
+internal record CustomerInfoResponse(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
 
 public class AuthService : IAuthService
 {
@@ -537,11 +540,32 @@ public class AuthService : IAuthService
         if (existing != null)
             return new VendorRequestResult(false, "Vendor approval request already pending");
 
+        string? firstName = null;
+        string? lastName = null;
+        try
+        {
+            var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(customerServiceUrl);
+            var customer = await client.GetFromJsonAsync<CustomerInfoResponse>($"/api/customer/by-user/{userId}");
+            if (customer != null)
+            {
+                firstName = customer.FirstName;
+                lastName = customer.LastName;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch customer name for vendor request UserId={UserId}", userId);
+        }
+
         _context.VendorApprovalRequests.Add(new VendorApprovalRequest
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             UserEmail = user.Email,
+            FirstName = firstName,
+            LastName = lastName,
             Status = "Pending",
             RequestedAt = DateTime.UtcNow
         });
@@ -566,7 +590,7 @@ public class AuthService : IAuthService
         return await _context.VendorApprovalRequests
             .Where(r => r.Status == "Pending")
             .OrderBy(r => r.RequestedAt)
-            .Select(r => new VendorApprovalDto(r.Id, r.UserId, r.UserEmail, r.RequestedAt))
+            .Select(r => new VendorApprovalDto(r.Id, r.UserId, r.UserEmail, r.FirstName, r.LastName, r.RequestedAt))
             .ToListAsync();
     }
 

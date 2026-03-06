@@ -44,7 +44,9 @@
             <RadzenDataGrid TItem="VendorApprovalDto" Data="@approvals" AllowPaging="true" PageSize="10"
                 AllowSorting="true" Style="width: 100%;">
                 <Columns>
-                    <RadzenDataGridColumn TItem="VendorApprovalDto" Property="UserEmail" Title="Email" Width="280px" />
+                    <RadzenDataGridColumn TItem="VendorApprovalDto" Property="FirstName" Title="First Name" Width="120px" />
+                    <RadzenDataGridColumn TItem="VendorApprovalDto" Property="LastName" Title="Last Name" Width="120px" />
+                    <RadzenDataGridColumn TItem="VendorApprovalDto" Property="UserEmail" Title="Email" Width="240px" />
                     <RadzenDataGridColumn TItem="VendorApprovalDto" Property="RequestedAt" Title="Requested" Width="180px"
                         FormatString="{0:MMM dd, yyyy HH:mm}" />
                     <RadzenDataGridColumn TItem="VendorApprovalDto" Title="Actions" Width="120px" Sortable="false" Filterable="false">
@@ -115,7 +117,7 @@
                 {
                     Severity = NotificationSeverity.Success,
                     Summary = "Approved",
-                    Detail = $"Vendor role assigned to {item.UserEmail}",
+                    Detail = $"Vendor role assigned to {FormatDisplayName(item)}",
                     Duration = 3000
                 });
                 await LoadApprovals();
@@ -149,11 +151,19 @@
         }
     }
 
+    private static string FormatDisplayName(VendorApprovalDto item)
+    {
+        var name = $"{item.FirstName} {item.LastName}".Trim();
+        return !string.IsNullOrEmpty(name) ? name : item.UserEmail;
+    }
+
     private class VendorApprovalDto
     {
         public Guid Id { get; set; }
         public Guid UserId { get; set; }
         public string UserEmail { get; set; } = "";
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
         public DateTime RequestedAt { get; set; }
     }
 }

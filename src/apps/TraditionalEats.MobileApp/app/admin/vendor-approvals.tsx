@@ -19,6 +19,8 @@ interface VendorApprovalDto {
   id: string;
   userId: string;
   userEmail: string;
+  firstName?: string | null;
+  lastName?: string | null;
   requestedAt: string;
 }
 
@@ -82,7 +84,10 @@ export default function AdminVendorApprovalsScreen() {
         `/MobileBff/admin/vendor-approvals/${item.id}/approve`,
       );
       await loadApprovals();
-      Alert.alert("Approved", `Vendor role assigned to ${item.userEmail}`);
+      const displayName =
+        [item.firstName, item.lastName].filter(Boolean).join(" ") ||
+        item.userEmail;
+      Alert.alert("Approved", `Vendor role assigned to ${displayName}`);
     } catch (e: any) {
       const msg =
         e?.response?.data?.message ?? "Failed to approve. Please try again.";
@@ -125,6 +130,10 @@ export default function AdminVendorApprovalsScreen() {
             {approvals.map((item) => (
               <View key={item.id} style={styles.card}>
                 <View style={styles.cardContent}>
+                  <Text style={styles.name}>
+                    {[item.firstName, item.lastName].filter(Boolean).join(" ") ||
+                      item.userEmail}
+                  </Text>
                   <Text style={styles.email}>{item.userEmail}</Text>
                   <Text style={styles.date}>
                     Requested:{" "}
@@ -206,7 +215,8 @@ const styles = StyleSheet.create({
     borderColor: "#e0e0e0",
   },
   cardContent: { flex: 1 },
-  email: { fontSize: 16, fontWeight: "600", color: "#333" },
+  name: { fontSize: 16, fontWeight: "600", color: "#333" },
+  email: { fontSize: 13, color: "#666", marginTop: 2 },
   date: { fontSize: 12, color: "#666", marginTop: 4 },
   approveButton: {
     flexDirection: "row",

@@ -78,6 +78,8 @@ public class IdentityDbContext : DbContext
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.RequestedAt);
             entity.Property(e => e.UserEmail).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.FirstName).HasMaxLength(255);
+            entity.Property(e => e.LastName).HasMaxLength(255);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
         });
