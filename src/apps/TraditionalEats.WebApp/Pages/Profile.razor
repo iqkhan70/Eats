@@ -1,13 +1,160 @@
 @page "/profile"
+@using System.Text.Json
 @using Radzen
 @using Radzen.Blazor
+@using TraditionalEats.WebApp.Services
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
 
 <PageTitle>Profile - Kram</PageTitle>
 
 <RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 100vw; box-sizing: border-box;" Class="page-container">
     <RadzenText TextStyle="TextStyle.H1">My Profile</RadzenText>
-    
-    <RadzenCard>
-        <RadzenText TextStyle="TextStyle.Body1">Profile settings will be displayed here.</RadzenText>
-    </RadzenCard>
+
+    @if (!isAuthenticated)
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem" Style="align-items: center; padding: 2rem;">
+                <RadzenText TextStyle="TextStyle.Body1">Please sign in to view your profile.</RadzenText>
+                <RadzenButton Text="Sign In" Icon="login" Click="@(() => NavigationManager.NavigateTo("/login"))" Variant="Variant.Filled" />
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.Body1">Profile settings will be displayed here.</RadzenText>
+
+                @* Become a Vendor - only for regular users, not vendor, not admin, not pending *@
+                @if (!isVendor && !isAdmin)
+                {
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.H4">Business</RadzenText>
+                        @if (vendorRequestPending)
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                <RadzenIcon Icon="schedule" Style="color: var(--rz-primary);" />
+                                <RadzenText TextStyle="TextStyle.Body1" Style="font-style: italic; color: var(--rz-text-secondary-color);">
+                                    Vendor approval pending
+                                </RadzenText>
+                            </RadzenStack>
+                        }
+                        else
+                        {
+                            <RadzenButton Text="Become a Vendor" Icon="storefront"
+                                Click="@HandleBecomeVendor" IsLoading="@submittingVendorRequest"
+                                Variant="Variant.Outlined" />
+                        }
+                    </RadzenStack>
+                }
+
+                @if (isVendor || isAdmin)
+                {
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.H4">Business</RadzenText>
+                        @if (isVendor)
+                        {
+                            <RadzenButton Text="Vendor Dashboard" Icon="restaurant"
+                                Click="@(() => NavigationManager.NavigateTo("/vendor"))"
+                                Variant="Variant.Outlined" />
+                        }
+                        @if (isAdmin)
+                        {
+                            <RadzenButton Text="Admin Dashboard" Icon="shield"
+                                Click="@(() => NavigationManager.NavigateTo("/admin"))"
+                                Variant="Variant.Outlined" Style="border-color: #d32f2f; color: #d32f2f;" />
+                        }
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        </RadzenCard>
+    }
 </RadzenStack>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isVendor = false;
+    private bool isAdmin = false;
+    private bool vendorRequestPending = false;
+    private bool submittingVendorRequest = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isVendor = await AuthService.IsVendorAsync();
+            isAdmin = await AuthService.IsAdminAsync();
+
+            if (!isVendor && !isAdmin)
+            {
+                try
+                {
+                    var response = await Http.GetFromJsonAsync<VendorRequestStatusResponse>("WebBff/auth/vendor-request/status");
+                    vendorRequestPending = response?.HasRequest == true && response?.Status == "Pending";
+                }
+                catch
+                {
+                    vendorRequestPending = false;
+                }
+            }
+        }
+    }
+
+    private async Task HandleBecomeVendor()
+    {
+        if (isVendor || isAdmin || vendorRequestPending) return;
+        try
+        {
+            submittingVendorRequest = true;
+            var response = await Http.PostAsync("WebBff/auth/vendor-request", null);
+            var content = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                vendorRequestPending = true;
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Request Submitted",
+                    Detail = "Your vendor approval request has been submitted.",
+                    Duration = 3000
+                });
+            }
+            else
+            {
+                var err = JsonSerializer.Deserialize<JsonElement>(content);
+                var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "Failed to submit request";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = msg ?? "Failed to submit request",
+                    Duration = 4000
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message ?? "Failed to submit request",
+                Duration = 4000
+            });
+        }
+        finally
+        {
+            submittingVendorRequest = false;
+        }
+    }
+
+    private class VendorRequestStatusResponse
+    {
+        public bool HasRequest { get; set; }
+        public string? Status { get; set; }
+    }
+}

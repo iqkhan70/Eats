@@ -70,6 +70,13 @@ export default function AdminDashboardScreen() {
       color: '#1976d2',
     },
     {
+      icon: 'storefront-outline',
+      label: 'Vendor Approvals',
+      description: 'Approve pending vendor requests',
+      route: '/admin/vendor-approvals',
+      color: '#f97316',
+    },
+    {
       icon: 'document-text-outline',
       label: 'Document Management',
       description: 'View and manage all vendor documents',

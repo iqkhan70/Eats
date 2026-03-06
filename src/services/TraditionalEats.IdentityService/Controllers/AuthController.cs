@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using TraditionalEats.IdentityService.Services;
 
@@ -245,6 +246,94 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Forgot password failed for {Email}", request.Email);
             return StatusCode(500, new { success = false, message = "Unable to process password reset. Please try again later." });
+        }
+    }
+
+    [HttpPost("vendor-request")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> CreateVendorRequest()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var emailClaim = User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue("email")
+            ?? User.FindFirstValue("preferred_username");
+
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { message = "Invalid user" });
+        if (string.IsNullOrEmpty(emailClaim))
+            return BadRequest(new { message = "Email not found in token" });
+
+        try
+        {
+            var result = await _authService.CreateVendorApprovalRequestAsync(userId, emailClaim);
+            if (!result.Success)
+                return BadRequest(new { message = result.Message ?? "Request failed" });
+            return Ok(new { message = "Vendor approval request submitted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Create vendor request failed");
+            return StatusCode(500, new { message = "Failed to submit request" });
+        }
+    }
+
+    [HttpGet("vendor-request/status")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> GetVendorRequestStatus()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { message = "Invalid user" });
+
+        try
+        {
+            var status = await _authService.GetVendorRequestStatusAsync(userId);
+            if (status == null)
+                return Ok(new { hasRequest = false });
+            return Ok(new { hasRequest = true, status = status.Status, requestedAt = status.RequestedAt });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get vendor request status failed");
+            return StatusCode(500, new { message = "Failed to get status" });
+        }
+    }
+
+    [HttpGet("vendor-approvals")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetPendingVendorApprovals()
+    {
+        try
+        {
+            var list = await _authService.GetPendingVendorApprovalsAsync();
+            return Ok(list);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get pending vendor approvals failed");
+            return StatusCode(500, new { message = "Failed to get approvals" });
+        }
+    }
+
+    [HttpPost("vendor-approvals/{requestId:guid}/approve")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> ApproveVendorRequest(Guid requestId)
+    {
+        var adminIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(adminIdClaim) || !Guid.TryParse(adminIdClaim, out var adminId))
+            return Unauthorized(new { message = "Invalid admin" });
+
+        try
+        {
+            var ok = await _authService.ApproveVendorRequestAsync(requestId, adminId);
+            if (!ok)
+                return NotFound(new { message = "Request not found or already resolved" });
+            return Ok(new { message = "Vendor role assigned successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Approve vendor request failed");
+            return StatusCode(500, new { message = "Failed to approve request" });
         }
     }
 

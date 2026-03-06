@@ -29,7 +29,15 @@ public interface IAuthService
     Task<List<string>> GetUserRolesAsync(string email);
     Task<ForgotPasswordResult> ForgotPasswordAsync(string email);
     Task<ResetPasswordResult> ResetPasswordAsync(string email, string token, string newPassword);
+    Task<VendorRequestResult> CreateVendorApprovalRequestAsync(Guid userId, string email);
+    Task<VendorRequestStatus?> GetVendorRequestStatusAsync(Guid userId);
+    Task<List<VendorApprovalDto>> GetPendingVendorApprovalsAsync();
+    Task<bool> ApproveVendorRequestAsync(Guid requestId, Guid adminUserId);
 }
+
+public record VendorRequestResult(bool Success, string? Message);
+public record VendorRequestStatus(string Status, DateTime RequestedAt); // Status: Pending, Approved, Rejected
+public record VendorApprovalDto(Guid Id, Guid UserId, string UserEmail, DateTime RequestedAt);
 
 public record ForgotPasswordResult(bool Success, string Message);
 public record ResetPasswordResult(bool Success, string Message);
@@ -505,6 +513,85 @@ public class AuthService : IAuthService
         }
 
         return user.UserRoles.Select(ur => ur.Role.Name).ToList();
+    }
+
+    public async Task<VendorRequestResult> CreateVendorApprovalRequestAsync(Guid userId, string email)
+    {
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+            return new VendorRequestResult(false, "User not found");
+
+        if (user.UserRoles.Any(ur => ur.Role.Name == "Vendor"))
+            return new VendorRequestResult(false, "User is already a vendor");
+
+        if (user.UserRoles.Any(ur => ur.Role.Name == "Admin"))
+            return new VendorRequestResult(false, "Admins cannot request vendor status");
+
+        var existing = await _context.VendorApprovalRequests
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Status == "Pending");
+
+        if (existing != null)
+            return new VendorRequestResult(false, "Vendor approval request already pending");
+
+        _context.VendorApprovalRequests.Add(new VendorApprovalRequest
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            UserEmail = user.Email,
+            Status = "Pending",
+            RequestedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Vendor approval request created for user {Email}", user.Email);
+        return new VendorRequestResult(true, null);
+    }
+
+    public async Task<VendorRequestStatus?> GetVendorRequestStatusAsync(Guid userId)
+    {
+        var req = await _context.VendorApprovalRequests
+            .Where(r => r.UserId == userId)
+            .OrderByDescending(r => r.RequestedAt)
+            .FirstOrDefaultAsync();
+
+        if (req == null) return null;
+        return new VendorRequestStatus(req.Status, req.RequestedAt);
+    }
+
+    public async Task<List<VendorApprovalDto>> GetPendingVendorApprovalsAsync()
+    {
+        return await _context.VendorApprovalRequests
+            .Where(r => r.Status == "Pending")
+            .OrderBy(r => r.RequestedAt)
+            .Select(r => new VendorApprovalDto(r.Id, r.UserId, r.UserEmail, r.RequestedAt))
+            .ToListAsync();
+    }
+
+    public async Task<bool> ApproveVendorRequestAsync(Guid requestId, Guid adminUserId)
+    {
+        var req = await _context.VendorApprovalRequests
+            .Include(r => r.User)
+            .FirstOrDefaultAsync(r => r.Id == requestId && r.Status == "Pending");
+
+        if (req == null) return false;
+
+        var success = await AssignRoleAsync(req.User.Email, "Vendor");
+        if (!success)
+        {
+            _logger.LogWarning("Failed to assign Vendor role to {Email} when approving request {RequestId}", req.User.Email, requestId);
+            return false;
+        }
+
+        req.Status = "Approved";
+        req.ResolvedAt = DateTime.UtcNow;
+        req.ResolvedByUserId = adminUserId;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Vendor approval request {RequestId} approved for {Email} by admin {AdminId}", requestId, req.User.Email, adminUserId);
+        return true;
     }
 
     public async Task<ForgotPasswordResult> ForgotPasswordAsync(string email)

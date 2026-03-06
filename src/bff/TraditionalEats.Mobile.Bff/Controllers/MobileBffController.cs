@@ -1186,6 +1186,90 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("auth/vendor-request")]
+    [Authorize]
+    public async Task<IActionResult> CreateVendorRequest()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/vendor-request");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Create vendor request failed");
+            return StatusCode(500, new { message = "Failed to submit request" });
+        }
+    }
+
+    [HttpGet("auth/vendor-request/status")]
+    [Authorize]
+    public async Task<IActionResult> GetVendorRequestStatus()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/vendor-request/status");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get vendor request status failed");
+            return StatusCode(500, new { message = "Failed to get status" });
+        }
+    }
+
+    [HttpGet("admin/vendor-approvals")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetPendingVendorApprovals()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/vendor-approvals");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get pending vendor approvals failed");
+            return StatusCode(500, new { message = "Failed to get approvals" });
+        }
+    }
+
+    [HttpPost("admin/vendor-approvals/{requestId:guid}/approve")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> ApproveVendorRequest(Guid requestId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var request = new HttpRequestMessage(HttpMethod.Post, $"/api/auth/vendor-approvals/{requestId}/approve");
+            if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authHeader.ToString());
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Approve vendor request failed");
+            return StatusCode(500, new { message = "Failed to approve request" });
+        }
+    }
+
     [HttpPost("auth/reset-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)

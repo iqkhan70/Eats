@@ -143,6 +143,12 @@
                         <div class="tile-sub">Users, roles, and permissions</div>
                     </button>
 
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/vendor-approvals"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-store"></i></div>
+                        <div class="tile-title">Vendor Approvals</div>
+                        <div class="tile-sub">Approve pending vendor requests</div>
+                    </button>
+
                     <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/documents"))">
                         <div class="tile-icon"><i class="rz-icon rz-icon-description"></i></div>
                         <div class="tile-title">Document Management</div>

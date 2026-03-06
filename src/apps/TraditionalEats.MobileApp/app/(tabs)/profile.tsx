@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authService } from "../../services/auth";
+import { api } from "../../services/api";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -24,6 +25,8 @@ export default function ProfileScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isVendor, setIsVendor] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [vendorRequestPending, setVendorRequestPending] = useState(false);
+  const [submittingVendorRequest, setSubmittingVendorRequest] = useState(false);
 
   // Refresh whenever screen becomes active (after login/logout, switching tabs, etc.)
   useFocusEffect(
@@ -40,8 +43,27 @@ export default function ProfileScreen() {
       setIsAuthenticated(authenticated);
 
       if (authenticated) {
-        setIsVendor(await authService.isVendor());
-        setIsAdmin(await authService.isAdmin());
+        const vendor = await authService.isVendor();
+        const admin = await authService.isAdmin();
+        setIsVendor(vendor);
+        setIsAdmin(admin);
+
+        // Check vendor request status only for regular users (not vendor, not admin)
+        if (!vendor && !admin) {
+          try {
+            const res = await api.get<{ hasRequest?: boolean; status?: string }>(
+              "/MobileBff/auth/vendor-request/status",
+            );
+            const data = res.data as any;
+            setVendorRequestPending(
+              data?.hasRequest === true && data?.status === "Pending",
+            );
+          } catch {
+            setVendorRequestPending(false);
+          }
+        } else {
+          setVendorRequestPending(false);
+        }
 
         // ✅ IMPORTANT: set user email
         let email: string | null = null;
@@ -57,6 +79,7 @@ export default function ProfileScreen() {
       } else {
         setIsVendor(false);
         setIsAdmin(false);
+        setVendorRequestPending(false);
         setUserEmail(null);
 
         // No valid session: redirect directly to sign-in
@@ -70,6 +93,7 @@ export default function ProfileScreen() {
       setIsAuthenticated(false);
       setIsVendor(false);
       setIsAdmin(false);
+      setVendorRequestPending(false);
       setUserEmail(null);
       if (!hasRedirectedRef.current) {
         hasRedirectedRef.current = true;
@@ -97,6 +121,22 @@ export default function ProfileScreen() {
       return;
     }
     action();
+  };
+
+  const handleBecomeVendor = async () => {
+    if (!isAuthenticated || isVendor || isAdmin || vendorRequestPending) return;
+    try {
+      setSubmittingVendorRequest(true);
+      await api.post("/MobileBff/auth/vendor-request");
+      setVendorRequestPending(true);
+    } catch (e: any) {
+      Alert.alert(
+        "Error",
+        e?.response?.data?.message ?? "Failed to submit request. Please try again.",
+      );
+    } finally {
+      setSubmittingVendorRequest(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -177,6 +217,37 @@ export default function ProfileScreen() {
         </LinearGradient>
 
         <>
+          {/* Become a Vendor - only for regular users, not vendor, not admin, not pending */}
+          {!isVendor && !isAdmin && (
+            <View style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>Business</Text>
+              {vendorRequestPending ? (
+                <View style={styles.pendingStatusRow}>
+                  <Ionicons name="time-outline" size={24} color="#f97316" />
+                  <Text style={styles.pendingStatusText}>
+                    Vendor approval pending
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => requireAuth(handleBecomeVendor)}
+                  disabled={submittingVendorRequest}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="storefront-outline" size={24} color="#f97316" />
+                    <Text style={styles.menuItemLabel}>Become a Vendor</Text>
+                  </View>
+                  {submittingVendorRequest ? (
+                    <ActivityIndicator size="small" color="#f97316" />
+                  ) : (
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {(isVendor || isAdmin) && (
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Business</Text>
@@ -314,4 +385,18 @@ const styles = StyleSheet.create({
     borderColor: "#e0e0e0",
   },
   logoutButtonText: { fontSize: 16, fontWeight: "600", color: "#d32f2f" },
+
+  pendingStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pendingStatusText: {
+    fontSize: 16,
+    color: "#666",
+    marginLeft: 16,
+    fontStyle: "italic",
+  },
 });

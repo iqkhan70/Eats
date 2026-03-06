@@ -1,0 +1,159 @@
+@page "/admin/vendor-approvals"
+@using System.Text.Json
+@using Radzen
+@using Radzen.Blazor
+@using TraditionalEats.WebApp.Services
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>Vendor Approvals - Kram</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo("/admin"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">Vendor Approval Queue</RadzenText>
+    </RadzenStack>
+
+    @if (!isAuthenticated || !isAdmin)
+    {
+        <RadzenCard>
+            <RadzenText>Access denied. Admin role required.</RadzenText>
+        </RadzenCard>
+    }
+    else if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (approvals.Count == 0)
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem" Style="align-items: center; padding: 2rem;">
+                <RadzenIcon Icon="check_circle" Style="font-size: 48px; color: var(--rz-success);" />
+                <RadzenText TextStyle="TextStyle.H3">No Pending Approvals</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body1" Style="color: var(--rz-text-secondary-color);">
+                    All vendor requests have been processed.
+                </RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenDataGrid TItem="VendorApprovalDto" Data="@approvals" AllowPaging="true" PageSize="10"
+                AllowSorting="true" Style="width: 100%;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="VendorApprovalDto" Property="UserEmail" Title="Email" Width="280px" />
+                    <RadzenDataGridColumn TItem="VendorApprovalDto" Property="RequestedAt" Title="Requested" Width="180px"
+                        FormatString="{0:MMM dd, yyyy HH:mm}" />
+                    <RadzenDataGridColumn TItem="VendorApprovalDto" Title="Actions" Width="120px" Sortable="false" Filterable="false">
+                        <Template Context="item">
+                            <RadzenButton Text="Approve" Icon="check" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                Click="@(() => ApproveRequest(item))" IsLoading="@(approvingId == item.Id)"
+                                Style="background-color: var(--rz-success); color: white;" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private bool isAuthenticated = false;
+    private bool isAdmin = false;
+    private bool loading = true;
+    private Guid? approvingId = null;
+    private List<VendorApprovalDto> approvals = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            isAdmin = await AuthService.IsAdminAsync();
+            if (isAdmin)
+            {
+                await LoadApprovals();
+            }
+        }
+        loading = false;
+    }
+
+    private async Task LoadApprovals()
+    {
+        try
+        {
+            var list = await Http.GetFromJsonAsync<List<VendorApprovalDto>>("WebBff/admin/vendor-approvals");
+            approvals = list ?? new List<VendorApprovalDto>();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message ?? "Failed to load approvals",
+                Duration = 4000
+            });
+            approvals = new List<VendorApprovalDto>();
+        }
+    }
+
+    private async Task ApproveRequest(VendorApprovalDto item)
+    {
+        try
+        {
+            approvingId = item.Id;
+            var response = await Http.PostAsync($"WebBff/admin/vendor-approvals/{item.Id}/approve", null);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Approved",
+                    Detail = $"Vendor role assigned to {item.UserEmail}",
+                    Duration = 3000
+                });
+                await LoadApprovals();
+            }
+            else
+            {
+                var err = JsonSerializer.Deserialize<JsonElement>(content);
+                var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "Failed to approve";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = msg ?? "Failed to approve",
+                    Duration = 4000
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message ?? "Failed to approve",
+                Duration = 4000
+            });
+        }
+        finally
+        {
+            approvingId = null;
+        }
+    }
+
+    private class VendorApprovalDto
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public string UserEmail { get; set; } = "";
+        public DateTime RequestedAt { get; set; }
+    }
+}

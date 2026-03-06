@@ -2032,6 +2032,82 @@ public class WebBffController : ControllerBase
         }
     }
 
+    [HttpPost("auth/vendor-request")]
+    [Authorize]
+    public async Task<IActionResult> CreateVendorRequest()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync("/api/auth/vendor-request", null);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Create vendor request failed");
+            return StatusCode(500, new { message = "Failed to submit request" });
+        }
+    }
+
+    [HttpGet("auth/vendor-request/status")]
+    [Authorize]
+    public async Task<IActionResult> GetVendorRequestStatus()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/auth/vendor-request/status");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get vendor request status failed");
+            return StatusCode(500, new { message = "Failed to get status" });
+        }
+    }
+
+    [HttpGet("admin/vendor-approvals")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetPendingVendorApprovals()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/auth/vendor-approvals");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get pending vendor approvals failed");
+            return StatusCode(500, new { message = "Failed to get approvals" });
+        }
+    }
+
+    [HttpPost("admin/vendor-approvals/{requestId:guid}/approve")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> ApproveVendorRequest(Guid requestId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsync($"/api/auth/vendor-approvals/{requestId}/approve", null);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Approve vendor request failed");
+            return StatusCode(500, new { message = "Failed to approve request" });
+        }
+    }
+
     // ----------------------------
     // Vendor Orders passthrough (keep as-is)
     // ----------------------------

@@ -15,6 +15,7 @@ public class IdentityDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<MfaSecret> MfaSecrets { get; set; }
     public DbSet<LoginAttempt> LoginAttempts { get; set; }
+    public DbSet<VendorApprovalRequest> VendorApprovalRequests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,6 +69,17 @@ public class IdentityDbContext : DbContext
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.IpAddress);
             entity.HasIndex(e => e.AttemptedAt);
+        });
+
+        modelBuilder.Entity<VendorApprovalRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.RequestedAt);
+            entity.Property(e => e.UserEmail).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId);
         });
     }
 }
