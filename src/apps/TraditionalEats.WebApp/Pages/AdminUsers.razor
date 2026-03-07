@@ -41,6 +41,10 @@
                     
                     @if (currentUserRoles.Any())
                     {
+                        @if (currentUserRoles.Count == 1)
+                        {
+                            <RadzenText Style="color: var(--rz-text-secondary-color); font-style: italic; margin-bottom: 0.5rem;">User must have at least one role. Cannot revoke the last role.</RadzenText>
+                        }
                         <RadzenStack Gap="0.5rem">
                             @foreach (var role in currentUserRoles)
                             {
@@ -48,7 +52,8 @@
                                     <RadzenBadge Text="@role" Style="background-color: var(--rz-primary); color: white;" />
                                     <RadzenButton Text="Revoke" Icon="close" Variant="Variant.Flat" Size="ButtonSize.Small" 
                                                  Click="@(() => RevokeRole(role))" 
-                                                 IsLoading="@(revokingRole == role)" />
+                                                 IsLoading="@(revokingRole == role)" 
+                                                 Disabled="@(currentUserRoles!.Count == 1)" />
                                 </RadzenStack>
                             }
                         </RadzenStack>

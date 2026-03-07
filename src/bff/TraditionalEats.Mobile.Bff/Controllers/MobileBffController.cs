@@ -1270,6 +1270,63 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpGet("admin/users/{email}/roles")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetUserRoles(string email)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync($"/api/auth/user-roles/{Uri.EscapeDataString(email)}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get user roles failed");
+            return StatusCode(500, new { message = "Failed to get user roles" });
+        }
+    }
+
+    [HttpPost("admin/users/assign-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AssignUserRole([FromBody] AssignRoleRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsJsonAsync("/api/auth/assign-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Assign role failed");
+            return StatusCode(500, new { message = "Failed to assign role" });
+        }
+    }
+
+    [HttpPost("admin/users/revoke-role")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RevokeUserRole([FromBody] RevokeRoleRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsJsonAsync("/api/auth/revoke-role", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Revoke role failed");
+            return StatusCode(500, new { message = "Failed to revoke role" });
+        }
+    }
+
     [HttpPost("auth/reset-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
@@ -2833,4 +2890,6 @@ public record CreateReviewDto(int Rating, string? Comment, List<string>? Tags);
 public record UpdateReviewDto(int? Rating, string? Comment, List<string>? Tags);
 public record AddResponseRequest(string Response);
 public record UpdateDocumentStatusRequest(bool IsActive);
+public record AssignRoleRequest(string Email, string Role);
+public record RevokeRoleRequest(string Email, string Role);
 public record CustomerInfoDto(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
