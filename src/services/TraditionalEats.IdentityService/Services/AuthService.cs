@@ -24,6 +24,7 @@ public interface IAuthService
     Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken);
     Task<bool> RegisterAsync(string firstName, string lastName, string? displayName, string email, string phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
+    Task<bool> UserExistsAsync(string email);
     Task<bool> AssignRoleAsync(string email, string role);
     Task<bool> RemoveRoleAsync(string email, string role);
     Task<List<string>> GetUserRolesAsync(string email);
@@ -426,6 +427,12 @@ public class AuthService : IAuthService
             tokenEntity.RevokedReason = "User logout";
             await _context.SaveChangesAsync();
         }
+    }
+
+    public async Task<bool> UserExistsAsync(string email)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        return await _context.Users.AnyAsync(u => u.Email == normalizedEmail);
     }
 
     public async Task<bool> AssignRoleAsync(string email, string role)

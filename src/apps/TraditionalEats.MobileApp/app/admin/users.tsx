@@ -90,6 +90,8 @@ export default function AdminUsersScreen() {
         Alert.alert("Session Expired", "Please log in again.");
         await authService.logout();
         router.replace("/login");
+      } else if (status === 404) {
+        Alert.alert("User Not Found", "No user exists with this email address.");
       } else {
         Alert.alert("Error", msg);
       }
@@ -117,12 +119,13 @@ export default function AdminUsersScreen() {
       setSelectedRole(null);
       await loadUserRoles();
     } catch (e: any) {
+      const status = e?.response?.status;
       const msg =
         e?.response?.data?.message ??
         e?.message ??
         "Failed to assign role";
       setErrorMessage(msg);
-      Alert.alert("Error", msg);
+      Alert.alert(status === 404 ? "User Not Found" : "Error", msg);
     } finally {
       setAssigningRole(false);
     }
@@ -152,12 +155,13 @@ export default function AdminUsersScreen() {
               Alert.alert("Success", `Role '${role}' revoked from ${email}`);
               await loadUserRoles();
             } catch (e: any) {
+              const status = e?.response?.status;
               const msg =
                 e?.response?.data?.message ??
                 e?.message ??
                 "Failed to revoke role";
               setErrorMessage(msg);
-              Alert.alert("Error", msg);
+              Alert.alert(status === 404 ? "User Not Found" : "Error", msg);
             } finally {
               setRevokingRole(null);
             }

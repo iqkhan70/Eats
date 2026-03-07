@@ -2,6 +2,7 @@
 @using TraditionalEats.WebApp.Services
 @using Radzen
 @using Radzen.Blazor
+@using System.Net
 @inject AuthService AuthService
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
@@ -129,10 +130,27 @@
             errorMessage = "";
             currentUserRoles = null;
 
-            var response = await Http.GetFromJsonAsync<UserRolesResponse>($"WebBff/admin/users/{Uri.EscapeDataString(userEmail)}/roles");
-            if (response != null)
+            var response = await Http.GetAsync($"WebBff/admin/users/{Uri.EscapeDataString(userEmail)}/roles");
+            if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                currentUserRoles = response.Roles ?? new List<string>();
+                errorMessage = "User not found";
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Warning, 
+                    Summary = "User Not Found", 
+                    Detail = "No user exists with this email address." 
+                });
+                return;
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = "Failed to load user roles";
+                return;
+            }
+            var data = await response.Content.ReadFromJsonAsync<UserRolesResponse>();
+            if (data != null)
+            {
+                currentUserRoles = data.Roles ?? new List<string>();
                 NotificationService.Notify(new NotificationMessage 
                 { 
                     Severity = NotificationSeverity.Success, 
@@ -203,11 +221,11 @@
             }
             else
             {
-                errorMessage = content;
+                errorMessage = ParseErrorMessage(content);
                 NotificationService.Notify(new NotificationMessage 
                 { 
                     Severity = NotificationSeverity.Error, 
-                    Summary = "Error", 
+                    Summary = response.StatusCode == HttpStatusCode.NotFound ? "User Not Found" : "Error", 
                     Detail = errorMessage 
                 });
             }
@@ -264,11 +282,11 @@
             }
             else
             {
-                errorMessage = content;
+                errorMessage = ParseErrorMessage(content);
                 NotificationService.Notify(new NotificationMessage 
                 { 
                     Severity = NotificationSeverity.Error, 
-                    Summary = "Error", 
+                    Summary = response.StatusCode == HttpStatusCode.NotFound ? "User Not Found" : "Error", 
                     Detail = errorMessage 
                 });
             }
@@ -293,6 +311,19 @@
         {
             revokingRole = null;
         }
+    }
+
+    private static string ParseErrorMessage(string jsonContent)
+    {
+        if (string.IsNullOrWhiteSpace(jsonContent)) return "An error occurred";
+        try
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
+            if (doc.RootElement.TryGetProperty("message", out var msg))
+                return msg.GetString() ?? jsonContent;
+        }
+        catch { }
+        return jsonContent;
     }
 
     private class UserRolesResponse

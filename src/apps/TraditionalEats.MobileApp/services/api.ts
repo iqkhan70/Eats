@@ -88,6 +88,10 @@ class ApiClient {
           const isRestaurant404 =
             url.includes('/restaurants/') && method === 'GET' && status === 404;
 
+          // Don't log 404 for admin users (roles, assign, revoke) - "User not found" is expected; UI shows friendly message
+          const isAdminUserNotFound =
+            url.includes('/admin/users/') && status === 404;
+
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
           // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
@@ -100,7 +104,8 @@ class ApiClient {
             (isAuthEndpoint && isUnauthorized) ||
             isStripeRefreshOnboardingStatus ||
             isOrderDetail403 ||
-            isRestaurant404;
+            isRestaurant404 ||
+            isAdminUserNotFound;
 
           if (!shouldSuppress) {
             console.error('❌ API Error:', {

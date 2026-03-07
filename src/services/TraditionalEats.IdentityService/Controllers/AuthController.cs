@@ -176,11 +176,14 @@ public class AuthController : ControllerBase
     {
         try
         {
+            if (!await _authService.UserExistsAsync(request.Email))
+                return NotFound(new { message = "User not found" });
+
             var success = await _authService.AssignRoleAsync(request.Email, request.Role);
 
             if (!success)
             {
-                return BadRequest(new { message = "User not found or role assignment failed" });
+                return BadRequest(new { message = "Role assignment failed" });
             }
 
             return Ok(new { message = $"Role '{request.Role}' assigned successfully to {request.Email}" });
@@ -198,11 +201,14 @@ public class AuthController : ControllerBase
     {
         try
         {
+            if (!await _authService.UserExistsAsync(request.Email))
+                return NotFound(new { message = "User not found" });
+
             var success = await _authService.RemoveRoleAsync(request.Email, request.Role);
 
             if (!success)
             {
-                return BadRequest(new { message = "User not found, role revocation failed, or cannot remove last role" });
+                return BadRequest(new { message = "Cannot remove last role. User must have at least one role." });
             }
 
             return Ok(new { message = $"Role '{request.Role}' revoked successfully from {request.Email}" });
@@ -220,6 +226,9 @@ public class AuthController : ControllerBase
     {
         try
         {
+            if (!await _authService.UserExistsAsync(email))
+                return NotFound(new { message = "User not found" });
+
             var roles = await _authService.GetUserRolesAsync(email);
             return Ok(new { email, roles });
         }
