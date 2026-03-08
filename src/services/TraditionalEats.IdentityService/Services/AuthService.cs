@@ -13,6 +13,7 @@ using TraditionalEats.BuildingBlocks.Redis;
 using TraditionalEats.BuildingBlocks.Encryption;
 using TraditionalEats.IdentityService.Data;
 using TraditionalEats.IdentityService.Entities;
+using TraditionalEats.IdentityService.Exceptions;
 
 namespace TraditionalEats.IdentityService.Services;
 
@@ -240,14 +241,35 @@ public class AuthService : IAuthService
         var token = handler.ReadJwtToken(idToken);
         var sub = token.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
         var tokenEmail = token.Claims.FirstOrDefault(c => c.Type == "email")?.Value ?? email;
+        User user;
+        string userEmail;
+
         if (string.IsNullOrEmpty(tokenEmail) && string.IsNullOrEmpty(email))
         {
-            await RecordLoginAttemptAsync(null, null, ipAddress, false, "Apple token missing email");
-            throw new UnauthorizedAccessException("Apple token does not contain email. Sign in with Apple requires email.");
+            // Apple omits email on subsequent sign-ins. Look up by sub (stored on first sign-in).
+            if (string.IsNullOrEmpty(sub))
+            {
+                await RecordLoginAttemptAsync(null, null, ipAddress, false, "Apple token missing email and sub");
+                throw new UnauthorizedAccessException("Apple token does not contain email. Sign in with Apple requires email on first sign-in.");
+            }
+            var extLogin = await _context.UserExternalLogins
+                .Include(x => x.User)
+                .ThenInclude(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(x => x.Provider == "Apple" && x.ProviderUserId == sub);
+            if (extLogin == null)
+            {
+                await RecordLoginAttemptAsync(null, null, ipAddress, false, "Apple token missing email; no existing user for sub");
+                throw new AppleEmailRequiredException("Enter the email for your account to link Apple Sign In.");
+            }
+            user = extLogin.User;
+            userEmail = user.Email;
         }
-
-        var userEmail = tokenEmail ?? email!;
-        var user = await GetOrCreateExternalUserAsync(userEmail, "Apple", sub ?? userEmail ?? "apple", fullName, null);
+        else
+        {
+            userEmail = tokenEmail ?? email!;
+            user = await GetOrCreateExternalUserAsync(userEmail, "Apple", sub ?? userEmail ?? "apple", fullName, null);
+        }
         user.LastLoginAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         await RecordLoginAttemptAsync(user.Id, userEmail, ipAddress, true, null);
@@ -267,6 +289,8 @@ public class AuthService : IAuthService
 
         if (user != null)
         {
+            // Ensure provider link exists (for Apple sub lookup on subsequent sign-ins)
+            await EnsureExternalLoginAsync(user.Id, provider, providerUserId);
             // Ensure existing social-login users have a Customer record (handles past sync failures)
             var parts = fullName?.Split(' ', 2) ?? Array.Empty<string>();
             var fn = parts.Length > 0 ? parts[0] : "User";
@@ -298,6 +322,7 @@ public class AuthService : IAuthService
             _context.Roles.Add(roleEntity);
         }
         _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleEntity.Id });
+        _context.UserExternalLogins.Add(new UserExternalLogin { Id = Guid.NewGuid(), UserId = user.Id, Provider = provider, ProviderUserId = providerUserId });
         await _context.SaveChangesAsync();
 
         await EnsureCustomerExistsAsync(user, email, firstName, lastName, phoneNumber ?? "");
@@ -306,6 +331,16 @@ public class AuthService : IAuthService
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
             .FirstAsync(u => u.Id == user.Id));
+    }
+
+    private async Task EnsureExternalLoginAsync(Guid userId, string provider, string providerUserId)
+    {
+        var exists = await _context.UserExternalLogins.AnyAsync(x => x.UserId == userId && x.Provider == provider);
+        if (!exists)
+        {
+            _context.UserExternalLogins.Add(new UserExternalLogin { Id = Guid.NewGuid(), UserId = userId, Provider = provider, ProviderUserId = providerUserId });
+            await _context.SaveChangesAsync();
+        }
     }
 
     public async Task<(string AccessToken, string RefreshToken)> RefreshTokenAsync(string refreshToken)

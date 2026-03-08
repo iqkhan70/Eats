@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -66,6 +67,9 @@ export default function LoginScreen() {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
+  const [showAppleEmailModal, setShowAppleEmailModal] = useState(false);
+  const [appleEmailRecovery, setAppleEmailRecovery] = useState<{ idToken: string; fullName?: string } | null>(null);
+  const [appleRecoveryEmail, setAppleRecoveryEmail] = useState("");
 
   const googleWebClientId = (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "").trim();
   const googleIosClientId = (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || "").trim();
@@ -133,19 +137,22 @@ export default function LoginScreen() {
 
   const handleContinueWithApple = async () => {
     if (Platform.OS !== "ios") return;
+    let identityToken: string | undefined;
+    let fullName: string | undefined;
     try {
       setSocialLoading(true);
+      setAppleEmailRecovery(null);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      const identityToken = credential.identityToken;
+      identityToken = credential.identityToken;
       if (!identityToken) {
         throw new Error("No identity token received from Apple");
       }
-      const fullName = credential.fullName
+      fullName = credential.fullName
         ? [credential.fullName.givenName, credential.fullName.familyName]
             .filter(Boolean)
             .join(" ")
@@ -159,13 +166,42 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     } catch (error: any) {
       if (error?.code === "ERR_REQUEST_CANCELED") {
-        // User cancelled, no need to show error
+        return;
+      }
+      if (error?.code === "APPLE_EMAIL_REQUIRED" && identityToken) {
+        setAppleEmailRecovery({ idToken: identityToken, fullName });
+        setShowAppleEmailModal(true);
+        setAppleRecoveryEmail("");
         return;
       }
       Alert.alert(
         "Sign In Failed",
         error?.message || "Could not sign in with Apple",
       );
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const submitAppleEmailRecovery = async () => {
+    if (!appleEmailRecovery?.idToken || !appleRecoveryEmail.trim()) {
+      Alert.alert("Error", "Please enter your account email");
+      return;
+    }
+    try {
+      setSocialLoading(true);
+      await authService.loginWithExternalToken(
+        "apple",
+        appleEmailRecovery.idToken,
+        appleRecoveryEmail.trim(),
+        appleEmailRecovery.fullName,
+      );
+      setShowAppleEmailModal(false);
+      setAppleEmailRecovery(null);
+      setAppleRecoveryEmail("");
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      Alert.alert("Sign In Failed", error?.message || "Could not link account");
     } finally {
       setSocialLoading(false);
     }
@@ -623,6 +659,55 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showAppleEmailModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAppleEmailModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Link Apple Sign In</Text>
+            <Text style={styles.modalSubtitle}>
+              Enter the email for your account to link Apple Sign In.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Email"
+              placeholderTextColor={TEXT_SECONDARY}
+              value={appleRecoveryEmail}
+              onChangeText={setAppleRecoveryEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalButtonCancel}
+                onPress={() => {
+                  setShowAppleEmailModal(false);
+                  setAppleEmailRecovery(null);
+                  setAppleRecoveryEmail("");
+                }}
+              >
+                <Text style={styles.modalButtonCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButtonSubmit, socialLoading && styles.loginButtonDisabled]}
+                onPress={submitAppleEmailRecovery}
+                disabled={socialLoading}
+              >
+                {socialLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.modalButtonSubmitText}>Continue</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -773,6 +858,69 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   loginButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: BG_WHITE,
+    borderRadius: 12,
+    padding: 24,
+    width: "100%",
+    maxWidth: 340,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: TEXT_PRIMARY,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: TEXT_SECONDARY,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    height: 48,
+    fontSize: 16,
+    color: TEXT_PRIMARY,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "flex-end",
+  },
+  modalButtonCancel: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  modalButtonCancelText: {
+    fontSize: 16,
+    color: TEXT_SECONDARY,
+    fontWeight: "500",
+  },
+  modalButtonSubmit: {
+    backgroundColor: "#f97316",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: "center",
+  },
+  modalButtonSubmitText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",

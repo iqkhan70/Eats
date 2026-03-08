@@ -66,8 +66,11 @@ class AuthService {
       }
       throw new Error('Invalid response from server');
     } catch (error: any) {
-      const msg = error.response?.data?.message ?? error.response?.data?.error ?? error.message;
-      throw new Error(msg);
+      const data = error.response?.data;
+      const msg = data?.message ?? data?.error ?? error.message;
+      const err = new Error(msg) as Error & { code?: string };
+      if (data?.code === 'APPLE_EMAIL_REQUIRED') err.code = 'APPLE_EMAIL_REQUIRED';
+      throw err;
     }
   }
 

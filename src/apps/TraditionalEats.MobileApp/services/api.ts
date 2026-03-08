@@ -92,6 +92,10 @@ class ApiClient {
           const isAdminUserNotFound =
             url.includes('/admin/users/') && status === 404;
 
+          // Don't log 400 for Apple auth when email is required - expected flow; UI shows recovery modal
+          const isAppleEmailRequired =
+            url.includes('/auth/apple') && status === 400 && error.response?.data?.code === 'APPLE_EMAIL_REQUIRED';
+
           // Only suppress logging for:
           // 1. GET cart requests that return 404/204 (empty cart is valid)
           // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
@@ -105,7 +109,8 @@ class ApiClient {
             isStripeRefreshOnboardingStatus ||
             isOrderDetail403 ||
             isRestaurant404 ||
-            isAdminUserNotFound;
+            isAdminUserNotFound ||
+            isAppleEmailRequired;
 
           if (!shouldSuppress) {
             console.error('❌ API Error:', {

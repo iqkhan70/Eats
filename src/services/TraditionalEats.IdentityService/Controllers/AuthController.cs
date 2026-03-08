@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using TraditionalEats.IdentityService.Exceptions;
 using TraditionalEats.IdentityService.Services;
 
 namespace TraditionalEats.IdentityService.Controllers;
@@ -116,6 +117,10 @@ public class AuthController : ControllerBase
             var (accessToken, refreshToken) = await _authService.LoginWithAppleAsync(
                 request.IdToken, request.Email, request.FullName, ipAddress);
             return Ok(new { accessToken, refreshToken, expiresIn = GetExpiresInSeconds() });
+        }
+        catch (AppleEmailRequiredException ex)
+        {
+            return BadRequest(new { code = "APPLE_EMAIL_REQUIRED", message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {

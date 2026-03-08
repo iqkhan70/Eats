@@ -1110,7 +1110,7 @@ public class MobileBffController : ControllerBase
                 await TryMergeGuestCartAsync(content);
                 return JsonString(content);
             }
-            return StatusCode((int)response.StatusCode, content);
+            return new ContentResult { StatusCode = (int)response.StatusCode, Content = content, ContentType = "application/json" };
         }
         catch (Exception ex)
         {
