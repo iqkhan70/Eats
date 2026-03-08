@@ -40,6 +40,11 @@
     }
     else
     {
+        <RadzenAlert Severity="AlertSeverity.Info" Style="margin-bottom: 1rem;" ShowIcon="true">
+            <strong>Note:</strong> Users who signed up via Apple or Google may have incomplete profile information. 
+            Approved vendors will need to update their personal info (name, phone, address) when setting up their vendor profile.
+        </RadzenAlert>
+
         <RadzenCard>
             <RadzenDataGrid TItem="VendorApprovalDto" Data="@approvals" AllowPaging="true" PageSize="10"
                 AllowSorting="true" Style="width: 100%;">

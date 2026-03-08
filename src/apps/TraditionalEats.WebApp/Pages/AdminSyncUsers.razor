@@ -1,0 +1,132 @@
+@page "/admin/sync-users"
+@using TraditionalEats.WebApp.Services
+@using Radzen
+@using Radzen.Blazor
+@inject AuthService AuthService
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>Sync Users to Customers - Admin - Kram</PageTitle>
+
+<RadzenStack Gap="1.25rem" Style="padding: 1rem; max-width: 900px; margin: 0 auto;">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
+        <RadzenButton Icon="arrow_back" ButtonStyle="ButtonStyle.Light" Click="@(() => NavigationManager.NavigateTo("/admin"))" />
+        <RadzenText TextStyle="TextStyle.H4">Sync Users to Customers</RadzenText>
+    </RadzenStack>
+
+    <RadzenAlert Severity="AlertSeverity.Info" AllowClose="false">
+        Creates Customer records for Identity users who don't have one. Use this to fix sync gaps from social login (Apple/Google) or other issues.
+    </RadzenAlert>
+
+    @if (!isAdmin)
+    {
+        <RadzenAlert Severity="AlertSeverity.Error">Admin access required.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="0.75rem">
+                <RadzenText TextStyle="TextStyle.H6">Sync Job</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Check all Identity users and create missing Customer records in CustomerService:</RadzenText>
+                <RadzenButton Text="Run Sync" Icon="sync" ButtonStyle="ButtonStyle.Primary"
+                    Click="@RunSync" Disabled="@syncRunning" />
+            </RadzenStack>
+        </RadzenCard>
+
+        @if (syncRunning)
+        {
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+        }
+
+        @if (lastResult != null)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="0.5rem">
+                    <RadzenText TextStyle="TextStyle.H6">
+                        <i class="rz-icon rz-icon-check_circle" style="color: var(--rz-success); margin-right: 0.25rem;"></i>
+                        Last run result
+                    </RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" Style="white-space: pre-wrap;">@lastResult</RadzenText>
+                    @if (lastErrors != null && lastErrors.Count > 0)
+                    {
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-danger); margin-top: 0.5rem;">Errors:</RadzenText>
+                        <RadzenStack Gap="0.25rem">
+                            @foreach (var err in lastErrors)
+                            {
+                                <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-danger); font-size: 0.85rem;">• @err</RadzenText>
+                            }
+                        </RadzenStack>
+                    }
+                </RadzenStack>
+            </RadzenCard>
+        }
+    }
+</RadzenStack>
+
+@code {
+    private bool isAdmin = false;
+    private bool syncRunning = false;
+    private string? lastResult;
+    private List<string>? lastErrors;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAdmin = await AuthService.IsAdminAsync();
+    }
+
+    private async Task RunSync()
+    {
+        syncRunning = true;
+        lastResult = null;
+        lastErrors = null;
+        try
+        {
+            var resp = await Http.PostAsync("WebBff/admin/sync-users-to-customers", null);
+            var content = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var result = System.Text.Json.JsonSerializer.Deserialize<SyncResult>(content, options);
+                if (result != null)
+                {
+                    lastResult = $"Checked {result.TotalUsers} users:\n" +
+                        $"• Created: {result.Created}\n" +
+                        $"• Already existed: {result.AlreadyExisted}\n" +
+                        $"• Failed: {result.Failed}";
+                    if (result.Errors != null && result.Errors.Count > 0)
+                        lastErrors = result.Errors;
+                }
+                else
+                {
+                    lastResult = "Sync completed. (Response could not be parsed)";
+                }
+                NotificationService.Notify(NotificationSeverity.Success, "Sync Complete", "Sync job finished.");
+            }
+            else
+            {
+                lastResult = $"Sync failed (HTTP {(int)resp.StatusCode}):\n{content}";
+                NotificationService.Notify(NotificationSeverity.Error, "Sync Failed", content ?? "Unknown error");
+            }
+        }
+        catch (Exception ex)
+        {
+            lastResult = $"Sync error: {ex.Message}";
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message ?? "Failed to sync.");
+        }
+        finally
+        {
+            syncRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    private class SyncResult
+    {
+        public int TotalUsers { get; set; }
+        public int Created { get; set; }
+        public int AlreadyExisted { get; set; }
+        public int Failed { get; set; }
+        public List<string>? Errors { get; set; }
+    }
+}

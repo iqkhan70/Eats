@@ -239,6 +239,22 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("admin/sync-users-to-customers")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SyncUsersToCustomers()
+    {
+        try
+        {
+            var result = await _authService.SyncUsersToCustomersAsync();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sync users to customers failed");
+            return StatusCode(500, new { message = "Sync failed" });
+        }
+    }
+
     [HttpPost("forgot-password")]
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)

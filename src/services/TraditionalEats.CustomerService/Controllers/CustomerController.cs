@@ -82,19 +82,53 @@ public class CustomerController : ControllerBase
         try
         {
             var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var customer = await _customerService.GetCustomerByUserIdAsync(userId);
+            var info = await _customerService.GetCustomerInfoByUserIdAsync(userId);
 
-            if (customer == null)
+            if (info == null)
             {
                 return NotFound(new { message = "Customer not found" });
             }
 
-            return Ok(customer);
+            var addresses = await _customerService.GetAddressesAsync(info.CustomerId);
+            return Ok(new CustomerProfileDto(
+                info.CustomerId,
+                info.UserId,
+                info.FirstName,
+                info.LastName,
+                info.Email,
+                info.PhoneNumber,
+                addresses));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get customer");
             return StatusCode(500, new { message = "Failed to get customer" });
+        }
+    }
+
+    [HttpPatch("me")]
+    public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileRequest request)
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var updated = await _customerService.UpdateCustomerPIIAsync(
+                userId,
+                request.FirstName,
+                request.LastName,
+                request.PhoneNumber);
+
+            if (!updated)
+            {
+                return NotFound(new { message = "Customer not found" });
+            }
+
+            return Ok(new { message = "Profile updated" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update profile");
+            return StatusCode(500, new { message = "Failed to update profile" });
         }
     }
 
@@ -117,6 +151,50 @@ public class CustomerController : ControllerBase
         {
             _logger.LogError(ex, "Failed to get customer by user id");
             return StatusCode(500, new { message = "Failed to get customer" });
+        }
+    }
+
+    [HttpPut("addresses/{addressId:guid}")]
+    public async Task<IActionResult> UpdateAddress(Guid addressId, [FromBody] AddressDto request)
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var updated = await _customerService.UpdateAddressAsync(userId, addressId, request);
+
+            if (!updated)
+            {
+                return NotFound(new { message = "Address not found" });
+            }
+
+            return Ok(new { message = "Address updated" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update address");
+            return StatusCode(500, new { message = "Failed to update address" });
+        }
+    }
+
+    [HttpDelete("addresses/{addressId:guid}")]
+    public async Task<IActionResult> DeleteAddress(Guid addressId)
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var deleted = await _customerService.DeleteAddressAsync(userId, addressId);
+
+            if (!deleted)
+            {
+                return NotFound(new { message = "Address not found" });
+            }
+
+            return Ok(new { message = "Address deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete address");
+            return StatusCode(500, new { message = "Failed to delete address" });
         }
     }
 
@@ -169,3 +247,6 @@ public class CustomerController : ControllerBase
 
 public record CreateCustomerRequest(string FirstName, string LastName, string Email, string? PhoneNumber);
 public record CreateCustomerInternalRequest(Guid UserId, string FirstName, string LastName, string Email, string PhoneNumber, string? DisplayName);
+public record CustomerProfileDto(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber, List<AddressDto> Addresses);
+/// <summary>Email is accepted but ignored - it cannot be changed (tied to Identity account).</summary>
+public record UpdateProfileRequest(string FirstName, string LastName, string? PhoneNumber, string? Email = null);

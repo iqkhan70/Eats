@@ -1270,6 +1270,27 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpPost("admin/sync-users-to-customers")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SyncUsersToCustomers()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsync("/api/auth/admin/sync-users-to-customers", null);
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sync users to customers failed");
+            return StatusCode(500, new { message = "Failed to sync" });
+        }
+    }
+
     [HttpGet("admin/users/{email}/roles")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetUserRoles(string email)
@@ -1349,6 +1370,124 @@ public class MobileBffController : ControllerBase
         {
             _logger.LogError(ex, "Error during reset password");
             return StatusCode(500, new { success = false, message = "Failed to process request. Please try again later." });
+        }
+    }
+
+    // ----------------------------
+    // Customer profile (proxies to CustomerService)
+    // ----------------------------
+
+    [HttpGet("customer/me")]
+    [Authorize]
+    public async Task<IActionResult> GetCustomerProfile()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/customer/me");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get customer profile failed");
+            return StatusCode(500, new { message = "Failed to get profile" });
+        }
+    }
+
+    [HttpPatch("customer/me")]
+    [Authorize]
+    public async Task<IActionResult> UpdateCustomerProfile([FromBody] JsonElement body)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.PatchAsJsonAsync("/api/customer/me", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Update customer profile failed");
+            return StatusCode(500, new { message = "Failed to update profile" });
+        }
+    }
+
+    [HttpGet("customer/addresses")]
+    [Authorize]
+    public async Task<IActionResult> GetCustomerAddresses()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/customer/addresses");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get addresses failed");
+            return StatusCode(500, new { message = "Failed to get addresses" });
+        }
+    }
+
+    [HttpPost("customer/addresses")]
+    [Authorize]
+    public async Task<IActionResult> AddCustomerAddress([FromBody] JsonElement body)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsJsonAsync("/api/customer/addresses", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Add address failed");
+            return StatusCode(500, new { message = "Failed to add address" });
+        }
+    }
+
+    [HttpPut("customer/addresses/{addressId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateCustomerAddress(Guid addressId, [FromBody] JsonElement body)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.PutAsJsonAsync($"/api/customer/addresses/{addressId}", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Update address failed");
+            return StatusCode(500, new { message = "Failed to update address" });
+        }
+    }
+
+    [HttpDelete("customer/addresses/{addressId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteCustomerAddress(Guid addressId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.DeleteAsync($"/api/customer/addresses/{addressId}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Delete address failed");
+            return StatusCode(500, new { message = "Failed to delete address" });
         }
     }
 

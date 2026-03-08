@@ -143,6 +143,12 @@
                         <div class="tile-sub">Users, roles, and permissions</div>
                     </button>
 
+                    <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/sync-users"))">
+                        <div class="tile-icon"><i class="rz-icon rz-icon-sync"></i></div>
+                        <div class="tile-title">Sync Users to Customers</div>
+                        <div class="tile-sub">Create missing Customer records for Identity users</div>
+                    </button>
+
                     <button class="admin-tile" @onclick="@(() => NavigationManager.NavigateTo("/admin/vendor-approvals"))">
                         <div class="tile-icon"><i class="rz-icon rz-icon-store"></i></div>
                         <div class="tile-title">Vendor Approvals</div>

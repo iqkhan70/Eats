@@ -26,8 +26,41 @@
     {
         <RadzenCard>
             <RadzenStack Gap="1rem">
-                <RadzenText TextStyle="TextStyle.Body1">Profile settings will be displayed here.</RadzenText>
+                <RadzenText TextStyle="TextStyle.H4">Personal Information</RadzenText>
+                @if (profileLoading)
+                {
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                }
+                else if (profileNotFound)
+                {
+                    <RadzenAlert AllowClose="false" Variant="Variant.Flat" Severity="AlertSeverity.Info">
+                        Your profile has not been set up yet. Users who signed up via Apple or Google may need to complete their profile. Please contact support if you need assistance.
+                    </RadzenAlert>
+                }
+                else
+                {
+                    <RadzenStack Gap="0.75rem">
+                        <RadzenFormField Text="First Name" class="w-100" Style="max-width: 400px;">
+                            <RadzenTextBox @bind-Value="@profileFirstName" Placeholder="First name" Style="width: 100%;" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="Last Name" class="w-100" Style="max-width: 400px;">
+                            <RadzenTextBox @bind-Value="@profileLastName" Placeholder="Last name" Style="width: 100%;" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="Email" class="w-100" Style="max-width: 400px;">
+                            <RadzenTextBox Value="@profileEmail" ReadOnly="true" Style="width: 100%; background: #f0f0f0;" />
+                            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color); font-style: italic;">Email cannot be changed (tied to your account)</RadzenText>
+                        </RadzenFormField>
+                        <RadzenFormField Text="Phone Number (optional)" class="w-100" Style="max-width: 400px;">
+                            <RadzenTextBox @bind-Value="@profilePhoneNumber" Placeholder="Phone number" Style="width: 100%;" />
+                        </RadzenFormField>
+                        <RadzenButton Text="Save Changes" Icon="save" Click="@SaveProfile" IsLoading="@profileSaving" Variant="Variant.Filled" Style="margin-top: 0.5rem; max-width: 200px;" />
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        </RadzenCard>
 
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
                 @* Become a Vendor - only for regular users, not vendor, not admin, not pending *@
                 @if (!isVendor && !isAdmin)
                 {
@@ -81,6 +114,14 @@
     private bool vendorRequestPending = false;
     private bool submittingVendorRequest = false;
 
+    private bool profileLoading = true;
+    private bool profileNotFound = false;
+    private bool profileSaving = false;
+    private string profileFirstName = "";
+    private string profileLastName = "";
+    private string profileEmail = "";
+    private string profilePhoneNumber = "";
+
     protected override async Task OnInitializedAsync()
     {
         isAuthenticated = await AuthService.IsAuthenticatedAsync();
@@ -101,6 +142,78 @@
                     vendorRequestPending = false;
                 }
             }
+
+            await LoadProfile();
+        }
+        else
+        {
+            profileLoading = false;
+        }
+    }
+
+    private async Task LoadProfile()
+    {
+        try
+        {
+            profileLoading = true;
+            profileNotFound = false;
+            var response = await Http.GetAsync("WebBff/customer/me");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                profileNotFound = true;
+                return;
+            }
+            response.EnsureSuccessStatusCode();
+            var dto = await response.Content.ReadFromJsonAsync<CustomerProfileDto>();
+            if (dto != null)
+            {
+                profileFirstName = dto.FirstName ?? "";
+                profileLastName = dto.LastName ?? "";
+                profileEmail = dto.Email ?? "";
+                profilePhoneNumber = dto.PhoneNumber ?? "";
+            }
+        }
+        catch (Exception)
+        {
+            profileNotFound = true;
+        }
+        finally
+        {
+            profileLoading = false;
+        }
+    }
+
+    private async Task SaveProfile()
+    {
+        if (string.IsNullOrWhiteSpace(profileFirstName) || string.IsNullOrWhiteSpace(profileLastName))
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Validation", Detail = "First name and last name are required.", Duration = 4000 });
+            return;
+        }
+        try
+        {
+            profileSaving = true;
+            var payload = new { firstName = profileFirstName.Trim(), lastName = profileLastName.Trim(), phoneNumber = string.IsNullOrWhiteSpace(profilePhoneNumber) ? (string?)null : profilePhoneNumber.Trim() };
+            var response = await Http.PatchAsJsonAsync("WebBff/customer/me", payload);
+            if (response.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Profile saved", Detail = "Your changes have been saved successfully.", Duration = 5000 });
+            }
+            else
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var err = JsonSerializer.Deserialize<JsonElement>(content);
+                var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "Failed to update profile";
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = msg ?? "Failed to update profile", Duration = 4000 });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = ex.Message ?? "Failed to update profile", Duration = 4000 });
+        }
+        finally
+        {
+            profileSaving = false;
         }
     }
 
@@ -156,5 +269,15 @@
     {
         public bool HasRequest { get; set; }
         public string? Status { get; set; }
+    }
+
+    private class CustomerProfileDto
+    {
+        public Guid CustomerId { get; set; }
+        public Guid UserId { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
     }
 }

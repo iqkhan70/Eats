@@ -83,6 +83,13 @@ export default function AdminDashboardScreen() {
       color: '#f97316',
     },
     {
+      icon: 'sync-outline',
+      label: 'Sync Users to Customers',
+      description: 'Create missing Customer records for Identity users',
+      route: '/admin/sync-users',
+      color: '#0d9488',
+    },
+    {
       icon: 'document-text-outline',
       label: 'Document Management',
       description: 'View and manage all vendor documents',

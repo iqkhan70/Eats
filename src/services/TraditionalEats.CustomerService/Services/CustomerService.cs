@@ -12,7 +12,10 @@ public interface ICustomerService
     Task<Guid> CreateCustomerAsync(Guid userId, string firstName, string lastName, string email, string phoneNumber, string? displayName = null);
     Task<Customer?> GetCustomerByUserIdAsync(Guid userId);
     Task<CustomerInfoDto?> GetCustomerInfoByUserIdAsync(Guid userId);
+    Task<bool> UpdateCustomerPIIAsync(Guid userId, string firstName, string lastName, string? phoneNumber);
     Task<Guid> AddAddressAsync(Guid customerId, AddressDto address);
+    Task<bool> UpdateAddressAsync(Guid userId, Guid addressId, AddressDto address);
+    Task<bool> DeleteAddressAsync(Guid userId, Guid addressId);
     Task<List<AddressDto>> GetAddressesAsync(Guid customerId);
 }
 
@@ -123,6 +126,65 @@ public class CustomerService : ICustomerService
         await _context.SaveChangesAsync();
 
         return addressId;
+    }
+
+    public async Task<bool> UpdateCustomerPIIAsync(Guid userId, string firstName, string lastName, string? phoneNumber)
+    {
+        var customer = await _context.Customers.Include(c => c.PII).FirstOrDefaultAsync(c => c.UserId == userId);
+        if (customer?.PII == null) return false;
+
+        customer.PII.FirstNameEnc = _encryption.Encrypt(firstName);
+        customer.PII.LastNameEnc = _encryption.Encrypt(lastName);
+        // Email is not updated - it's tied to the Identity account and cannot be changed here
+        customer.PII.PhoneEnc = !string.IsNullOrWhiteSpace(phoneNumber) ? _encryption.Encrypt(phoneNumber) : null;
+        customer.PII.PhoneHash = !string.IsNullOrWhiteSpace(phoneNumber) ? _encryption.HashForSearch(phoneNumber) : null;
+        customer.PII.UpdatedAt = DateTime.UtcNow;
+        customer.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> UpdateAddressAsync(Guid userId, Guid addressId, AddressDto address)
+    {
+        var customer = await _context.Customers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (customer == null) return false;
+
+        var addr = await _context.Addresses.FirstOrDefaultAsync(a => a.AddressId == addressId && a.CustomerId == customer.CustomerId);
+        if (addr == null) return false;
+
+        addr.Line1Enc = _encryption.Encrypt(address.Line1);
+        addr.Line2Enc = address.Line2 != null ? _encryption.Encrypt(address.Line2) : null;
+        addr.CityEnc = _encryption.Encrypt(address.City);
+        addr.StateEnc = _encryption.Encrypt(address.State);
+        addr.ZipEnc = _encryption.Encrypt(address.ZipCode);
+        addr.Latitude = address.Latitude;
+        addr.Longitude = address.Longitude;
+        addr.GeoHash = address.GeoHash;
+        addr.IsDefault = address.IsDefault;
+        addr.Label = address.Label;
+
+        if (address.IsDefault)
+        {
+            await _context.Addresses
+                .Where(a => a.CustomerId == customer.CustomerId && a.AddressId != addressId && a.IsDefault)
+                .ExecuteUpdateAsync(a => a.SetProperty(x => x.IsDefault, false));
+        }
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteAddressAsync(Guid userId, Guid addressId)
+    {
+        var customer = await _context.Customers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (customer == null) return false;
+
+        var addr = await _context.Addresses.FirstOrDefaultAsync(a => a.AddressId == addressId && a.CustomerId == customer.CustomerId);
+        if (addr == null) return false;
+
+        _context.Addresses.Remove(addr);
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<List<AddressDto>> GetAddressesAsync(Guid customerId)

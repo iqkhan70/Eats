@@ -117,6 +117,12 @@ export default function AdminVendorApprovalsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        <View style={styles.noteCard}>
+          <Ionicons name="information-circle" size={18} color="#0ea5e9" style={styles.noteIcon} />
+          <Text style={styles.noteText}>
+            <Text style={styles.noteBold}>Note:</Text> Users who signed up via Apple or Google may have incomplete profile information. Approved vendors will need to update their personal info (name, phone, address) when setting up their vendor profile.
+          </Text>
+        </View>
         {approvals.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="checkmark-circle" size={64} color="#4caf50" />
@@ -183,6 +189,19 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 16, fontSize: 16, color: "#666" },
   scrollView: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
+  noteCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#e0f2fe",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+  },
+  noteIcon: { marginRight: 8, marginTop: 2 },
+  noteText: { flex: 1, fontSize: 13, color: "#0369a1", lineHeight: 18 },
+  noteBold: { fontWeight: "600" },
   emptyCard: {
     backgroundColor: "#fff",
     borderRadius: 16,

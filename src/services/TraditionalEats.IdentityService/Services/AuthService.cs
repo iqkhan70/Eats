@@ -34,7 +34,11 @@ public interface IAuthService
     Task<VendorRequestStatus?> GetVendorRequestStatusAsync(Guid userId);
     Task<List<VendorApprovalDto>> GetPendingVendorApprovalsAsync();
     Task<bool> ApproveVendorRequestAsync(Guid requestId, Guid adminUserId);
+    /// <summary>Admin: Sync Identity users to Customer records. Creates missing Customer records.</summary>
+    Task<SyncUsersToCustomersResult> SyncUsersToCustomersAsync();
 }
+
+public record SyncUsersToCustomersResult(int TotalUsers, int Created, int AlreadyExisted, int Failed, List<string> Errors);
 
 public record VendorRequestResult(bool Success, string? Message);
 public record VendorRequestStatus(string Status, DateTime RequestedAt); // Status: Pending, Approved, Rejected
@@ -262,7 +266,14 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
 
         if (user != null)
+        {
+            // Ensure existing social-login users have a Customer record (handles past sync failures)
+            var parts = fullName?.Split(' ', 2) ?? Array.Empty<string>();
+            var fn = parts.Length > 0 ? parts[0] : "User";
+            var ln = parts.Length > 1 ? parts[1] : provider;
+            await EnsureCustomerExistsAsync(user, email, fn, ln, phoneNumber ?? "");
             return user;
+        }
 
         var nameParts = fullName?.Split(' ', 2) ?? Array.Empty<string>();
         var firstName = nameParts.Length > 0 ? nameParts[0] : "User";
@@ -289,27 +300,7 @@ public class AuthService : IAuthService
         _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleEntity.Id });
         await _context.SaveChangesAsync();
 
-        try
-        {
-            var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
-            var client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(customerServiceUrl);
-            var response = await client.PostAsJsonAsync("/api/customer/internal", new
-            {
-                UserId = user.Id,
-                FirstName = firstName,
-                LastName = lastName,
-                Email = email,
-                PhoneNumber = phoneNumber ?? "",
-                DisplayName = (string?)null
-            });
-            if (!response.IsSuccessStatusCode)
-                _logger.LogWarning("Customer provisioning failed for external user {Email}", email);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Customer provisioning failed for external user {Email}", email);
-        }
+        await EnsureCustomerExistsAsync(user, email, firstName, lastName, phoneNumber ?? "");
 
         return (await _context.Users
             .Include(u => u.UserRoles)
@@ -426,6 +417,50 @@ public class AuthService : IAuthService
             tokenEntity.RevokedAt = DateTime.UtcNow;
             tokenEntity.RevokedReason = "User logout";
             await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>
+    /// Ensures a Customer record exists for the given Identity user. Creates one if missing.
+    /// Used for social-login users (new and existing) to fix sync gaps.
+    /// </summary>
+    private async Task EnsureCustomerExistsAsync(User user, string email, string firstName, string lastName, string phoneNumber)
+    {
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
+                var client = _httpClientFactory.CreateClient();
+                client.BaseAddress = new Uri(customerServiceUrl);
+                var response = await client.PostAsJsonAsync("/api/customer/internal", new
+                {
+                    UserId = user.Id,
+                    FirstName = firstName,
+                    LastName = lastName,
+                    Email = email,
+                    PhoneNumber = phoneNumber,
+                    DisplayName = (string?)null
+                });
+                if (response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (body.TryGetProperty("alreadyExists", out var ae) && ae.GetBoolean())
+                        return; // Already had customer
+                    _logger.LogInformation("Customer created for external user {Email}", email);
+                    return;
+                }
+                _logger.LogWarning("Customer provisioning attempt {Attempt}/{Max} failed for {Email}: {Status}",
+                    attempt, maxAttempts, email, response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Customer provisioning attempt {Attempt}/{Max} failed for external user {Email}",
+                    attempt, maxAttempts, email);
+            }
+            if (attempt < maxAttempts)
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2));
         }
     }
 
@@ -623,6 +658,69 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Vendor approval request {RequestId} approved for {Email} by admin {AdminId}", requestId, req.User.Email, adminUserId);
         return true;
+    }
+
+    public async Task<SyncUsersToCustomersResult> SyncUsersToCustomersAsync()
+    {
+        var users = await _context.Users.ToListAsync();
+        var created = 0;
+        var alreadyExisted = 0;
+        var failed = 0;
+        var errors = new List<string>();
+        var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
+
+        foreach (var user in users)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                client.BaseAddress = new Uri(customerServiceUrl);
+                var checkResponse = await client.GetAsync($"/api/customer/by-user/{user.Id}");
+                if (checkResponse.IsSuccessStatusCode)
+                {
+                    alreadyExisted++;
+                    continue;
+                }
+
+                var email = user.Email;
+                var phoneNumber = !string.IsNullOrEmpty(user.PhoneNumber) ? _encryption.Decrypt(user.PhoneNumber) : "";
+                var localPart = email.Split('@')[0];
+                var firstName = localPart.Length > 0 ? char.ToUpperInvariant(localPart[0]) + localPart[1..].ToLowerInvariant() : "User";
+                var lastName = "User";
+
+                var createResponse = await client.PostAsJsonAsync("/api/customer/internal", new
+                {
+                    UserId = user.Id,
+                    FirstName = firstName,
+                    LastName = lastName,
+                    Email = email,
+                    PhoneNumber = phoneNumber ?? "",
+                    DisplayName = (string?)null
+                });
+
+                if (createResponse.IsSuccessStatusCode)
+                {
+                    var body = await createResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (body.TryGetProperty("alreadyExists", out var ae) && ae.GetBoolean())
+                        alreadyExisted++;
+                    else
+                        created++;
+                }
+                else
+                {
+                    failed++;
+                    errors.Add($"{user.Email}: {createResponse.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                errors.Add($"{user.Email}: {ex.Message}");
+                _logger.LogWarning(ex, "Sync failed for user {Email}", user.Email);
+            }
+        }
+
+        return new SyncUsersToCustomersResult(users.Count, created, alreadyExisted, failed, errors);
     }
 
     public async Task<ForgotPasswordResult> ForgotPasswordAsync(string email)

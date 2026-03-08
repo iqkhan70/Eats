@@ -2032,6 +2032,27 @@ public class WebBffController : ControllerBase
         }
     }
 
+    [HttpPost("admin/sync-users-to-customers")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SyncUsersToCustomers()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(client);
+
+            var response = await client.PostAsync("/api/auth/admin/sync-users-to-customers", null);
+            var content = await response.Content.ReadAsStringAsync();
+
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing users to customers");
+            return StatusCode(500, new { error = "Failed to sync" });
+        }
+    }
+
     [HttpPost("auth/vendor-request")]
     [Authorize]
     public async Task<IActionResult> CreateVendorRequest()
@@ -2067,6 +2088,44 @@ public class WebBffController : ControllerBase
         {
             _logger.LogError(ex, "Get vendor request status failed");
             return StatusCode(500, new { message = "Failed to get status" });
+        }
+    }
+
+    [HttpGet("customer/me")]
+    [Authorize]
+    public async Task<IActionResult> GetCustomerProfile()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.GetAsync("/api/customer/me");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Get customer profile failed");
+            return StatusCode(500, new { message = "Failed to get profile" });
+        }
+    }
+
+    [HttpPatch("customer/me")]
+    [Authorize]
+    public async Task<IActionResult> UpdateCustomerProfile([FromBody] JsonElement body)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CustomerService");
+            ForwardBearerToken(client);
+            var response = await client.PatchAsJsonAsync("/api/customer/me", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Update customer profile failed");
+            return StatusCode(500, new { message = "Failed to update profile" });
         }
     }
 
