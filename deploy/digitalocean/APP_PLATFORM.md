@@ -27,7 +27,7 @@ This builds all images (edge, web-bff, mobile-bff, identity-service, etc.) and p
 - **envs**: Fill secrets and URLs:
   - **edge**: `APP_BASE_URL` = your app’s public URL (e.g. `https://kram-xxx.ondigitalocean.app`) so the Blazor app and reset-password links use the right API base.
   - **web-bff / mobile-bff**: Set `Services__IdentityService`, `Services__CustomerService`, etc. to the **default URLs** of the corresponding App Platform services (e.g. `https://identity-service-xxx.ondigitalocean.app`). You can get these after the first deploy from the DO control panel, or use [bindable env vars](https://docs.digitalocean.com/products/app-platform/how-to/use-environment-variables/) if your account supports them.
-  - **identity-service**: `ConnectionStrings__IdentityDb`, `Jwt__Secret`, `AppSettings__BaseUrl`, `Services__NotificationService` (notification-service URL).
+  - **identity-service**: `ConnectionStrings__IdentityDb`, `Jwt__Secret`, `AppSettings__BaseUrl`, `Services__NotificationService`, `Services__CustomerService` (for sync-users-to-customers and registration; internal: `http://customer-service:8080`).
   - **Other services**: Set `ConnectionStrings__*` (and any Redis/RabbitMQ URLs if you use managed DBs).
 
 Use the DO dashboard to store **SECRET** values (JWT, connection strings) and reference them in the spec or set them after create.
@@ -62,9 +62,12 @@ Or use the deploy script (set `APP_ID` in `.env` for updates):
   - `/api/MobileBff` → **mobile-bff**
 - Microservices (identity, customer, order, etc.) have **no ingress rules**; they get default `.ondigitalocean.app` URLs. Only the BFFs and edge are meant to be called by the browser/mobile app; the BFFs call the microservices over HTTP using those URLs (or internal networking when available).
 
-## 5. Databases
+## 5. Sync Users to Customers (Connection refused)
 
-The spec does not define **databases**; add them in the DO control panel (MySQL, Redis) or use external connection strings. Then set `ConnectionStrings__*` (and Redis/RabbitMQ if needed) in each service’s env in the spec or in the dashboard.
+If the admin "Sync Users to Customers" job fails with `Connection refused (customer-service:5001)` or similar:
+
+- **App Platform**: Ensure `identity-service` has `Services__CustomerService` set. The app-spec uses `http://customer-service:8080` (port 8080 matches `http_port`). If you overrode it to port 5001, change to 8080.
+- **Docker Compose**: Ensure `customer-service` is running (`docker ps`) and healthy. Check logs: `docker compose logs customer-service`. Then set `ConnectionStrings__*` (and Redis/RabbitMQ if needed) in each service’s env in the spec or in the dashboard.
 
 ## Summary
 
