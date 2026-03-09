@@ -115,7 +115,7 @@ export default function AddressesScreen() {
             <Ionicons name="location-outline" size={48} color="#999" />
             <Text style={styles.emptyText}>No addresses yet</Text>
             <Text style={styles.emptySubtext}>
-              Add your address now—it'll be ready for faster checkout when we launch delivery
+              Add your address so it's ready when we launch delivery
             </Text>
             <TouchableOpacity
               style={styles.addButton}
