@@ -201,8 +201,9 @@ export default function HomeScreen() {
           longitude: location.coords.longitude,
         });
       } catch (error) {
-        console.error("Error getting location:", error);
+        // Expected when user denies, location services off, or emulator has no GPS
         setLocationPermissionDenied(true);
+        if (__DEV__) console.warn("Location unavailable:", (error as Error)?.message ?? error);
       }
     })();
   }, []);
