@@ -12,12 +12,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AppHeader from "../../components/AppHeader";
 
-const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? "support@kram.tech";
+const SUPPORT_EMAIL =
+  process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? "support@kram.tech";
 
 const FAQ_ITEMS = [
   {
     q: "How do I place an order?",
-    a: "Browse restaurants, add items to your cart, and checkout. You can pay with a saved payment method or add a new one at checkout.",
+    a: "Browse vendors, add items to your cart, and checkout. You can pay with a saved payment method or add a new one at checkout.",
   },
   {
     q: "How do I track my order?",
@@ -45,7 +46,11 @@ function FaqItem({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.faqItem} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={styles.faqItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <View style={styles.faqRow}>
         <Text style={styles.faqQuestion}>{question}</Text>
         <Ionicons
@@ -67,7 +72,7 @@ async function openMailto(email: string, subject: string) {
     Alert.alert(
       "Email",
       `No email app found. You can email us at ${email} with subject: ${subject}`,
-      [{ text: "OK" }]
+      [{ text: "OK" }],
     );
   }
 }
@@ -103,7 +108,10 @@ export default function SupportScreen() {
   return (
     <View style={styles.container}>
       <AppHeader title="Help & Support" onBack={() => router.back()} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
         <Text style={styles.sectionTitle}>FAQ</Text>
         {FAQ_ITEMS.map((item, i) => (
           <FaqItem

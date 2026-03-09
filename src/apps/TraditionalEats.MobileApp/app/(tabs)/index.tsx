@@ -328,9 +328,12 @@ export default function HomeScreen() {
 
         {/* Distance slider: 0–100 miles */}
         <BlurView intensity={80} tint="light" style={styles.distanceRow}>
-          <Text style={styles.distanceLabel}>
-            Within {Math.round(distanceMiles)} miles
-          </Text>
+          <View style={styles.distanceLabelRow}>
+            <Ionicons name="location" size={18} color="#f97316" />
+            <Text style={styles.distanceLabel}>
+              Within {Math.round(distanceMiles)} miles
+            </Text>
+          </View>
           <Slider
             style={styles.slider}
             minimumValue={1}
@@ -366,7 +369,13 @@ export default function HomeScreen() {
                     size={36}
                     color="#f97316"
                   />
-                  <Text style={styles.categoryName}>{category.name}</Text>
+                  <Text
+                    style={styles.categoryName}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {category.name}
+                  </Text>
                 </BlurView>
               </TouchableOpacity>
             ))}
@@ -579,7 +588,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.3)",
     overflow: "hidden",
   },
-  distanceLabel: { fontSize: 14, color: "#555", marginBottom: 4 },
+  distanceLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  distanceLabel: { fontSize: 14, color: "#555" },
   slider: { width: "100%", height: 32 },
 
   section: { marginTop: 20, paddingHorizontal: 16 },
