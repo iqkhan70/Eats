@@ -57,14 +57,20 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
   const [distanceMiles, setDistanceMiles] = useState(25);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [nearbyRestaurants, setNearbyRestaurants] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
-  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  const [locationPermissionDenied, setLocationPermissionDenied] =
+    useState(false);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [fullSizeImageRestaurant, setFullSizeImageRestaurant] =
     useState<Restaurant | null>(null);
-  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(
+    new Set(),
+  );
 
   const navigateToRestaurants = async (
     location?: string,
@@ -93,11 +99,15 @@ export default function HomeScreen() {
         params.zip = zip;
       } catch {
         params.location = loc;
-        params.radiusMiles = Math.round(Math.max(1, Math.min(100, distanceMiles)));
+        params.radiusMiles = Math.round(
+          Math.max(1, Math.min(100, distanceMiles)),
+        );
       }
     } else if (loc) {
       params.location = loc;
-      params.radiusMiles = Math.round(Math.max(1, Math.min(100, distanceMiles)));
+      params.radiusMiles = Math.round(
+        Math.max(1, Math.min(100, distanceMiles)),
+      );
     }
 
     router.push({ pathname: "/(tabs)/restaurants", params } as any);
@@ -124,7 +134,9 @@ export default function HomeScreen() {
             params: { query, maxResults: 10 },
           },
         );
-        const apiSuggestions = Array.isArray(response.data) ? response.data : [];
+        const apiSuggestions = Array.isArray(response.data)
+          ? response.data
+          : [];
         const merged = [...categorySuggestions, ...apiSuggestions]
           .map((s) => (typeof s === "string" ? s.trim() : ""))
           .filter(Boolean);
@@ -151,7 +163,11 @@ export default function HomeScreen() {
       (c) => (c.name ?? "").trim().toLowerCase() === normalized,
     );
     if (exactCategory?.categoryId) {
-      await navigateToRestaurants(undefined, undefined, exactCategory.categoryId);
+      await navigateToRestaurants(
+        undefined,
+        undefined,
+        exactCategory.categoryId,
+      );
       return;
     }
 
@@ -203,7 +219,11 @@ export default function HomeScreen() {
       } catch (error) {
         // Expected when user denies, location services off, or emulator has no GPS
         setLocationPermissionDenied(true);
-        if (__DEV__) console.warn("Location unavailable:", (error as Error)?.message ?? error);
+        if (__DEV__)
+          console.warn(
+            "Location unavailable:",
+            (error as Error)?.message ?? error,
+          );
       }
     })();
   }, []);
@@ -264,7 +284,9 @@ export default function HomeScreen() {
     } else {
       // "View All" button - navigate to restaurants list with filters
       if (userLocation) {
-        router.push(`/(tabs)/restaurants?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radiusMiles=${Math.round(distanceMiles)}`);
+        router.push(
+          `/(tabs)/restaurants?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radiusMiles=${Math.round(distanceMiles)}`,
+        );
       } else {
         navigateToRestaurants();
       }
@@ -301,9 +323,7 @@ export default function HomeScreen() {
           style={[styles.header, { paddingTop: insets.top + 20 }]}
         >
           <Text style={styles.title}>Welcome to Kram</Text>
-          <Text style={styles.subtitle}>
-            Discover authentic traditional food
-          </Text>
+          <Text style={styles.subtitle}>Discover your local vendors</Text>
         </LinearGradient>
 
         {/* Distance slider: 0–100 miles */}
@@ -336,7 +356,11 @@ export default function HomeScreen() {
                 onPress={() => navigateToRestaurants(undefined, category.name)}
                 activeOpacity={0.85}
               >
-                <BlurView intensity={80} tint="light" style={styles.categoryCard}>
+                <BlurView
+                  intensity={80}
+                  tint="light"
+                  style={styles.categoryCard}
+                >
                   <Ionicons
                     name={category.icon as any}
                     size={36}
@@ -347,7 +371,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
         </View>
 
         <View style={styles.section}>
@@ -389,15 +412,17 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {!loadingRestaurants && userLocation && nearbyRestaurants.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="restaurant-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>No vendors found</Text>
-              <Text style={styles.emptySubtext}>
-                Try increasing the distance range
-              </Text>
-            </View>
-          )}
+          {!loadingRestaurants &&
+            userLocation &&
+            nearbyRestaurants.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="restaurant-outline" size={48} color="#ccc" />
+                <Text style={styles.emptyText}>No vendors found</Text>
+                <Text style={styles.emptySubtext}>
+                  Try increasing the distance range
+                </Text>
+              </View>
+            )}
 
           {!loadingRestaurants &&
             userLocation &&
@@ -411,19 +436,40 @@ export default function HomeScreen() {
               >
                 <View style={styles.restaurantInfo}>
                   <TouchableOpacity
-                    onPress={() => { if (restaurant.imageUrl && !failedImageUrls.has(restaurant.imageUrl)) setFullSizeImageRestaurant(restaurant); }}
+                    onPress={() => {
+                      if (
+                        restaurant.imageUrl &&
+                        !failedImageUrls.has(restaurant.imageUrl)
+                      )
+                        setFullSizeImageRestaurant(restaurant);
+                    }}
                     activeOpacity={0.9}
                     style={styles.restaurantImagePlaceholder}
                   >
-                    <Ionicons name="restaurant" size={24} color="#f97316" style={{ position: "absolute" }} />
-                    {restaurant.imageUrl && !failedImageUrls.has(restaurant.imageUrl) && (
-                      <Image
-                        source={{ uri: getRestaurantImageUrl(restaurant.imageUrl) }}
-                        style={[StyleSheet.absoluteFillObject, { borderRadius: 8 }]}
-                        resizeMode="cover"
-                        onError={() => setFailedImageUrls((prev) => new Set(prev).add(restaurant.imageUrl!))}
-                      />
-                    )}
+                    <Ionicons
+                      name="restaurant"
+                      size={24}
+                      color="#f97316"
+                      style={{ position: "absolute" }}
+                    />
+                    {restaurant.imageUrl &&
+                      !failedImageUrls.has(restaurant.imageUrl) && (
+                        <Image
+                          source={{
+                            uri: getRestaurantImageUrl(restaurant.imageUrl),
+                          }}
+                          style={[
+                            StyleSheet.absoluteFillObject,
+                            { borderRadius: 8 },
+                          ]}
+                          resizeMode="cover"
+                          onError={() =>
+                            setFailedImageUrls((prev) =>
+                              new Set(prev).add(restaurant.imageUrl!),
+                            )
+                          }
+                        />
+                      )}
                   </TouchableOpacity>
                   <View style={styles.restaurantDetails}>
                     <Text style={styles.restaurantName}>{restaurant.name}</Text>

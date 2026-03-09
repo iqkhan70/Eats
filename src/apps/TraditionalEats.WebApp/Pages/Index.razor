@@ -13,7 +13,7 @@
     Class="page-container">
     <RadzenText TextStyle="TextStyle.H1">Welcome to Kram</RadzenText>
     <RadzenText TextStyle="TextStyle.Body1">
-        Discover authentic traditional food from local vendors, delivered to your door.
+        Discover your local vendors from local vendors, delivered to your door.
     </RadzenText>
 
     <RadzenCard Style="margin-top: 1rem;">
@@ -85,13 +85,13 @@
     private string? hoveredSuggestion = null;
     private static readonly (string Name, string Icon)[] vendorTypeCategories =
     {
-        ("Food", "restaurant"),
-        ("Education", "school"),
-        ("Home Care", "home"),
-        ("Builds and Repairs", "build"),
-        ("Events", "event"),
-        ("Other", "more_horiz"),
-    };
+("Food", "restaurant"),
+("Education", "school"),
+("Home Care", "home"),
+("Builds and Repairs", "build"),
+("Events", "event"),
+("Other", "more_horiz"),
+};
     private System.Threading.CancellationTokenSource? _debounceCts;
     private double distanceMiles = 25;
 
