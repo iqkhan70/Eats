@@ -104,12 +104,18 @@ export default function AddressesScreen() {
       <AppHeader title="Addresses" />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoText}>
+            Saved addresses are for delivery when it becomes available. Right now we're pickup
+            only—your name from your profile is shown to the vendor at checkout.
+          </Text>
+        </View>
         {addresses.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="location-outline" size={48} color="#999" />
             <Text style={styles.emptyText}>No addresses yet</Text>
             <Text style={styles.emptySubtext}>
-              Add an address for faster checkout
+              Add your address now—it'll be ready for faster checkout when we launch delivery
             </Text>
             <TouchableOpacity
               style={styles.addButton}
@@ -186,6 +192,22 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 16, fontSize: 16, color: "#666" },
   scrollView: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
+  infoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#4b5563",
+    lineHeight: 22,
+  },
   emptyCard: {
     backgroundColor: "#fff",
     borderRadius: 12,

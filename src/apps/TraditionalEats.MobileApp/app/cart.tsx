@@ -38,9 +38,7 @@ export default function CartScreen() {
   const [customOrderCreated, setCustomOrderCreated] = useState(false);
   const customOrderCreatingRef = React.useRef(false);
 
-  const [deliveryAddress, setDeliveryAddress] = useState(
-    "Delivery is not available yet, might be available later based on customer needs. Pickup only!",
-  );
+  const [deliveryAddress, setDeliveryAddress] = useState("Pickup only");
   const [specialInstructions, setSpecialInstructions] = useState("");
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -171,6 +169,21 @@ export default function CartScreen() {
   const checkAuthStatus = async () => {
     const authenticated = await authService.isAuthenticated();
     setIsAuthenticated(authenticated);
+    if (authenticated) {
+      try {
+        const res = await api.get<{ firstName?: string; lastName?: string }>(
+          "/MobileBff/customer/me",
+        );
+        const first = (res.data?.firstName ?? "").trim();
+        const last = (res.data?.lastName ?? "").trim();
+        const name = [first, last].filter(Boolean).join(" ");
+        setDeliveryAddress(name || "Pickup only");
+      } catch {
+        setDeliveryAddress("Pickup only");
+      }
+    } else {
+      setDeliveryAddress("Pickup only");
+    }
   };
 
   const createCustomOrderItem = async (
@@ -411,9 +424,7 @@ export default function CartScreen() {
 
       // Clear cart state immediately after successful order placement
       setCart(null);
-      setDeliveryAddress(
-        "Delivery is not available yet, might be available later based on customer needs. Pickup only!",
-      );
+      setDeliveryAddress("Pickup only");
       setSpecialInstructions("");
 
       if (result.checkoutUrl) {
@@ -662,13 +673,12 @@ export default function CartScreen() {
         </View>
 
         <View style={styles.deliverySection}>
-          <Text style={styles.deliveryLabel}>Delivery Address</Text>
+          <Text style={styles.deliveryLabel}>Name for pickup</Text>
+          <Text style={styles.deliveryHint}>From your profile—the vendor will look for this name</Text>
           <TextInput
-            style={styles.deliveryInput}
-            placeholder="Enter your delivery address"
+            style={[styles.deliveryInput, styles.deliveryInputReadOnly]}
             value={deliveryAddress}
             editable={false}
-            onChangeText={setDeliveryAddress}
             multiline
           />
         </View>
@@ -807,6 +817,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#333",
+    marginBottom: 4,
+  },
+  deliveryHint: {
+    fontSize: 12,
+    color: "#666",
     marginBottom: 8,
   },
   deliveryInput: {
@@ -817,6 +832,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 80,
     textAlignVertical: "top",
+  },
+  deliveryInputReadOnly: {
+    backgroundColor: "#f5f5f5",
+    minHeight: 44,
   },
 
   placeOrderButton: {
