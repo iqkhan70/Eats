@@ -168,31 +168,8 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    {
-      icon: "person-outline",
-      label: "Personal Information",
-      route: "/profile/personal",
-    },
-    {
-      icon: "location-outline",
-      label: "Addresses",
-      route: "/profile/addresses",
-    },
-    {
-      icon: "card-outline",
-      label: "Payment Methods",
-      route: "/profile/payments",
-    },
-    {
-      icon: "notifications-outline",
-      label: "Notifications",
-      route: "/profile/notifications",
-    },
-    {
-      icon: "help-circle-outline",
-      label: "Help & Support",
-      route: "/profile/support",
-    },
+    { icon: "location-outline", label: "Addresses", route: "/profile/addresses" },
+    { icon: "card-outline", label: "Payment Methods", route: "/profile/payments" },
     { icon: "settings-outline", label: "Settings", route: "/profile/settings" },
   ];
 
