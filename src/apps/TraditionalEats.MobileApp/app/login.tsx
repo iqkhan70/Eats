@@ -14,6 +14,7 @@ import {
   Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as AppleAuthentication from "expo-apple-authentication";
@@ -273,6 +274,7 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -283,12 +285,14 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brandSection}>
-            <Image
-              source={require("../assets/logo.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.brandTitle}>Kram</Text>
+            <View style={styles.brandRow}>
+              <Image
+                source={require("../assets/logo.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.brandTitle}>Kram</Text>
+            </View>
             <Text style={styles.brandSubtitle}>
               {activeTab === "signin"
                 ? "Connect with nearby vendors"
@@ -722,18 +726,25 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingVertical: 40,
   },
   brandSection: {
     alignItems: "center",
-    marginTop: 24,
     marginBottom: 32,
+  },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
   },
   logo: {
     width: 64,
     height: 64,
-    marginBottom: 12,
+    borderRadius: 12,
+    overflow: "hidden",
   },
   brandTitle: {
     fontSize: 28,

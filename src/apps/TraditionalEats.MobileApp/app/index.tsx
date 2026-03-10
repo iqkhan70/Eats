@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { authService } from '../services/auth';
 
 export default function IndexScreen() {
@@ -20,6 +21,7 @@ export default function IndexScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="dark" />
       <ActivityIndicator size="large" color="#6200ee" />
     </View>
   );
