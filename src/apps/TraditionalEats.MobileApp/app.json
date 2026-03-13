@@ -33,7 +33,8 @@
         {
           "photosPermission": "Allow Kram to access your photos so you can upload images for your vendor listings."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "ios": {
       "supportsTablet": true,
@@ -41,7 +42,9 @@
       "buildNumber": "2",
       "usesAppleSignIn": true,
       "entitlements": {
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",

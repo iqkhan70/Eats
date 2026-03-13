@@ -53,6 +53,11 @@ export default function CartScreen() {
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
 
+  // Deal discount (applied at checkout by OrderService)
+  const [dealDiscountPercent, setDealDiscountPercent] = useState<number | null>(
+    null,
+  );
+
   // Reload cart when screen comes into focus (e.g., after login)
   useFocusEffect(
     useCallback(() => {
@@ -240,14 +245,43 @@ export default function CartScreen() {
       // If cart is null or has no items, set to null
       if (!cartData || !cartData.items || cartData.items.length === 0) {
         setCart(null);
-        setPaymentReady(true); // Reset when cart is empty
+        setPaymentReady(true);
+        setDealDiscountPercent(null);
       } else {
         setCart(cartData);
-        // Check payment readiness if cart has a restaurant
+        // Check payment readiness and deal if cart has a restaurant
         if (cartData.restaurantId) {
           await checkPaymentReadiness(cartData.restaurantId);
+          try {
+            const restRes = await api.get<{
+              activeDealTitle?: string | null;
+              activeDealDiscountPercent?: number | null;
+              activeDealEndTime?: string | null;
+            }>(`/MobileBff/restaurants/${cartData.restaurantId}`);
+            const r = restRes.data;
+            if (
+              r?.activeDealTitle?.trim() &&
+              r.activeDealDiscountPercent != null &&
+              r.activeDealDiscountPercent > 0 &&
+              r.activeDealDiscountPercent <= 100
+            ) {
+              if (
+                !r.activeDealEndTime ||
+                new Date(r.activeDealEndTime).getTime() > Date.now()
+              ) {
+                setDealDiscountPercent(r.activeDealDiscountPercent);
+              } else {
+                setDealDiscountPercent(null);
+              }
+            } else {
+              setDealDiscountPercent(null);
+            }
+          } catch {
+            setDealDiscountPercent(null);
+          }
         } else {
           setPaymentReady(true);
+          setDealDiscountPercent(null);
         }
       }
     } catch (error: any) {
@@ -262,6 +296,7 @@ export default function CartScreen() {
       ) {
         setCart(null);
         setPaymentReady(true);
+        setDealDiscountPercent(null);
       } else {
         Alert.alert(
           "Error",
@@ -269,6 +304,7 @@ export default function CartScreen() {
         );
         setCart(null);
         setPaymentReady(true);
+        setDealDiscountPercent(null);
       }
     } finally {
       setLoading(false);
@@ -576,6 +612,16 @@ export default function CartScreen() {
           </View>
         ))}
 
+        {/* Deal applied at checkout - OrderService applies discount when placing order */}
+        {dealDiscountPercent != null && (
+          <View style={styles.dealBanner}>
+            <Ionicons name="flame" size={18} color="#f97316" />
+            <Text style={styles.dealBannerText}>
+              {dealDiscountPercent}% off applied at checkout
+            </Text>
+          </View>
+        )}
+
         {(() => {
           const amountBeforeServiceFee =
             cart.subtotal + cart.tax + cart.deliveryFee;
@@ -803,6 +849,22 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: "#e0e0e0", marginVertical: 8 },
   totalLabel: { fontSize: 18, fontWeight: "bold", color: "#333" },
   totalValue: { fontSize: 18, fontWeight: "bold", color: "#6200ee" },
+  dealBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(249, 115, 22, 0.15)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.3)",
+  },
+  dealBannerText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#c2410c",
+  },
 
   deliverySection: {
     backgroundColor: "rgba(255, 255, 255, 0.7)",

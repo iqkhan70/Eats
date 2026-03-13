@@ -32,6 +32,7 @@ public class RestaurantDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Address).HasMaxLength(500);
             entity.Property(e => e.EloRating).HasDefaultValue(1500m);
+            entity.Property(e => e.ActiveDealTitle).HasMaxLength(200);
         });
 
         modelBuilder.Entity<DeliveryZone>(entity =>

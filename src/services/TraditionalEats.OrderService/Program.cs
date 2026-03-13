@@ -97,6 +97,10 @@ builder.Services.AddAuthorization();
 
 // Application services
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("RestaurantService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:RestaurantService"] ?? "http://localhost:5007");
+});
 builder.Services.AddScoped<IOrderService, OrderService>();
 
 var app = builder.Build();

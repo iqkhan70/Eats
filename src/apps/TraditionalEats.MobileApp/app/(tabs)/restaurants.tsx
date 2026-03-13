@@ -31,6 +31,9 @@ interface Restaurant {
   imageUrl?: string;
   latitude?: number;
   longitude?: number;
+  activeDealTitle?: string | null;
+  activeDealDiscountPercent?: number | null;
+  activeDealEndTime?: string | null;
 }
 
 interface MenuCategory {
@@ -64,6 +67,21 @@ function haversineMiles(
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+const hasActiveDeal = (r: Restaurant): boolean => {
+  if (!r.activeDealTitle?.trim()) return false;
+  if (r.activeDealEndTime) {
+    const end = new Date(r.activeDealEndTime).getTime();
+    if (end < Date.now()) return false;
+  }
+  return true;
+};
+
+const getDealBadgeText = (r: Restaurant): string => {
+  if (r.activeDealDiscountPercent != null)
+    return `${r.activeDealDiscountPercent}% off`;
+  return r.activeDealTitle?.trim() ?? "Deal";
+};
 
 /** Show "Same ZIP" when coords are invalid (0,0) or distance is unreasonably large. */
 function getDisplayDistance(
@@ -268,6 +286,9 @@ export default function RestaurantsScreen() {
         imageUrl: r.imageUrl,
         latitude: r.latitude,
         longitude: r.longitude,
+        activeDealTitle: r.activeDealTitle ?? r.ActiveDealTitle,
+        activeDealDiscountPercent: r.activeDealDiscountPercent ?? r.ActiveDealDiscountPercent,
+        activeDealEndTime: r.activeDealEndTime ?? r.ActiveDealEndTime,
       }));
 
       setRestaurants(mappedRestaurants);
@@ -360,7 +381,17 @@ export default function RestaurantsScreen() {
       </TouchableOpacity>
 
       <View style={styles.restaurantInfo}>
-        <Text style={styles.restaurantName}>{item.name}</Text>
+        <View style={styles.restaurantNameRow}>
+          <Text style={styles.restaurantName}>{item.name}</Text>
+          {hasActiveDeal(item) && (
+            <View style={styles.dealBadge}>
+              <Ionicons name="flame" size={12} color="#fff" />
+              <Text style={styles.dealBadgeText}>
+                {getDealBadgeText(item)}
+              </Text>
+            </View>
+          )}
+        </View>
         {!!item.cuisineType && (
           <Text style={styles.cuisineType}>{item.cuisineType}</Text>
         )}
@@ -748,11 +779,31 @@ const styles = StyleSheet.create({
 
   restaurantInfo: { flex: 1 },
 
+  restaurantNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
   restaurantName: {
     fontSize: 18,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 4,
+  },
+  dealBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f97316",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 4,
+  },
+  dealBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#fff",
   },
 
   cuisineType: { fontSize: 14, color: "#666", marginBottom: 4 },

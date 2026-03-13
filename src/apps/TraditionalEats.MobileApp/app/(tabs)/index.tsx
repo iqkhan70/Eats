@@ -27,6 +27,21 @@ import { APP_CONFIG } from "../../config/api.config";
 
 const ZIP_REGEX = /^\s*(\d{5})(?:-\d{4})?\s*$/;
 
+const hasActiveDeal = (r: Restaurant): boolean => {
+  if (!r.activeDealTitle?.trim()) return false;
+  if (r.activeDealEndTime) {
+    const end = new Date(r.activeDealEndTime).getTime();
+    if (end < Date.now()) return false;
+  }
+  return true;
+};
+
+const getDealBadgeText = (r: Restaurant): string => {
+  if (r.activeDealDiscountPercent != null)
+    return `${r.activeDealDiscountPercent}% off`;
+  return r.activeDealTitle?.trim() ?? "Deal";
+};
+
 const getRestaurantImageUrl = (imageUrl?: string) => {
   if (!imageUrl) return "";
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))
@@ -45,6 +60,9 @@ interface Restaurant {
   imageUrl?: string;
   latitude?: number;
   longitude?: number;
+  activeDealTitle?: string | null;
+  activeDealDiscountPercent?: number | null;
+  activeDealEndTime?: string | null;
 }
 
 interface MenuCategory {
@@ -256,6 +274,9 @@ export default function HomeScreen() {
         imageUrl: r.imageUrl,
         latitude: r.latitude,
         longitude: r.longitude,
+        activeDealTitle: r.activeDealTitle ?? r.ActiveDealTitle,
+        activeDealDiscountPercent: r.activeDealDiscountPercent ?? r.ActiveDealDiscountPercent,
+        activeDealEndTime: r.activeDealEndTime ?? r.ActiveDealEndTime,
       }));
 
       setNearbyRestaurants(mappedRestaurants);
@@ -384,6 +405,37 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Today's Deals banner - only when there are active deals */}
+        {userLocation &&
+          !loadingRestaurants &&
+          (() => {
+            const deals = nearbyRestaurants.filter(hasActiveDeal).slice(0, 5);
+            if (deals.length === 0) return null;
+            return (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Today's Deals</Text>
+                <View style={styles.dealsBanner}>
+                  {deals.map((r, i) => (
+                    <TouchableOpacity
+                      key={r.restaurantId}
+                      style={[
+                        styles.dealItem,
+                        i < deals.length - 1 && styles.dealItemBorder,
+                      ]}
+                      onPress={() => navigateToRestaurantDetails(r)}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="flame" size={16} color="#f97316" />
+                      <Text style={styles.dealText} numberOfLines={1}>
+                        {getDealBadgeText(r)} – {r.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            );
+          })()}
+
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Nearby Vendors</Text>
@@ -483,7 +535,17 @@ export default function HomeScreen() {
                       )}
                   </TouchableOpacity>
                   <View style={styles.restaurantDetails}>
-                    <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                    <View style={styles.restaurantNameRow}>
+                      <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                      {hasActiveDeal(restaurant) && (
+                        <View style={styles.dealBadge}>
+                          <Ionicons name="flame" size={12} color="#fff" />
+                          <Text style={styles.dealBadgeText}>
+                            {getDealBadgeText(restaurant)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.restaurantAddress}>
                       {restaurant.address}
                     </Text>
@@ -688,11 +750,54 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   restaurantDetails: { marginLeft: 12, flex: 1 },
+  restaurantNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
   restaurantName: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 4,
+  },
+  dealBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f97316",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 4,
+  },
+  dealBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  dealsBanner: {
+    backgroundColor: "rgba(249, 115, 22, 0.12)",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.3)",
+    marginTop: 8,
+  },
+  dealItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 8,
+  },
+  dealItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(249, 115, 22, 0.2)",
+  },
+  dealText: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
   },
   restaurantAddress: { fontSize: 14, color: "#666", marginBottom: 4 },
   cuisineType: {

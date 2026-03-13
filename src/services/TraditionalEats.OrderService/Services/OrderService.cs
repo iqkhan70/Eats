@@ -1063,19 +1063,58 @@ public class OrderService : IOrderService
                 item.MenuItemId, item.Name, item.Quantity, item.UnitPrice, item.TotalPrice);
         }
 
+        // Apply restaurant active deal discount if applicable
+        decimal discountMultiplier = 1m;
+        try
+        {
+            var restClient = _httpClientFactory.CreateClient("RestaurantService");
+            var restResponse = await restClient.GetAsync($"/api/restaurant/{cart.RestaurantId.Value}");
+            if (restResponse.IsSuccessStatusCode)
+            {
+                var restJson = await restResponse.Content.ReadAsStringAsync();
+                using var doc = System.Text.Json.JsonDocument.Parse(restJson);
+                var root = doc.RootElement;
+                var title = root.TryGetProperty("activeDealTitle", out var t) ? t.GetString() : root.TryGetProperty("ActiveDealTitle", out t) ? t.GetString() : null;
+                var endTime = root.TryGetProperty("activeDealEndTime", out var e) ? e.GetString() : root.TryGetProperty("ActiveDealEndTime", out e) ? e.GetString() : null;
+                int? discountPct = null;
+                if (root.TryGetProperty("activeDealDiscountPercent", out var p) && p.ValueKind != System.Text.Json.JsonValueKind.Null && p.ValueKind != System.Text.Json.JsonValueKind.Undefined && p.TryGetInt32(out var dp))
+                    discountPct = dp;
+                else if (root.TryGetProperty("ActiveDealDiscountPercent", out p) && p.ValueKind != System.Text.Json.JsonValueKind.Null && p.ValueKind != System.Text.Json.JsonValueKind.Undefined && p.TryGetInt32(out dp))
+                    discountPct = dp;
+
+                if (!string.IsNullOrWhiteSpace(title) && discountPct.HasValue && discountPct.Value > 0 && discountPct.Value <= 100)
+                {
+                    if (string.IsNullOrEmpty(endTime) || (DateTime.TryParse(endTime, out var end) && end > DateTime.UtcNow))
+                    {
+                        discountMultiplier = 1m - (discountPct.Value / 100m);
+                        _logger.LogInformation("PlaceOrderAsync: Applying {Discount}% deal discount (multiplier={Multiplier})", discountPct.Value, discountMultiplier);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PlaceOrderAsync: Could not fetch restaurant deal, proceeding without discount");
+        }
+
         var orderId = Guid.NewGuid();
 
         // Calculate totals from items to ensure accuracy (don't trust cart totals if items are doubled)
-        var orderItems = cart.Items.Select(item => new OrderItem
+        var orderItems = cart.Items.Select(item =>
         {
-            OrderItemId = Guid.NewGuid(),
-            OrderId = orderId,
-            MenuItemId = item.MenuItemId,
-            Name = item.Name,
-            Quantity = item.Quantity,
-            UnitPrice = item.UnitPrice,
-            TotalPrice = item.TotalPrice,
-            ModifiersJson = item.SelectedOptionsJson
+            var unitPrice = Math.Round(item.UnitPrice * discountMultiplier, 2);
+            var totalPrice = Math.Round(unitPrice * item.Quantity, 2);
+            return new OrderItem
+            {
+                OrderItemId = Guid.NewGuid(),
+                OrderId = orderId,
+                MenuItemId = item.MenuItemId,
+                Name = item.Name,
+                Quantity = item.Quantity,
+                UnitPrice = unitPrice,
+                TotalPrice = totalPrice,
+                ModifiersJson = item.SelectedOptionsJson
+            };
         }).ToList();
 
         // Recalculate totals from order items to ensure accuracy

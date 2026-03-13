@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import BottomSearchBar from "../../components/BottomSearchBar";
@@ -31,6 +32,7 @@ interface Restaurant {
 
 export default function VendorDashboardScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -410,7 +412,7 @@ export default function VendorDashboardScreen() {
       </ScrollView>
 
       <BottomSearchBar
-        bottomOffset={160}
+        bottomOffset={insets.bottom + 4}
         onSearch={(query) => {
           setSearchText(query.trim());
           setSearchTextDebounced(query.trim());
@@ -448,7 +450,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   scrollContent: {
-    paddingBottom: 240,
+    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,

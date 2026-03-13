@@ -31,7 +31,8 @@ start_service () {
   tmux new-window -t $SESSION -n $NAME
   # NOTE: Running many `dotnet watch` processes in parallel can fight over shared project outputs (e.g. BuildingBlocks.pdb).
   # `--artifacts-path` isolates build outputs per service, avoiding CS2012 file-lock errors.
-  tmux send-keys -t $SESSION:$NAME "cd $BASE_DIR/$PATH_TO_PROJECT && dotnet watch --no-restore --disable-build-servers --artifacts-path \"$ARTIFACTS_BASE/$NAME\" run" C-m
+  # Allow restore on first run so project.assets.json is generated in artifacts path
+  tmux send-keys -t $SESSION:$NAME "cd $BASE_DIR/$PATH_TO_PROJECT && dotnet watch --disable-build-servers --artifacts-path \"$ARTIFACTS_BASE/$NAME\" run" C-m
 }
 
 # ---------------- SERVICES ----------------

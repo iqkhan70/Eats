@@ -23,6 +23,11 @@ public class Restaurant
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Display deal for discovery (e.g. "50% off today"). When set, shows in banner and badge.</summary>
+    public string? ActiveDealTitle { get; set; }
+    public int? ActiveDealDiscountPercent { get; set; }
+    public DateTime? ActiveDealEndTime { get; set; }
+
     public List<DeliveryZone> DeliveryZones { get; set; } = new();
     public List<RestaurantHours> Hours { get; set; } = new();
 }

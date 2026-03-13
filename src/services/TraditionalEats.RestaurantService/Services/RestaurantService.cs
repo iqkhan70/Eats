@@ -252,6 +252,10 @@ public class RestaurantService : IRestaurantService
         if (dto.Latitude.HasValue) restaurant.Latitude = dto.Latitude.Value;
         if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
         if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
+        // Deal fields: always apply (null/empty clears the deal)
+        restaurant.ActiveDealTitle = string.IsNullOrWhiteSpace(dto.ActiveDealTitle) ? null : dto.ActiveDealTitle;
+        restaurant.ActiveDealDiscountPercent = dto.ActiveDealDiscountPercent;
+        restaurant.ActiveDealEndTime = dto.ActiveDealEndTime;
 
         // Re-geocode when address is present and either (coordinates are 0,0) or (address was just updated)
         var addressToUse = !string.IsNullOrWhiteSpace(restaurant.Address) ? restaurant.Address : null;
@@ -521,6 +525,9 @@ public class RestaurantService : IRestaurantService
         if (dto.Latitude.HasValue) restaurant.Latitude = dto.Latitude.Value;
         if (dto.Longitude.HasValue) restaurant.Longitude = dto.Longitude.Value;
         if (dto.IsActive.HasValue) restaurant.IsActive = dto.IsActive.Value;
+        restaurant.ActiveDealTitle = string.IsNullOrWhiteSpace(dto.ActiveDealTitle) ? null : dto.ActiveDealTitle;
+        restaurant.ActiveDealDiscountPercent = dto.ActiveDealDiscountPercent;
+        restaurant.ActiveDealEndTime = dto.ActiveDealEndTime;
 
         // Re-geocode when address is present and either (coordinates are 0,0) or (address was just updated)
         var addressToUseAdmin = !string.IsNullOrWhiteSpace(restaurant.Address) ? restaurant.Address : null;
@@ -660,6 +667,9 @@ public class RestaurantService : IRestaurantService
             EloRating = restaurant.EloRating,
             CreatedAt = restaurant.CreatedAt,
             UpdatedAt = restaurant.UpdatedAt,
+            ActiveDealTitle = restaurant.ActiveDealTitle,
+            ActiveDealDiscountPercent = restaurant.ActiveDealDiscountPercent,
+            ActiveDealEndTime = restaurant.ActiveDealEndTime,
             DeliveryZones = (restaurant.DeliveryZones ?? Enumerable.Empty<DeliveryZone>()).Select(z => new DeliveryZoneDto
             {
                 ZoneId = z.ZoneId,
@@ -704,7 +714,10 @@ public record UpdateRestaurantDto(
     string? Address,
     double? Latitude,
     double? Longitude,
-    bool? IsActive);
+    bool? IsActive,
+    string? ActiveDealTitle,
+    int? ActiveDealDiscountPercent,
+    DateTime? ActiveDealEndTime);
 
 public record RestaurantDto
 {
@@ -726,6 +739,9 @@ public record RestaurantDto
     public decimal EloRating { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string? ActiveDealTitle { get; set; }
+    public int? ActiveDealDiscountPercent { get; set; }
+    public DateTime? ActiveDealEndTime { get; set; }
     public List<DeliveryZoneDto> DeliveryZones { get; set; } = new();
     public List<RestaurantHoursDto> Hours { get; set; } = new();
 }
