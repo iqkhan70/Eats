@@ -34,8 +34,8 @@ public class PaymentController : ControllerBase
             return Unauthorized(new { message = "User ID claim is missing" });
         try
         {
-            var url = await _paymentService.CreateVendorConnectLinkAsync(userId);
-            return Ok(new { url });
+            var result = await _paymentService.CreateVendorConnectLinkAsync(userId);
+            return Ok(new { url = result.Url, returnUrl = result.ReturnUrl });
         }
         catch (InvalidOperationException ex)
         {

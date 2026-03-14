@@ -12,7 +12,7 @@ namespace TraditionalEats.PaymentService.Services;
 public interface IPaymentService
 {
     // Stripe Connect (vendor onboarding)
-    Task<string> CreateVendorConnectLinkAsync(Guid userId);
+    Task<VendorConnectLinkResult> CreateVendorConnectLinkAsync(Guid userId);
     Task<(string? StripeAccountId, string Status)> GetVendorOnboardingStatusAsync(Guid userId);
     Task UpdateVendorOnboardingFromStripeAsync(string stripeAccountId);
     Task<bool> IsVendorPaymentReadyAsync(Guid restaurantId);
@@ -37,6 +37,9 @@ public interface IPaymentService
 }
 
 public record RefundByOrderResult(string Action, Guid? RefundId, string Message);
+
+/// <summary>Result of creating a Stripe Connect account link. ReturnUrl is where Stripe redirects after onboarding (for in-app browser).</summary>
+public record VendorConnectLinkResult(string Url, string ReturnUrl);
 
 public class PaymentService : IPaymentService
 {
@@ -63,7 +66,7 @@ public class PaymentService : IPaymentService
         StripeConfiguration.ApiKey = _configuration["Stripe:SecretKey"];
     }
 
-    public async Task<string> CreateVendorConnectLinkAsync(Guid userId)
+    public async Task<VendorConnectLinkResult> CreateVendorConnectLinkAsync(Guid userId)
     {
         var secretKey = _configuration["Stripe:SecretKey"];
         if (string.IsNullOrWhiteSpace(secretKey))
@@ -139,7 +142,7 @@ public class PaymentService : IPaymentService
         };
         var link = await linkService.CreateAsync(linkOptions);
         _logger.LogInformation("Created account link for vendor UserId={UserId}, StripeAccountId={StripeAccountId}", userId, stripeAccountId);
-        return link.Url;
+        return new VendorConnectLinkResult(link.Url, returnUrl);
     }
 
     public async Task<(string? StripeAccountId, string Status)> GetVendorOnboardingStatusAsync(Guid userId)

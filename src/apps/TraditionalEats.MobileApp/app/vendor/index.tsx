@@ -8,8 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
-  Linking,
 } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -169,12 +169,26 @@ export default function VendorDashboardScreen() {
   const connectStripe = async () => {
     try {
       setStripeConnecting(true);
-      const response = await api.post<{ url?: string }>(
+      const response = await api.post<{ url?: string; returnUrl?: string }>(
         "/MobileBff/payments/vendor/connect-link",
       );
       const url = response.data?.url;
-      if (url) {
-        await Linking.openURL(url);
+      const returnUrl = response.data?.returnUrl;
+      if (url && returnUrl) {
+        // Open in-app browser (same as checkout) so vendor stays in the app
+        await WebBrowser.openAuthSessionAsync(url, returnUrl);
+        // Refresh onboarding status when user returns
+        try {
+          const res = await api.post<{ status?: string }>(
+            "/MobileBff/payments/vendor/refresh-onboarding-status",
+          );
+          setStripeOnboardingStatus(res.data?.status ?? "Pending");
+        } catch {
+          await loadStripeOnboardingStatus();
+        }
+      } else if (url) {
+        // Fallback: returnUrl not provided (older backend) - open external browser
+        await WebBrowser.openBrowserAsync(url);
       } else {
         Alert.alert("Error", "Could not start payout setup.");
       }
