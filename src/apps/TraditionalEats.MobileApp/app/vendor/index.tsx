@@ -260,6 +260,7 @@ export default function VendorDashboardScreen() {
             style={styles.backButton}
           >
             <Ionicons name="chevron-back" size={28} color="#fff" />
+            <Text style={styles.backLabel}>Back</Text>
           </TouchableOpacity>
           <View style={styles.headerActions}>
             <TouchableOpacity
@@ -471,7 +472,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   backButton: {
+    flexDirection: "row",
+    alignItems: "center",
     padding: 8,
+    gap: 4,
+  },
+  backLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
   },
   headerTitle: {
     fontSize: 20,

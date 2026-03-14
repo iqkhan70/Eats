@@ -721,6 +721,7 @@ export default function OrdersScreen() {
         />
       )}
       <BottomSearchBar
+        initialValue={searchQuery}
         onSearch={(query) => {
           Keyboard.dismiss();
           setSearchQuery(query);

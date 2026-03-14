@@ -135,6 +135,7 @@ export default function AdminRestaurantsScreen() {
       >
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={28} color="#fff" />
+          <Text style={styles.backLabel}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>All Restaurants</Text>
         <View style={styles.placeholder} />
@@ -244,7 +245,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 8,
+    gap: 4,
+  },
+  backLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   headerTitle: {
     fontSize: 20,

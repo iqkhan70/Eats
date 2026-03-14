@@ -456,12 +456,21 @@ public class PaymentService : IPaymentService
         var amountCents = (long)Math.Round(amount * 100);
         var serviceFeeCents = (long)Math.Round(serviceFee * 100);
         var sessionService = new SessionService();
+        var displayName = _configuration["Stripe:CheckoutDisplayName"] ?? "Kram";
         var options = new SessionCreateOptions
         {
             Mode = "payment",
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
             ClientReferenceId = orderId.ToString(),
+            BrandingSettings = new SessionBrandingSettingsOptions { DisplayName = displayName },
+            CustomText = new SessionCustomTextOptions
+            {
+                Submit = new SessionCustomTextSubmitOptions
+                {
+                    Message = "Changed your mind? Tap the back arrow (←) at the top to return to your cart without paying."
+                }
+            },
             LineItems = new List<SessionLineItemOptions>
             {
                 new()

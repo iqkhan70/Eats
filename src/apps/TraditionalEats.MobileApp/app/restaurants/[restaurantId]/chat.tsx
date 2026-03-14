@@ -153,6 +153,7 @@ export default function RestaurantChatScreen() {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Ionicons name="chevron-back" size={28} color="#333" />
+            <Text style={styles.backLabel}>Back</Text>
           </TouchableOpacity>
 
           <Text style={styles.title} numberOfLines={1}>
@@ -203,10 +204,15 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
   },
   backButton: {
-    width: 40,
-    height: 40,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    padding: 8,
+    gap: 4,
+  },
+  backLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
   },
   title: {
     flex: 1,

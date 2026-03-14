@@ -40,11 +40,12 @@ export default function AppHeader({ title, showBack = true, onBack, right }: Pro
           style={styles.backButton}
           hitSlop={{ top: 32, bottom: 32, left: 32, right: 32 }}
           activeOpacity={0.7}
-          accessibilityLabel="Back"
+          accessibilityLabel="Go back"
         >
           <View style={styles.backCircle}>
             <Ionicons name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} size={24} color="#fff" />
           </View>
+          <Text style={styles.backLabel}>Back</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.backButton} />
@@ -70,11 +71,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   backButton: {
-    width: 56,
-    height: 56,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingRight: 8,
     marginLeft: -8,
+    gap: 4,
+    minWidth: 88,
   },
   backCircle: {
     width: 44,
@@ -83,6 +86,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  backLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   title: {
     flex: 1,

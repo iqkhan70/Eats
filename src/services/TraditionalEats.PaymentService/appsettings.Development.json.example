@@ -6,7 +6,8 @@
     "SecretKey": "sk_test_YOUR_STRIPE_SECRET_KEY_HERE",
     "PublishableKey": "pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE",
     "WebhookSecret": "whsec_YOUR_WEBHOOK_SECRET_HERE",
-    "ConnectReturnUrl": "https://localhost:5301"
+    "ConnectReturnUrl": "https://localhost:5301",
+    "CheckoutDisplayName": "Kram"
   },
   "Services": {
     "OrderService": {

@@ -104,6 +104,7 @@ export default function RegisterScreen() {
             style={styles.backButton}
           >
             <Ionicons name="chevron-back" size={28} color="#333" />
+            <Text style={styles.backLabel}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Create Account</Text>
         </View>
@@ -302,7 +303,15 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e0e0e0",
   },
   backButton: {
+    flexDirection: "row",
+    alignItems: "center",
     marginRight: 16,
+    gap: 4,
+  },
+  backLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
   },
   title: {
     fontSize: 24,
