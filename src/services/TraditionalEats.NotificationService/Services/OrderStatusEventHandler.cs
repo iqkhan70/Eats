@@ -71,7 +71,14 @@ public class OrderStatusEventHandler : BackgroundService
             if (_channel == null || _connection == null || !_connection.IsOpen)
             {
                 _logger.LogInformation("RabbitMQ not available. Retrying connection in 30 seconds...");
-                await Task.Delay(30000, stoppingToken);
+                try
+                {
+                    await Task.Delay(30000, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 TryConnect();
                 continue;
             }
@@ -126,6 +133,12 @@ public class OrderStatusEventHandler : BackgroundService
                     _logger.LogWarning("RabbitMQ connection lost. Will retry...");
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Expected when host is stopping; exit gracefully
+                _logger.LogInformation("OrderStatusEventHandler is stopping.");
+                break;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in OrderStatusEventHandler. Will retry...");
@@ -133,7 +146,14 @@ public class OrderStatusEventHandler : BackgroundService
                 _channel?.Dispose();
                 _connection = null;
                 _channel = null;
-                await Task.Delay(30000, stoppingToken);
+                try
+                {
+                    await Task.Delay(30000, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
         }
     }

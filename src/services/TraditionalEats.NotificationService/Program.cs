@@ -13,6 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddSharedConfiguration(builder.Environment);
 
+// Don't stop the host when OrderStatusEventHandler throws (e.g. TaskCanceledException on shutdown)
+builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(opts =>
+{
+    opts.BackgroundServiceExceptionBehavior = Microsoft.Extensions.Hosting.BackgroundServiceExceptionBehavior.Ignore;
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

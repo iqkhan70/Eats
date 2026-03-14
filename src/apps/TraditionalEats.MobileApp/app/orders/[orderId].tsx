@@ -382,7 +382,15 @@ export default function OrderDetailsScreen() {
         return;
       }
 
-      await WebBrowser.openAuthSessionAsync(checkoutUrl, paymentRedirectUrl);
+      const authResult = await WebBrowser.openAuthSessionAsync(checkoutUrl, paymentRedirectUrl);
+      if (authResult?.type === "success" && authResult.url?.includes("status=cancelled")) {
+        const orderIdToCancel = order.orderId;
+        try {
+          await api.post(`/MobileBff/orders/${orderIdToCancel}/cancel`);
+        } catch {
+          // Ignore
+        }
+      }
       await loadOrder();
     } catch (e: any) {
       const msg =

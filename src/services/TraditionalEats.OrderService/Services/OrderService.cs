@@ -26,6 +26,8 @@ public interface IOrderService
     Task<bool> CancelOrderByCustomerAsync(Guid orderId, Guid customerId);
     /// <summary>Internal: update payment state fields on the order (called by PaymentService webhooks).</summary>
     Task<bool> UpdateOrderPaymentAsync(Guid orderId, string paymentStatus, string? stripePaymentIntentId, string? failureReason);
+    /// <summary>Internal: cancel orders stuck in PaymentPending for too long (abandoned Stripe checkout). Returns count cancelled.</summary>
+    Task<int> CancelAbandonedPaymentPendingOrdersAsync(TimeSpan olderThan);
 }
 
 public class OrderService : IOrderService
@@ -1555,6 +1557,64 @@ public class OrderService : IOrderService
         }
 
         return true;
+    }
+
+    public async Task<int> CancelAbandonedPaymentPendingOrdersAsync(TimeSpan olderThan)
+    {
+        var cutoff = DateTime.UtcNow - olderThan;
+        var abandoned = await _context.Orders
+            .Where(o =>
+                o.PaymentStatus == "Pending" &&
+                o.Status == "Pending" &&
+                o.CreatedAt < cutoff)
+            .Select(o => o.OrderId)
+            .ToListAsync();
+
+        var count = 0;
+        foreach (var orderId in abandoned)
+        {
+            try
+            {
+                var order = await _context.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.OrderId == orderId);
+                if (order == null) continue;
+
+                var ok = await UpdateOrderStatusAsync(orderId, "Cancelled", "Auto-cancelled: payment abandoned (checkout closed without completing)");
+                if (!ok) continue;
+
+                var paymentBaseUrl = _configuration["Services:PaymentService:BaseUrl"] ?? "http://localhost:5004";
+                var internalApiKey = _configuration["Services:PaymentService:InternalApiKey"];
+                try
+                {
+                    using var http = _httpClientFactory.CreateClient();
+                    var payload = new { orderId };
+                    var content = new StringContent(
+                        System.Text.Json.JsonSerializer.Serialize(payload),
+                        System.Text.Encoding.UTF8,
+                        "application/json");
+                    var request = new HttpRequestMessage(HttpMethod.Post, $"{paymentBaseUrl.TrimEnd('/')}/api/payment/internal/cancel-by-order")
+                    {
+                        Content = content
+                    };
+                    if (!string.IsNullOrEmpty(internalApiKey))
+                        request.Headers.TryAddWithoutValidation("X-Internal-Api-Key", internalApiKey);
+
+                    await http.SendAsync(request);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "CancelAbandonedPaymentPendingOrdersAsync: Payment void failed for OrderId={OrderId}", orderId);
+                }
+
+                count++;
+                _logger.LogInformation("CancelAbandonedPaymentPendingOrdersAsync: Auto-cancelled OrderId={OrderId} (abandoned checkout)", orderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "CancelAbandonedPaymentPendingOrdersAsync: Failed to cancel OrderId={OrderId}", orderId);
+            }
+        }
+
+        return count;
     }
 
     private async Task RefundPaymentOnCancelAsync(string paymentBaseUrl, string? internalApiKey, Guid orderId)

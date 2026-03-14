@@ -469,11 +469,18 @@ export default function CartScreen() {
           result.checkoutUrl,
           paymentRedirectUrl,
         );
+        // If user cancelled/abandoned Stripe checkout, auto-cancel the order so it doesn't stay in PaymentPending
+        if (authResult?.type === "success" && authResult.url?.includes("status=cancelled")) {
+          const orderIdMatch = authResult.url.match(/[?&]orderId=([^&]+)/);
+          const orderIdToCancel = orderIdMatch?.[1] ?? result.orderId;
+          try {
+            await api.post(`/MobileBff/orders/${orderIdToCancel}/cancel`);
+          } catch {
+            // Ignore - order may already be cancelled or in different state
+          }
+        }
         // Browser closed - navigate to orders (whether success or cancelled)
         router.push(`/(tabs)/orders?refresh=${Date.now()}`);
-        if (authResult?.type === "success" && authResult.url?.includes("status=success")) {
-          // Payment completed - optional: show brief success feedback
-        }
         return;
       }
 
@@ -623,25 +630,56 @@ export default function CartScreen() {
         )}
 
         {(() => {
+          const discountMult =
+            dealDiscountPercent != null && dealDiscountPercent > 0
+              ? 1 - dealDiscountPercent / 100
+              : 1;
+          const discountedSubtotal =
+            Math.round(cart.subtotal * discountMult * 100) / 100;
+          const discountedTax =
+            Math.round(discountedSubtotal * 0.08 * 100) / 100;
           const amountBeforeServiceFee =
-            cart.subtotal + cart.tax + cart.deliveryFee;
+            discountedSubtotal + discountedTax + cart.deliveryFee;
           const rawFee = amountBeforeServiceFee * serviceFeeRate;
           const serviceFee = Math.max(
             serviceFeeMinimum,
             Math.min(rawFee, serviceFeeCap),
           );
           const totalWithServiceFee = amountBeforeServiceFee + serviceFee;
+          const hasDiscount = dealDiscountPercent != null && dealDiscountPercent > 0;
           return (
             <View style={styles.summary}>
+              {hasDiscount && (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Subtotal (before deal)</Text>
+                    <Text style={styles.summaryValueStrikethrough}>
+                      ${cart.subtotal.toFixed(2)}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabelDeal}>
+                      Deal: {dealDiscountPercent}% off
+                    </Text>
+                    <Text style={styles.summaryValueDeal}>
+                      -${(cart.subtotal - discountedSubtotal).toFixed(2)}
+                    </Text>
+                  </View>
+                </>
+              )}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryLabel}>
+                  {hasDiscount ? "Subtotal (after deal)" : "Subtotal"}
+                </Text>
                 <Text style={styles.summaryValue}>
-                  ${cart.subtotal.toFixed(2)}
+                  ${discountedSubtotal.toFixed(2)}
                 </Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Tax</Text>
-                <Text style={styles.summaryValue}>${cart.tax.toFixed(2)}</Text>
+                <Text style={styles.summaryValue}>
+                  ${discountedTax.toFixed(2)}
+                </Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Delivery Fee</Text>
@@ -846,6 +884,9 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { fontSize: 14, color: "#666" },
   summaryValue: { fontSize: 14, color: "#333" },
+  summaryValueStrikethrough: { fontSize: 14, color: "#999", textDecorationLine: "line-through" },
+  summaryLabelDeal: { fontSize: 14, color: "#2e7d32", fontWeight: "600" },
+  summaryValueDeal: { fontSize: 14, color: "#2e7d32", fontWeight: "600" },
   divider: { height: 1, backgroundColor: "#e0e0e0", marginVertical: 8 },
   totalLabel: { fontSize: 18, fontWeight: "bold", color: "#333" },
   totalValue: { fontSize: 18, fontWeight: "bold", color: "#6200ee" },

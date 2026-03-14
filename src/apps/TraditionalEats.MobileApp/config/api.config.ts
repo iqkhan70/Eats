@@ -25,7 +25,7 @@ const ENV_MODE = (process.env.EXPO_PUBLIC_ENV || 'ip').toLowerCase();
 // On macOS: ipconfig getifaddr en0
 // On Windows: Check ipconfig output
 // On Linux: hostname -I
-const DEV_IP = process.env.EXPO_PUBLIC_DEV_IP || '192.168.86.248';
+const DEV_IP = process.env.EXPO_PUBLIC_DEV_IP || '192.168.86.250';
 const STAGING_DOMAIN = 'www.caseflowstage.store';
 // Production host for TestFlight/App Store (no protocol). Override with EXPO_PUBLIC_PRODUCTION_URL=e.g. www.kram.tech
 const PRODUCTION_DOMAIN = (process.env.EXPO_PUBLIC_PRODUCTION_URL || 'www.kram.tech').replace(/^https?:\/\//, '').replace(/\/.*$/, '');

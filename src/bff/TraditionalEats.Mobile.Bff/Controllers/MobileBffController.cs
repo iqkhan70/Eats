@@ -675,6 +675,9 @@ public class MobileBffController : ControllerBase
             var cancelUrl = !string.IsNullOrWhiteSpace(request.CancelUrl)
                 ? request.CancelUrl!.Trim()
                 : baseUrl.TrimEnd('/') + "/cart?payment=cancelled";
+            // Append orderId to cancel URL so app can auto-cancel when user abandons Stripe checkout
+            if (cancelUrl.Contains("payment-done", StringComparison.OrdinalIgnoreCase) || cancelUrl.Contains("status=cancelled", StringComparison.OrdinalIgnoreCase))
+                cancelUrl += (cancelUrl.Contains("?") ? "&" : "?") + "orderId=" + orderId.ToString();
             var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
             var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
             if (Request.Headers.TryGetValue("Authorization", out var checkoutAuthHeader))
@@ -872,6 +875,8 @@ public class MobileBffController : ControllerBase
             var cancelUrl = !string.IsNullOrWhiteSpace(body?.CancelUrl)
                 ? body.CancelUrl!.Trim()
                 : baseUrl.TrimEnd('/') + "/orders/" + orderId + "?payment=cancelled";
+            if (cancelUrl.Contains("payment-done", StringComparison.OrdinalIgnoreCase) || cancelUrl.Contains("status=cancelled", StringComparison.OrdinalIgnoreCase))
+                cancelUrl += (cancelUrl.Contains("?") ? "&" : "?") + "orderId=" + orderId.ToString();
 
             var checkoutPaymentClient = _httpClientFactory.CreateClient("PaymentService");
             var checkoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/payment/checkout/session");
