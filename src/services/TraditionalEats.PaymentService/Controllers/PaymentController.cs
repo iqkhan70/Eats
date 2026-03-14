@@ -102,7 +102,7 @@ public class PaymentController : ControllerBase
         {
             var (stripeAccountId, _) = await _paymentService.GetVendorOnboardingStatusAsync(userId);
             if (string.IsNullOrEmpty(stripeAccountId))
-                return BadRequest(new { message = "No Stripe account linked. Use 'Finish Stripe setup' to start onboarding." });
+                return BadRequest(new { message = "No payout account linked. Use 'Connect payouts' in your vendor dashboard to get started." });
             await _paymentService.UpdateVendorOnboardingFromStripeAsync(stripeAccountId);
             var (_, status) = await _paymentService.GetVendorOnboardingStatusAsync(userId);
             return Ok(new { stripeAccountId, status });

@@ -176,13 +176,13 @@ export default function VendorDashboardScreen() {
       if (url) {
         await Linking.openURL(url);
       } else {
-        Alert.alert("Error", "Could not start Stripe setup.");
+        Alert.alert("Error", "Could not start payout setup.");
       }
     } catch (error: any) {
       const msg =
         error.response?.data?.error ||
         error.message ||
-        "Failed to start Stripe setup.";
+        "Failed to connect payouts.";
       Alert.alert("Error", msg);
     } finally {
       setStripeConnecting(false);
@@ -284,34 +284,35 @@ export default function VendorDashboardScreen() {
           </View>
         </LinearGradient>
 
-        {stripeOnboardingStatus && stripeOnboardingStatus !== "Complete" && (
-          <View style={styles.stripeBanner}>
-            <View style={styles.stripeBannerContent}>
-              <Text style={styles.stripeBannerTitle}>
-                Stripe setup incomplete
-              </Text>
-              <Text style={styles.stripeBannerText}>
-                Complete the short Stripe Connect flow so you can accept paid
-                orders. In test mode use Stripe's test data—no real bank details
-                needed until you go live.
-              </Text>
+        {restaurants.length > 0 &&
+          stripeOnboardingStatus &&
+          stripeOnboardingStatus !== "Complete" && (
+            <View style={styles.stripeBanner}>
+              <View style={styles.stripeBannerContent}>
+                <Text style={styles.stripeBannerTitle}>
+                  Connect payouts to accept orders
+                </Text>
+                <Text style={styles.stripeBannerText}>
+                  You're almost ready to go live. Set up payouts so you can
+                  receive payments when customers order. Takes about 2 minutes.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.stripeButton,
+                  stripeConnecting && styles.stripeButtonDisabled,
+                ]}
+                onPress={connectStripe}
+                disabled={stripeConnecting}
+              >
+                {stripeConnecting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.stripeButtonText}>Connect payouts</Text>
+                )}
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[
-                styles.stripeButton,
-                stripeConnecting && styles.stripeButtonDisabled,
-              ]}
-              onPress={connectStripe}
-              disabled={stripeConnecting}
-            >
-              {stripeConnecting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.stripeButtonText}>Finish Stripe setup</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
 
         {restaurants.length === 0 ? (
           <View style={styles.emptyContainer}>

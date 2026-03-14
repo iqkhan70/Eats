@@ -188,7 +188,7 @@ You can **Clear cart** to remove all items. Pull down on the cart screen to refr
 ### 6.2 Vendor dashboard (“My Vendors”)
 
 - **Header** – Back, “My Vendors”, and icons for **Documents**, **Orders**, and **Add** (new restaurant).
-- **Stripe banner** – If Stripe setup is not complete, a yellow banner explains you need to finish Stripe Connect so you can accept paid orders. Tap **Finish Stripe setup** to open the Stripe onboarding link in the browser. In test mode you can use Stripe test data.
+- **Connect payouts banner** – When you have at least one restaurant, a yellow banner appears if payouts are not yet connected. Tap **Connect payouts** to complete setup so you can accept paid orders. In test mode you can use Stripe test data.
 - **Restaurant list** – Each card shows:
   - Name and status (**Active** / **Inactive**)
   - Description and cuisine type
@@ -308,7 +308,7 @@ You can **Clear cart** to remove all items. Pull down on the cart screen to refr
 | Manage my restaurants         | Vendor Dashboard |
 | Manage menu items             | Vendor Dashboard → Menu on a restaurant |
 | Manage orders (vendor)        | Vendor Dashboard → Orders (or Orders on a card) |
-| Complete Stripe setup         | Vendor Dashboard → Finish Stripe setup (banner) |
+| Connect payouts               | Vendor Dashboard → Connect payouts (banner, after adding a restaurant) |
 
 ---
 

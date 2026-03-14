@@ -74,7 +74,7 @@ class ApiClient {
           const isUnauthorized = status === 401;
 
           // Don't log 400 for Stripe onboarding refresh when vendor has not linked a Stripe account yet
-          // This is an expected state for new vendors; UI should show "Finish Stripe setup".
+          // This is an expected state for new vendors; UI should show "Connect payouts".
           const isStripeRefreshOnboardingStatus =
             url.includes('/payments/vendor/refresh-onboarding-status') &&
             method === 'POST' &&

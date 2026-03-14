@@ -1,12 +1,12 @@
 # Stripe Connect (Vendor Onboarding) Setup
 
-## Why the app still shows "Stripe setup incomplete" after you finished in Stripe
+## Why the app still shows "Connect payouts" / payout setup incomplete after you finished in Stripe
 
-The platform **only** knows about connected accounts that **it** creates and that are completed via **the app’s “Finish Stripe setup” link**. It checks `details_submitted` and `charges_enabled` (and `payouts_enabled`) for **that** account.
+The platform **only** knows about connected accounts that **it** creates and that are completed via **the app’s “Connect payouts” link**. It checks `details_submitted` and `charges_enabled` (and `payouts_enabled`) for **that** account.
 
 - **You completed onboarding in the Stripe Dashboard manually**  
   Then Stripe has a different connected account than the one our app created and stored. The app never received that account ID and never marks it as complete.  
-  **Fix:** Use **“Finish Stripe setup”** in the app. That opens our Stripe Connect Account Link; when you complete that flow, our app has the correct `acct_xxx` and (via webhook or refresh) can set status to Complete.
+  **Fix:** Use **“Connect payouts”** in the app. That opens our Stripe Connect Account Link; when you complete that flow, our app has the correct `acct_xxx` and (via webhook or refresh) can set status to Complete.
 
 - **Test vs live mismatch**  
   If the app uses **test** keys (`sk_test_...`) but you completed onboarding in the **live** Stripe Dashboard (or the other way around), the account we have is for the other mode.  
@@ -20,11 +20,11 @@ The platform **only** knows about connected accounts that **it** creates and tha
 
 You are using **live** Stripe keys (`sk_live_...`). Stripe requires your platform to complete a one-time questionnaire before you can create **live** connected accounts (vendor onboarding).
 
-**Fix:** Open **[Stripe Connect Accounts Overview](https://dashboard.stripe.com/connect/accounts/overview)** and complete the platform profile questionnaire. After that, "Finish Stripe setup" in the app will work with live keys.
+**Fix:** Open **[Stripe Connect Accounts Overview](https://dashboard.stripe.com/connect/accounts/overview)** and complete the platform profile questionnaire. After that, "Connect payouts" in the app will work with live keys.
 
 ## If you get 400 Bad Request ("Why you see 400")
 
-After you click **Finish Stripe setup**, the Vendor Dashboard shows the **exact Stripe error** in a red box under the banner ("Why you see 400"). Use that message to fix the issue.
+After you click **Connect payouts**, the Vendor Dashboard shows the **exact Stripe error** in a red box under the banner ("Why you see 400"). Use that message to fix the issue.
 
 **Common causes and fixes:**
 
@@ -52,7 +52,7 @@ After you click **Finish Stripe setup**, the Vendor Dashboard shows the **exact 
 
 If Stripe (e.g. in the Dashboard) gives you a **remediation link** for your connected account (“Send this remediation link to your connected account…”), you can still complete setup:
 
-1. In the **Vendor Dashboard** in the app, under the “Stripe setup incomplete” banner you’ll see: **“If you got a remediation link from Stripe, paste it below and open it”**.
+1. In the **Vendor Dashboard** in the app, under the “payout setup” banner you’ll see: **“If you got a remediation link from our payment provider, paste it below and open it”**.
 2. Paste the full link (e.g. `https://connect.stripe.com/d/setup/e/...`) into the box and click **Open link**.
 3. Complete the Stripe-hosted form. When done, Stripe will redirect you back; our webhook will update onboarding status when Stripe notifies us.
 
@@ -84,12 +84,12 @@ This works when the connected account has outstanding requirements and Stripe pr
    - Start services (e.g. `./start-all.sh` or run PaymentService, Web BFF, WebApp, IdentityService, etc.).
    - Open the **WebApp** at the same URL you set in `ConnectReturnUrl` (e.g. `https://localhost:5301`).
    - Sign in with a **Vendor** account.
-   - Go to **Vendor Dashboard** → click **Finish Stripe setup**. You’ll be sent to Stripe’s onboarding.
+   - Go to **Vendor Dashboard** → click **Connect payouts**. You’ll be sent to Stripe’s onboarding.
    - Complete the form (in test mode you can use [Stripe test data](https://docs.stripe.com/connect/account-tokens)); Stripe will redirect back to `https://localhost:5301/vendor?stripe=return` (or your IP).
-   - The Vendor Dashboard will call the refresh endpoint and the “Stripe setup incomplete” banner should disappear.
+   - The Vendor Dashboard will call the refresh endpoint and the “payout setup” banner should disappear.
 
 5. **Mobile app locally**  
-   If you’re testing from the **mobile app** (e.g. Expo), “Finish Stripe setup” opens the browser. When onboarding is done, Stripe redirects to the **WebApp** return URL (e.g. `https://localhost:5301/vendor?stripe=return` or your IP). So that URL must be reachable from the device (localhost won’t work from a phone — use your machine’s IP and add those redirect URLs in Stripe). After finishing, return to the app and open Vendor Dashboard again (or pull to refresh); we sync status from Stripe and the banner updates.
+   If you’re testing from the **mobile app** (e.g. Expo), “Connect payouts” opens the browser. When onboarding is done, Stripe redirects to the **WebApp** return URL (e.g. `https://localhost:5301/vendor?stripe=return` or your IP). So that URL must be reachable from the device (localhost won’t work from a phone — use your machine’s IP and add those redirect URLs in Stripe). After finishing, return to the app and open Vendor Dashboard again (or pull to refresh); we sync status from Stripe and the banner updates.
 
 ## Development / testing without completing the questionnaire
 
