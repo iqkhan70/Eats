@@ -275,7 +275,8 @@ export default function HomeScreen() {
         latitude: r.latitude,
         longitude: r.longitude,
         activeDealTitle: r.activeDealTitle ?? r.ActiveDealTitle,
-        activeDealDiscountPercent: r.activeDealDiscountPercent ?? r.ActiveDealDiscountPercent,
+        activeDealDiscountPercent:
+          r.activeDealDiscountPercent ?? r.ActiveDealDiscountPercent,
         activeDealEndTime: r.activeDealEndTime ?? r.ActiveDealEndTime,
       }));
 
@@ -415,8 +416,8 @@ export default function HomeScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Today's Deals</Text>
                 <Text style={styles.dealsSubtitle}>
-                  Restaurant discounts. Some items have their own deal – you get
-                  the best discount per item.
+                  Vendor discounts. Some items have their own deal – you get the
+                  best discount per item.
                 </Text>
                 <View style={styles.dealsBanner}>
                   {deals.map((r, i) => (
@@ -540,7 +541,9 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                   <View style={styles.restaurantDetails}>
                     <View style={styles.restaurantNameRow}>
-                      <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                      <Text style={styles.restaurantName}>
+                        {restaurant.name}
+                      </Text>
                       {hasActiveDeal(restaurant) && (
                         <View style={styles.dealBadge}>
                           <Ionicons name="flame" size={12} color="#fff" />
