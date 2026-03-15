@@ -19,6 +19,8 @@ public interface ICatalogService
     Task<List<MenuItemDto>> GetMenuItemsByRestaurantAsync(Guid restaurantId, Guid? categoryId = null);
     Task<bool> UpdateMenuItemAsync(Guid menuItemId, Guid restaurantId, UpdateMenuItemDto dto);
     Task<bool> SetMenuItemAvailabilityAsync(Guid menuItemId, Guid restaurantId, bool isAvailable);
+    /// <summary>Returns active deal info (discount percent, end time) for menu items. Used at checkout.</summary>
+    Task<Dictionary<Guid, (int DiscountPercent, DateTime EndTime)>> GetMenuItemDealInfoAsync(IEnumerable<Guid> menuItemIds);
     Task<Guid> AddMenuItemOptionAsync(Guid menuItemId, Guid restaurantId, CreateMenuItemOptionDto dto);
     Task<List<MenuItemOptionDto>> GetMenuItemOptionsAsync(Guid menuItemId);
     Task<Guid> AddMenuItemPriceAsync(Guid menuItemId, Guid restaurantId, CreateMenuItemPriceDto dto);
@@ -284,6 +286,9 @@ public class CatalogService : ICatalogService
         if (dto.ImageUrl != null) menuItem.ImageUrl = dto.ImageUrl;
         if (dto.CategoryId.HasValue) menuItem.CategoryId = dto.CategoryId.Value;
         if (dto.DietaryTags != null) menuItem.DietaryTagsJson = JsonSerializer.Serialize(dto.DietaryTags);
+        menuItem.ActiveDealTitle = string.IsNullOrWhiteSpace(dto.ActiveDealTitle) ? null : dto.ActiveDealTitle;
+        menuItem.ActiveDealDiscountPercent = dto.ActiveDealDiscountPercent;
+        menuItem.ActiveDealEndTime = dto.ActiveDealEndTime;
 
         menuItem.UpdatedAt = DateTime.UtcNow;
 
@@ -316,6 +321,29 @@ public class CatalogService : ICatalogService
         await _redis.DeleteAsync($"menu:restaurant:{restaurantId}");
 
         return true;
+    }
+
+    public async Task<Dictionary<Guid, (int DiscountPercent, DateTime EndTime)>> GetMenuItemDealInfoAsync(IEnumerable<Guid> menuItemIds)
+    {
+        var ids = menuItemIds.Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, (int, DateTime)>();
+
+        var now = DateTime.UtcNow;
+        var items = await _context.MenuItems
+            .AsNoTracking()
+            .Where(m => ids.Contains(m.MenuItemId)
+                && m.ActiveDealTitle != null
+                && m.ActiveDealDiscountPercent.HasValue
+                && m.ActiveDealDiscountPercent.Value > 0
+                && m.ActiveDealDiscountPercent.Value <= 100
+                && m.ActiveDealEndTime.HasValue
+                && m.ActiveDealEndTime.Value > now)
+            .Select(m => new { m.MenuItemId, m.ActiveDealDiscountPercent, m.ActiveDealEndTime })
+            .ToListAsync();
+
+        return items
+            .Where(m => m.ActiveDealEndTime.HasValue)
+            .ToDictionary(m => m.MenuItemId, m => (m.ActiveDealDiscountPercent!.Value, m.ActiveDealEndTime!.Value));
     }
 
     public async Task<Guid> AddMenuItemOptionAsync(Guid menuItemId, Guid restaurantId, CreateMenuItemOptionDto dto)
@@ -444,6 +472,9 @@ public class CatalogService : ICatalogService
             ImageUrl = menuItem.ImageUrl,
             IsAvailable = menuItem.IsAvailable,
             DietaryTags = JsonSerializer.Deserialize<List<string>>(menuItem.DietaryTagsJson ?? "[]") ?? new(),
+            ActiveDealTitle = menuItem.ActiveDealTitle,
+            ActiveDealDiscountPercent = menuItem.ActiveDealDiscountPercent,
+            ActiveDealEndTime = menuItem.ActiveDealEndTime,
             CreatedAt = menuItem.CreatedAt,
             UpdatedAt = menuItem.UpdatedAt,
             Options = menuItem.Options.Select(o => new MenuItemOptionDto
@@ -503,7 +534,10 @@ public record UpdateMenuItemDto(
     decimal? Price,
     string? ImageUrl,
     Guid? CategoryId,
-    List<string>? DietaryTags);
+    List<string>? DietaryTags,
+    string? ActiveDealTitle,
+    int? ActiveDealDiscountPercent,
+    DateTime? ActiveDealEndTime);
 
 public record MenuItemDto
 {
@@ -517,6 +551,9 @@ public record MenuItemDto
     public string? ImageUrl { get; set; }
     public bool IsAvailable { get; set; }
     public List<string> DietaryTags { get; set; } = new();
+    public string? ActiveDealTitle { get; set; }
+    public int? ActiveDealDiscountPercent { get; set; }
+    public DateTime? ActiveDealEndTime { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<MenuItemOptionDto> Options { get; set; } = new();

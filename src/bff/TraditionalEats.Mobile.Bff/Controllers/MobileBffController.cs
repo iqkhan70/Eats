@@ -391,6 +391,25 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpGet("catalog/menu-items/deal-info")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMenuItemDealInfo([FromQuery] string? menuItemIds = null)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CatalogService");
+            var query = !string.IsNullOrWhiteSpace(menuItemIds) ? $"?menuItemIds={Uri.EscapeDataString(menuItemIds)}" : "";
+            var response = await client.GetAsync($"/api/catalog/menu-items/deal-info{query}");
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching menu item deal info");
+            return StatusCode(500, new { message = "Failed to get deal info" });
+        }
+    }
+
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories()
     {

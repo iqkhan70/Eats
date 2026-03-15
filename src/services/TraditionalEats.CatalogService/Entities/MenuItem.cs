@@ -12,6 +12,9 @@ public class MenuItem
     public string? ImageUrl { get; set; }
     public bool IsAvailable { get; set; } = true;
     public string DietaryTagsJson { get; set; } = "[]"; // JSON array stored as string
+    public string? ActiveDealTitle { get; set; }
+    public int? ActiveDealDiscountPercent { get; set; }
+    public DateTime? ActiveDealEndTime { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -101,6 +101,10 @@ builder.Services.AddHttpClient("RestaurantService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:RestaurantService"] ?? "http://localhost:5007");
 });
+builder.Services.AddHttpClient("CatalogService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:CatalogService"] ?? "http://localhost:5003");
+});
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddHostedService<AbandonedPaymentCleanupBackgroundService>();
 

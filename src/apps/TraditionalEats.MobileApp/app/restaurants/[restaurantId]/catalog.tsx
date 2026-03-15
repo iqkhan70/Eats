@@ -22,7 +22,24 @@ interface MenuItem {
   imageUrl?: string;
   isAvailable: boolean;
   dietaryTags: string[];
+  activeDealTitle?: string | null;
+  activeDealDiscountPercent?: number | null;
+  activeDealEndTime?: string | null;
 }
+
+const hasActiveItemDeal = (item: MenuItem): boolean => {
+  if (item.activeDealDiscountPercent == null || item.activeDealDiscountPercent <= 0 || item.activeDealDiscountPercent > 100) return false;
+  if (item.activeDealEndTime) {
+    const end = new Date(item.activeDealEndTime).getTime();
+    if (end <= Date.now()) return false;
+  }
+  return true;
+};
+
+const getItemDealBadgeText = (item: MenuItem): string => {
+  if (item.activeDealDiscountPercent != null) return `${item.activeDealDiscountPercent}% off`;
+  return item.activeDealTitle?.trim() ?? 'Deal';
+};
 
 interface Category {
   categoryId: string;
@@ -106,6 +123,9 @@ export default function CatalogScreen() {
         imageUrl: item.imageUrl,
         isAvailable: item.isAvailable ?? true,
         dietaryTags: item.dietaryTags || [],
+        activeDealTitle: item.activeDealTitle ?? item.ActiveDealTitle,
+        activeDealDiscountPercent: item.activeDealDiscountPercent ?? item.ActiveDealDiscountPercent,
+        activeDealEndTime: item.activeDealEndTime ?? item.ActiveDealEndTime,
       }));
 
       setMenuItems(mappedItems);
@@ -347,7 +367,14 @@ export default function CatalogScreen() {
                       <View style={styles.menuItemDetails}>
                         <Text style={styles.menuItemName}>{item.name}</Text>
                         {item.description && <Text style={styles.menuItemDescription}>{item.description}</Text>}
-                        <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                        <View style={styles.priceRow}>
+                          <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                          {hasActiveItemDeal(item) && (
+                            <View style={styles.itemDealBadge}>
+                              <Text style={styles.itemDealBadgeText}>{getItemDealBadgeText(item)}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
 
                       {item.isAvailable ? (
@@ -575,7 +602,10 @@ const styles = StyleSheet.create({
   menuItemDetails: { flex: 1 },
   menuItemName: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 4 },
   menuItemDescription: { fontSize: 14, color: '#666', marginBottom: 8 },
-  menuItemPrice: { fontSize: 18, fontWeight: 'bold', color: '#f97316', marginTop: 4 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' },
+  menuItemPrice: { fontSize: 18, fontWeight: 'bold', color: '#f97316' },
+  itemDealBadge: { backgroundColor: '#2e7d32', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  itemDealBadgeText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   addButton: {
     marginLeft: 12,
     padding: 4,

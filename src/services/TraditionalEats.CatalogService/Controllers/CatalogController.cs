@@ -156,6 +156,31 @@ public class CatalogController : ControllerBase
         }
     }
 
+    [HttpGet("menu-items/deal-info")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMenuItemDealInfo([FromQuery] string? menuItemIds = null)
+    {
+        try
+        {
+            var ids = new List<Guid>();
+            if (!string.IsNullOrWhiteSpace(menuItemIds))
+            {
+                foreach (var s in menuItemIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (Guid.TryParse(s, out var id)) ids.Add(id);
+                }
+            }
+            var deals = await _catalogService.GetMenuItemDealInfoAsync(ids);
+            var result = deals.ToDictionary(kv => kv.Key.ToString(), kv => new { discountPercent = kv.Value.DiscountPercent, endTime = kv.Value.EndTime });
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get menu item deal info");
+            return StatusCode(500, new { message = "Failed to get deal info" });
+        }
+    }
+
     [HttpGet("menu-items/{menuItemId}")]
     public async Task<IActionResult> GetMenuItem(Guid menuItemId)
     {

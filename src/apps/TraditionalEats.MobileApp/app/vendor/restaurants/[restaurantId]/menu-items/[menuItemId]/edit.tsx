@@ -9,7 +9,11 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -33,6 +37,9 @@ interface MenuItem {
   categoryId: string;
   categoryName?: string;
   isAvailable: boolean;
+  activeDealTitle?: string | null;
+  activeDealDiscountPercent?: number | null;
+  activeDealEndTime?: string | null;
 }
 
 export default function EditMenuItemScreen() {
@@ -53,8 +60,13 @@ export default function EditMenuItemScreen() {
     description: "",
     price: "",
     imageUrl: "",
+    activeDealTitle: "" as string | null,
+    activeDealDiscountPercent: null as number | null,
+    activeDealEndTime: "" as string | null,
   });
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showDealEndPicker, setShowDealEndPicker] = useState(false);
+  const [pendingDealEndTime, setPendingDealEndTime] = useState<Date | null>(null);
 
   useEffect(() => {
     if (restaurantId && menuItemId) {
@@ -157,6 +169,9 @@ export default function EditMenuItemScreen() {
           description: found.description || "",
           price: found.price.toString() || "",
           imageUrl: found.imageUrl || "",
+          activeDealTitle: found.activeDealTitle ?? "",
+          activeDealDiscountPercent: found.activeDealDiscountPercent ?? null,
+          activeDealEndTime: found.activeDealEndTime ?? "",
         });
       } else {
         Alert.alert("Error", "Menu item not found");
@@ -197,6 +212,11 @@ export default function EditMenuItemScreen() {
         imageUrl: formData.imageUrl.trim() || null,
         categoryId: formData.categoryId,
         dietaryTags: null as string[] | null,
+        activeDealTitle: formData.activeDealTitle?.trim() || null,
+        activeDealDiscountPercent: formData.activeDealDiscountPercent ?? null,
+        activeDealEndTime: formData.activeDealEndTime
+          ? new Date(formData.activeDealEndTime).toISOString()
+          : null,
       };
 
       await api.put(`/MobileBff/menu-items/${menuItemId}`, request);
@@ -237,8 +257,19 @@ export default function EditMenuItemScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <LinearGradient
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={true}
+      >
+        <LinearGradient
         colors={["#f97316", "#eab308"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
@@ -374,6 +405,191 @@ export default function EditMenuItemScreen() {
           <Text style={styles.caption}>JPEG, PNG, WebP or GIF. Max 5MB.</Text>
         </View>
 
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Item Deal</Text>
+          <Text style={styles.caption}>
+            Optional. Show a deal badge on this item. Customer gets the best of
+            restaurant or item deal at checkout.
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={formData.activeDealTitle ?? ""}
+            onChangeText={(text) =>
+              setFormData({ ...formData, activeDealTitle: text || null })
+            }
+            placeholder="e.g. 20% off today"
+          />
+          <View style={styles.dealRow}>
+            <TextInput
+              style={[styles.input, styles.dealPercentInput]}
+              value={
+                formData.activeDealDiscountPercent != null
+                  ? String(formData.activeDealDiscountPercent)
+                  : ""
+              }
+              onChangeText={(text) => {
+                const n = text ? parseInt(text, 10) : null;
+                setFormData({
+                  ...formData,
+                  activeDealDiscountPercent:
+                    n != null && !isNaN(n) ? n : null,
+                });
+              }}
+              placeholder="% off"
+              keyboardType="number-pad"
+            />
+            <TouchableOpacity
+              style={[
+                styles.input,
+                styles.dealEndInput,
+                styles.datePickerTouchable,
+              ]}
+              onPress={() => {
+                const initial = formData.activeDealEndTime
+                  ? (() => {
+                      const d = new Date(formData.activeDealEndTime);
+                      return isNaN(d.getTime())
+                        ? new Date(Date.now() + 24 * 60 * 60 * 1000)
+                        : d;
+                    })()
+                  : new Date(Date.now() + 24 * 60 * 60 * 1000);
+                setPendingDealEndTime(initial);
+                setShowDealEndPicker(true);
+              }}
+            >
+              <Text
+                style={
+                  formData.activeDealEndTime
+                    ? styles.datePickerText
+                    : styles.datePickerPlaceholder
+                }
+              >
+                {formData.activeDealEndTime
+                  ? (() => {
+                      try {
+                        const d = new Date(formData.activeDealEndTime);
+                        return isNaN(d.getTime())
+                          ? "Invalid date"
+                          : d.toLocaleString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            });
+                      } catch {
+                        return "Invalid date";
+                      }
+                    })()
+                  : "Set end date/time"}
+              </Text>
+              <Ionicons name="calendar-outline" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+          {showDealEndPicker &&
+            (Platform.OS === "android" ? (
+              <DateTimePicker
+                value={
+                  formData.activeDealEndTime
+                    ? (() => {
+                        const d = new Date(formData.activeDealEndTime);
+                        return isNaN(d.getTime()) ? new Date() : d;
+                      })()
+                    : new Date(Date.now() + 24 * 60 * 60 * 1000)
+                }
+                mode="datetime"
+                minimumDate={new Date()}
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowDealEndPicker(false);
+                  if (event.type === "set" && selectedDate) {
+                    setFormData({
+                      ...formData,
+                      activeDealEndTime: selectedDate.toISOString(),
+                    });
+                  }
+                }}
+              />
+            ) : (
+              <Modal
+                visible={showDealEndPicker}
+                transparent
+                animationType="slide"
+              >
+                <View style={styles.datePickerOverlay}>
+                  <TouchableOpacity
+                    style={StyleSheet.absoluteFill}
+                    activeOpacity={1}
+                    onPress={() => {
+                      setPendingDealEndTime(null);
+                      setShowDealEndPicker(false);
+                    }}
+                  />
+                  <View
+                    style={styles.datePickerModal}
+                    onStartShouldSetResponder={() => true}
+                  >
+                    <View style={styles.datePickerHeader}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setPendingDealEndTime(null);
+                          setShowDealEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.datePickerCancel}>Cancel</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.datePickerTitle}>Deal ends</Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (pendingDealEndTime) {
+                            setFormData({
+                              ...formData,
+                              activeDealEndTime:
+                                pendingDealEndTime.toISOString(),
+                            });
+                          }
+                          setPendingDealEndTime(null);
+                          setShowDealEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.datePickerDone}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <DateTimePicker
+                      value={
+                        pendingDealEndTime ??
+                        new Date(Date.now() + 24 * 60 * 60 * 1000)
+                      }
+                      mode="datetime"
+                      minimumDate={new Date()}
+                      display="spinner"
+                      onChange={(_, selectedDate) => {
+                        if (selectedDate) {
+                          setPendingDealEndTime(selectedDate);
+                        }
+                      }}
+                    />
+                  </View>
+                </View>
+              </Modal>
+            ))}
+          <TouchableOpacity
+            onPress={() => {
+              setShowDealEndPicker(false);
+              setFormData({
+                ...formData,
+                activeDealTitle: null,
+                activeDealDiscountPercent: null,
+                activeDealEndTime: null,
+              });
+            }}
+            style={styles.clearDealButton}
+          >
+            <Ionicons name="close-circle-outline" size={18} color="#666" />
+            <Text style={styles.clearDealText}>Clear deal</Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[
             styles.saveButton,
@@ -408,7 +624,8 @@ export default function EditMenuItemScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -417,6 +634,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 280 },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
@@ -573,4 +792,48 @@ const styles = StyleSheet.create({
   },
   uploadButtonText: { color: "#f97316", fontWeight: "600" },
   caption: { fontSize: 12, color: "#666", marginTop: 4 },
+  dealRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  dealPercentInput: { flex: 0.3 },
+  dealEndInput: { flex: 0.7 },
+  datePickerTouchable: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  datePickerText: { fontSize: 16, color: "#333" },
+  datePickerPlaceholder: { fontSize: 16, color: "#999" },
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerModal: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 34,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  datePickerCancel: { fontSize: 16, color: "#666" },
+  datePickerTitle: { fontSize: 18, fontWeight: "600", color: "#333" },
+  datePickerDone: { fontSize: 16, color: "#f97316", fontWeight: "600" },
+  clearDealButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    padding: 8,
+  },
+  clearDealText: { fontSize: 14, color: "#666" },
 });

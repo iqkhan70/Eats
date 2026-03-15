@@ -1067,8 +1067,8 @@ public class OrderService : IOrderService
                 item.MenuItemId, item.Name, item.Quantity, item.UnitPrice, item.TotalPrice);
         }
 
-        // Apply restaurant active deal discount if applicable
-        decimal discountMultiplier = 1m;
+        // Restaurant deal: fallback when item has no deal
+        decimal restaurantDiscountMultiplier = 1m;
         try
         {
             var restClient = _httpClientFactory.CreateClient("RestaurantService");
@@ -1090,8 +1090,8 @@ public class OrderService : IOrderService
                 {
                     if (string.IsNullOrEmpty(endTime) || (DateTime.TryParse(endTime, out var end) && end > DateTime.UtcNow))
                     {
-                        discountMultiplier = 1m - (discountPct.Value / 100m);
-                        _logger.LogInformation("PlaceOrderAsync: Applying {Discount}% deal discount (multiplier={Multiplier})", discountPct.Value, discountMultiplier);
+                        restaurantDiscountMultiplier = 1m - (discountPct.Value / 100m);
+                        _logger.LogInformation("PlaceOrderAsync: Restaurant deal {Discount}% (multiplier={Multiplier})", discountPct.Value, restaurantDiscountMultiplier);
                     }
                 }
             }
@@ -1101,12 +1101,45 @@ public class OrderService : IOrderService
             _logger.LogWarning(ex, "PlaceOrderAsync: Could not fetch restaurant deal, proceeding without discount");
         }
 
+        // Menu item deals: best (highest) discount applies per item
+        var itemDealMultipliers = new Dictionary<Guid, decimal>();
+        try
+        {
+            var menuItemIds = cart.Items.Select(i => i.MenuItemId).Distinct().ToList();
+            if (menuItemIds.Count > 0)
+            {
+                var catalogClient = _httpClientFactory.CreateClient("CatalogService");
+                var idsParam = string.Join(",", menuItemIds);
+                var catalogResponse = await catalogClient.GetAsync($"/api/catalog/menu-items/deal-info?menuItemIds={idsParam}");
+                if (catalogResponse.IsSuccessStatusCode)
+                {
+                    var catalogJson = await catalogResponse.Content.ReadAsStringAsync();
+                    using var doc = System.Text.Json.JsonDocument.Parse(catalogJson);
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (Guid.TryParse(prop.Name, out var mid) && prop.Value.TryGetProperty("discountPercent", out var dpEl) && dpEl.TryGetInt32(out var dp) && dp > 0 && dp <= 100)
+                        {
+                            itemDealMultipliers[mid] = 1m - (dp / 100m);
+                            _logger.LogInformation("PlaceOrderAsync: Menu item {MenuItemId} has {Discount}% deal", mid, dp);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PlaceOrderAsync: Could not fetch menu item deals, using restaurant deal only");
+        }
+
         var orderId = Guid.NewGuid();
 
-        // Calculate totals from items to ensure accuracy (don't trust cart totals if items are doubled)
+        // Calculate totals: use the best (highest) discount for the customer per item.
+        // If restaurant has 50% and item has 20%, customer gets 50% (avoids vendor oversight).
         var orderItems = cart.Items.Select(item =>
         {
-            var unitPrice = Math.Round(item.UnitPrice * discountMultiplier, 2);
+            var itemMult = itemDealMultipliers.TryGetValue(item.MenuItemId, out var m) ? m : 1m;
+            var multiplier = itemMult < restaurantDiscountMultiplier ? itemMult : restaurantDiscountMultiplier;
+            var unitPrice = Math.Round(item.UnitPrice * multiplier, 2);
             var totalPrice = Math.Round(unitPrice * item.Quantity, 2);
             return new OrderItem
             {

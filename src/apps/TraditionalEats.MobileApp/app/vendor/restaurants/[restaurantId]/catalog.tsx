@@ -23,7 +23,18 @@ interface MenuItem {
   categoryId?: string;
   categoryName?: string;
   isAvailable: boolean;
+  activeDealDiscountPercent?: number | null;
+  activeDealEndTime?: string | null;
 }
+
+const hasActiveItemDeal = (item: MenuItem): boolean => {
+  if (item.activeDealDiscountPercent == null || item.activeDealDiscountPercent <= 0 || item.activeDealDiscountPercent > 100) return false;
+  if (item.activeDealEndTime) {
+    const end = new Date(item.activeDealEndTime).getTime();
+    if (end <= Date.now()) return false;
+  }
+  return true;
+};
 
 export default function ManageCatalogScreen() {
   const router = useRouter();
@@ -77,6 +88,8 @@ export default function ManageCatalogScreen() {
         categoryId: typeof x.categoryId === 'string' ? x.categoryId : undefined,
         categoryName: normalizeCategoryName(x.categoryName ?? x.category),
         isAvailable: typeof x.isAvailable === 'boolean' ? x.isAvailable : (x.isAvailable ?? true),
+        activeDealDiscountPercent: x.activeDealDiscountPercent ?? x.ActiveDealDiscountPercent ?? null,
+        activeDealEndTime: x.activeDealEndTime ?? x.ActiveDealEndTime ?? null,
       }));
 
       setMenuItems(mapped);
@@ -210,7 +223,16 @@ export default function ManageCatalogScreen() {
                 <View style={styles.menuItemHeader}>
                   <View style={styles.menuItemInfo}>
                     <Text style={styles.menuItemName}>{item.name}</Text>
-                    <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
+                      {hasActiveItemDeal(item) && (
+                        <View style={styles.itemDealBadge}>
+                          <Text style={styles.itemDealBadgeText}>
+                            {item.activeDealDiscountPercent}% off
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
 
                   <View
@@ -327,7 +349,10 @@ const styles = StyleSheet.create({
   menuItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   menuItemInfo: { flex: 1 },
   menuItemName: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   menuItemPrice: { fontSize: 16, fontWeight: '600', color: '#f97316' },
+  itemDealBadge: { backgroundColor: '#2e7d32', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  itemDealBadgeText: { fontSize: 12, fontWeight: '600', color: '#fff' },
 
   availabilityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   availableBadge: { backgroundColor: '#e8f5e9' },

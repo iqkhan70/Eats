@@ -414,6 +414,10 @@ export default function HomeScreen() {
             return (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Today's Deals</Text>
+                <Text style={styles.dealsSubtitle}>
+                  Restaurant discounts. Some items have their own deal – you get
+                  the best discount per item.
+                </Text>
                 <View style={styles.dealsBanner}>
                   {deals.map((r, i) => (
                     <TouchableOpacity
@@ -775,6 +779,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#fff",
+  },
+  dealsSubtitle: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 8,
+    lineHeight: 16,
   },
   dealsBanner: {
     backgroundColor: "rgba(249, 115, 22, 0.12)",

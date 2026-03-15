@@ -57,6 +57,8 @@ export default function CartScreen() {
   const [dealDiscountPercent, setDealDiscountPercent] = useState<number | null>(
     null,
   );
+  // Item-level deals: menuItemId -> discountPercent (overrides restaurant deal for that item)
+  const [itemDealMap, setItemDealMap] = useState<Record<string, number>>({});
 
   // Reload cart when screen comes into focus (e.g., after login)
   useFocusEffect(
@@ -247,6 +249,7 @@ export default function CartScreen() {
         setCart(null);
         setPaymentReady(true);
         setDealDiscountPercent(null);
+        setItemDealMap({});
       } else {
         setCart(cartData);
         // Check payment readiness and deal if cart has a restaurant
@@ -279,9 +282,38 @@ export default function CartScreen() {
           } catch {
             setDealDiscountPercent(null);
           }
+          // Fetch item-level deal info for cart items
+          try {
+            const menuItemIds = cartData.items
+              .map((i) => i.menuItemId)
+              .filter((id) => id && id !== EMPTY_MENU_ITEM_ID);
+            if (menuItemIds.length > 0) {
+              const dealRes = await api.get<Record<string, { discountPercent: number; endTime: string }>>(
+                `/MobileBff/catalog/menu-items/deal-info`,
+                { params: { menuItemIds: menuItemIds.join(",") } }
+              );
+              const map: Record<string, number> = {};
+              const data = dealRes.data;
+              if (data && typeof data === "object") {
+                const now = Date.now();
+                for (const [id, info] of Object.entries(data)) {
+                  if (info?.discountPercent != null && info.discountPercent > 0 && info.discountPercent <= 100) {
+                    const end = info.endTime ? new Date(info.endTime).getTime() : Infinity;
+                    if (end > now) map[id] = info.discountPercent;
+                  }
+                }
+              }
+              setItemDealMap(map);
+            } else {
+              setItemDealMap({});
+            }
+          } catch {
+            setItemDealMap({});
+          }
         } else {
           setPaymentReady(true);
           setDealDiscountPercent(null);
+          setItemDealMap({});
         }
       }
     } catch (error: any) {
@@ -297,6 +329,7 @@ export default function CartScreen() {
         setCart(null);
         setPaymentReady(true);
         setDealDiscountPercent(null);
+        setItemDealMap({});
       } else {
         Alert.alert(
           "Error",
@@ -305,6 +338,7 @@ export default function CartScreen() {
         setCart(null);
         setPaymentReady(true);
         setDealDiscountPercent(null);
+        setItemDealMap({});
       }
     } finally {
       setLoading(false);
@@ -582,9 +616,18 @@ export default function CartScreen() {
             <BlurView intensity={80} tint="light" style={styles.cartItem}>
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemPrice}>
-                  ${item.unitPrice.toFixed(2)} each
-                </Text>
+                <View style={styles.itemPriceRow}>
+                  <Text style={styles.itemPrice}>
+                    ${item.unitPrice.toFixed(2)} each
+                  </Text>
+                  {itemDealMap[item.menuItemId] != null && (
+                    <View style={styles.cartItemDealBadge}>
+                      <Text style={styles.cartItemDealBadgeText}>
+                        {itemDealMap[item.menuItemId]}% off
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
               <View style={styles.quantityControls}>
@@ -619,34 +662,44 @@ export default function CartScreen() {
           </View>
         ))}
 
-        {/* Deal applied at checkout - OrderService applies discount when placing order */}
-        {dealDiscountPercent != null && (
+        {/* Deal applied at checkout - OrderService applies best discount per item (highest of restaurant/item) */}
+        {((dealDiscountPercent != null && dealDiscountPercent > 0) || Object.keys(itemDealMap).length > 0) && (
           <View style={styles.dealBanner}>
             <Ionicons name="flame" size={18} color="#f97316" />
             <Text style={styles.dealBannerText}>
-              {dealDiscountPercent}% off applied at checkout
+              {Object.keys(itemDealMap).length > 0 && (dealDiscountPercent == null || dealDiscountPercent === 0)
+                ? "Best deal applied at checkout"
+                : dealDiscountPercent != null && dealDiscountPercent > 0 && Object.keys(itemDealMap).length === 0
+                  ? `${dealDiscountPercent}% off applied at checkout`
+                  : "Best deal applied at checkout"}
             </Text>
           </View>
         )}
 
         {(() => {
-          const discountMult =
-            dealDiscountPercent != null && dealDiscountPercent > 0
-              ? 1 - dealDiscountPercent / 100
-              : 1;
-          const discountedSubtotal =
-            Math.round(cart.subtotal * discountMult * 100) / 100;
+          // Per-item discount: use best (highest) discount for customer
+          const discountedSubtotal = cart.items.reduce((sum, item) => {
+            const itemPct = itemDealMap[item.menuItemId] ?? 0;
+            const restPct = dealDiscountPercent ?? 0;
+            const pct = Math.max(itemPct, restPct);
+            const mult = pct > 0 ? 1 - pct / 100 : 1;
+            return sum + item.totalPrice * mult;
+          }, 0);
+          const roundedDiscountedSubtotal =
+            Math.round(discountedSubtotal * 100) / 100;
           const discountedTax =
-            Math.round(discountedSubtotal * 0.08 * 100) / 100;
+            Math.round(roundedDiscountedSubtotal * 0.08 * 100) / 100;
           const amountBeforeServiceFee =
-            discountedSubtotal + discountedTax + cart.deliveryFee;
+            roundedDiscountedSubtotal + discountedTax + cart.deliveryFee;
           const rawFee = amountBeforeServiceFee * serviceFeeRate;
           const serviceFee = Math.max(
             serviceFeeMinimum,
             Math.min(rawFee, serviceFeeCap),
           );
           const totalWithServiceFee = amountBeforeServiceFee + serviceFee;
-          const hasDiscount = dealDiscountPercent != null && dealDiscountPercent > 0;
+          const hasDiscount =
+            (dealDiscountPercent != null && dealDiscountPercent > 0) ||
+            Object.keys(itemDealMap).length > 0;
           return (
             <View style={styles.summary}>
               {hasDiscount && (
@@ -659,10 +712,10 @@ export default function CartScreen() {
                   </View>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabelDeal}>
-                      Deal: {dealDiscountPercent}% off
+                      Deal{Object.keys(itemDealMap).length > 0 ? "s" : ""}
                     </Text>
                     <Text style={styles.summaryValueDeal}>
-                      -${(cart.subtotal - discountedSubtotal).toFixed(2)}
+                      -${(cart.subtotal - roundedDiscountedSubtotal).toFixed(2)}
                     </Text>
                   </View>
                 </>
@@ -672,7 +725,7 @@ export default function CartScreen() {
                   {hasDiscount ? "Subtotal (after deal)" : "Subtotal"}
                 </Text>
                 <Text style={styles.summaryValue}>
-                  ${discountedSubtotal.toFixed(2)}
+                  ${roundedDiscountedSubtotal.toFixed(2)}
                 </Text>
               </View>
               <View style={styles.summaryRow}>
@@ -840,7 +893,10 @@ const styles = StyleSheet.create({
 
   itemInfo: { flex: 1, marginRight: 12 },
   itemName: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 4 },
+  itemPriceRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   itemPrice: { fontSize: 12, color: "#666" },
+  cartItemDealBadge: { backgroundColor: "#2e7d32", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  cartItemDealBadgeText: { fontSize: 11, fontWeight: "600", color: "#fff" },
 
   quantityControls: {
     flexDirection: "row",
