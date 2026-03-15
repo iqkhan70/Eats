@@ -184,6 +184,8 @@ export default function OrdersScreen() {
   }, [isAuthenticated, router]);
 
   const RESTAURANT_UNAVAILABLE = "Restaurant no longer exists";
+  const loadingRestaurantNamesRef = useRef(false);
+  const triedRestaurantIdsRef = useRef<Set<string>>(new Set());
 
   const loadRestaurantName = useCallback(async (restaurantId: string) => {
     if (!restaurantId) return;
@@ -218,14 +220,22 @@ export default function OrdersScreen() {
     );
 
     const missing = uniqueRestaurantIds.filter(
-      (id) => !restaurantNamesById[id],
+      (id) =>
+        !restaurantNamesById[id] && !triedRestaurantIdsRef.current.has(id),
     );
 
     if (!missing.length) return;
+    if (loadingRestaurantNamesRef.current) return;
 
+    for (const id of missing) triedRestaurantIdsRef.current.add(id);
+    loadingRestaurantNamesRef.current = true;
     void (async () => {
-      for (const id of missing) {
-        await loadRestaurantName(id);
+      try {
+        for (const id of missing) {
+          await loadRestaurantName(id);
+        }
+      } finally {
+        loadingRestaurantNamesRef.current = false;
       }
     })();
   }, [orders, restaurantNamesById, loadRestaurantName]);

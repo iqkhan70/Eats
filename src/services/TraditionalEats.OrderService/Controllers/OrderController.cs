@@ -661,6 +661,30 @@ public class OrderController : ControllerBase
     // Vendor Orders (existing)
     // ----------------------------
 
+    [HttpGet("vendor/pending-order-counts")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorPendingOrderCounts([FromQuery] string? restaurantIds = null)
+    {
+        try
+        {
+            var ids = new List<Guid>();
+            if (!string.IsNullOrWhiteSpace(restaurantIds))
+            {
+                foreach (var s in restaurantIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (Guid.TryParse(s, out var id)) ids.Add(id);
+                }
+            }
+            var counts = await _orderService.GetPendingOrderCountsAsync(ids);
+            return Ok(counts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get vendor pending order counts");
+            return StatusCode(500, new { message = "Failed to get pending order counts" });
+        }
+    }
+
     [HttpGet("vendor/restaurants/{restaurantId}/orders")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> GetVendorOrders(Guid restaurantId)

@@ -1885,6 +1885,47 @@ public class MobileBffController : ControllerBase
     // Vendor Orders
     // ----------------------------
 
+    [HttpGet("vendor/pending-order-counts")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetVendorPendingOrderCounts()
+    {
+        try
+        {
+            var restClient = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(restClient);
+            var restResponse = await restClient.GetAsync("/api/restaurant/vendor/my-restaurants");
+            if (!restResponse.IsSuccessStatusCode)
+                return StatusCode((int)restResponse.StatusCode, new { error = "Failed to fetch vendor restaurants" });
+
+            var restJson = await restResponse.Content.ReadAsStringAsync();
+            var ids = new List<Guid>();
+            try
+            {
+                using var doc = JsonDocument.Parse(restJson);
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    if (TryGetRestaurantId(el, out var id) && id != default) ids.Add(id);
+                }
+            }
+            catch { /* ignore parse errors */ }
+
+            if (ids.Count == 0)
+                return Ok(new Dictionary<string, int>());
+
+            var orderClient = _httpClientFactory.CreateClient("OrderService");
+            ForwardBearerToken(orderClient);
+            var idsParam = string.Join(",", ids);
+            var response = await orderClient.GetAsync($"/api/Order/vendor/pending-order-counts?restaurantIds={idsParam}");
+            var content = await response.Content.ReadAsStringAsync();
+            return new ContentResult { Content = content, ContentType = "application/json", StatusCode = (int)response.StatusCode };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching vendor pending order counts");
+            return StatusCode(500, new { error = "Failed to fetch pending order counts" });
+        }
+    }
+
     [HttpGet("vendor/restaurants/{restaurantId}/orders")]
     [Authorize(Roles = "Vendor,Admin")]
     public async Task<IActionResult> GetVendorOrders(Guid restaurantId)

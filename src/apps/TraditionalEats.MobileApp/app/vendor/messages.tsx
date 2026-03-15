@@ -171,10 +171,16 @@ export default function VendorMessagesScreen() {
     return Array.from(ids);
   }, [scopedConversations, scopedRestaurantId]);
 
+  const triedVendorIdsRef = useRef<Set<string>>(new Set());
+
   const loadVendorNames = useCallback(
     async (ids: string[]) => {
-      const missing = ids.filter((id) => !vendorNameById[id]);
+      const missing = ids.filter(
+        (id) => !vendorNameById[id] && !triedVendorIdsRef.current.has(id),
+      );
       if (missing.length === 0) return;
+
+      for (const id of missing) triedVendorIdsRef.current.add(id);
 
       const results = await Promise.all(
         missing.map(async (restaurantId) => {
@@ -190,7 +196,7 @@ export default function VendorMessagesScreen() {
                   : "";
             return { restaurantId, name };
           } catch {
-            return { restaurantId, name: "" };
+            return { restaurantId, name: "Unknown" };
           }
         }),
       );
@@ -198,7 +204,7 @@ export default function VendorMessagesScreen() {
       setVendorNameById((prev) => {
         const next = { ...prev };
         for (const r of results) {
-          if (r.name) next[r.restaurantId] = r.name;
+          next[r.restaurantId] = r.name || "Unknown";
         }
         return next;
       });

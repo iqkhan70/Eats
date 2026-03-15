@@ -21,6 +21,8 @@ public interface IOrderService
     Task<Order?> GetOrderAsync(Guid orderId);
     Task<List<Order>> GetOrdersByCustomerAsync(Guid customerId);
     Task<List<Order>> GetOrdersByRestaurantAsync(Guid restaurantId);
+    /// <summary>Count of orders needing vendor action (Pending, Preparing, Ready) per restaurant.</summary>
+    Task<Dictionary<Guid, int>> GetPendingOrderCountsAsync(IEnumerable<Guid> restaurantIds);
     Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null);
     /// <summary>Customer self-cancel. Allowed only while Pending or Accepted.</summary>
     Task<bool> CancelOrderByCustomerAsync(Guid orderId, Guid customerId);
@@ -1329,6 +1331,22 @@ public class OrderService : IOrderService
         _logger.LogInformation("GetOrdersByRestaurantAsync: Found {OrderCount} orders for RestaurantId={RestaurantId}", orders.Count, restaurantId);
 
         return orders;
+    }
+
+    public async Task<Dictionary<Guid, int>> GetPendingOrderCountsAsync(IEnumerable<Guid> restaurantIds)
+    {
+        var ids = restaurantIds.Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, int>();
+
+        // Use explicit OR instead of array.Contains for MySQL compatibility
+        var counts = await _context.Orders
+            .Where(o => ids.Contains(o.RestaurantId) &&
+                (o.Status == "Pending" || o.Status == "Preparing" || o.Status == "Ready"))
+            .GroupBy(o => o.RestaurantId)
+            .Select(g => new { RestaurantId = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        return ids.ToDictionary(id => id, id => counts.FirstOrDefault(c => c.RestaurantId == id)?.Count ?? 0);
     }
 
     public async Task<bool> UpdateOrderStatusAsync(Guid orderId, string newStatus, string? notes = null)

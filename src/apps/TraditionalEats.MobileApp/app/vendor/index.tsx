@@ -44,6 +44,15 @@ export default function VendorDashboardScreen() {
     string | null
   >(null);
   const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [pendingOrderCounts, setPendingOrderCounts] = useState<
+    Record<string, number>
+  >({});
+
+  const totalPendingOrders = useMemo(
+    () =>
+      Object.values(pendingOrderCounts).reduce((sum, n) => sum + n, 0),
+    [pendingOrderCounts],
+  );
 
   const filteredRestaurants = useMemo(() => {
     const q = searchTextDebounced.trim().toLowerCase();
@@ -60,11 +69,29 @@ export default function VendorDashboardScreen() {
     checkAuthAndLoad();
   }, []);
 
+  const loadPendingOrderCounts = async () => {
+    try {
+      const res = await api.get<Record<string, number>>(
+        "/MobileBff/vendor/pending-order-counts",
+      );
+      const raw = res.data ?? {};
+      // Normalize keys to lowercase so we match restaurantId regardless of API casing
+      const normalized: Record<string, number> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (v > 0) normalized[k.toLowerCase()] = v;
+      }
+      setPendingOrderCounts(normalized);
+    } catch {
+      setPendingOrderCounts({});
+    }
+  };
+
   // Reload restaurants and sync Stripe status when screen gains focus (e.g. after creating a restaurant or returning from Stripe onboarding)
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated && isVendor) {
         loadRestaurants();
+        loadPendingOrderCounts();
         // Sync onboarding status from Stripe so we show Complete when user just finished in browser (webhook may be missed)
         api
           .post<{ status?: string }>(
@@ -141,15 +168,18 @@ export default function VendorDashboardScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadRestaurants();
-      try {
-        const res = await api.post<{ status?: string }>(
-          "/MobileBff/payments/vendor/refresh-onboarding-status",
-        );
-        setStripeOnboardingStatus(res.data?.status ?? "Pending");
-      } catch {
-        await loadStripeOnboardingStatus();
-      }
+      await Promise.all([
+        loadRestaurants(),
+        loadPendingOrderCounts(),
+        api
+          .post<{ status?: string }>(
+            "/MobileBff/payments/vendor/refresh-onboarding-status",
+          )
+          .then((res) =>
+            setStripeOnboardingStatus(res.data?.status ?? "Pending"),
+          )
+          .catch(() => loadStripeOnboardingStatus()),
+      ]);
     } finally {
       setRefreshing(false);
     }
@@ -287,7 +317,16 @@ export default function VendorDashboardScreen() {
               onPress={() => router.push("/vendor/orders")}
               style={styles.iconButton}
             >
-              <Ionicons name="receipt-outline" size={20} color="#fff" />
+              <View>
+                <Ionicons name="receipt-outline" size={20} color="#fff" />
+                {totalPendingOrders > 0 && (
+                  <View style={styles.headerBadge}>
+                    <Text style={styles.headerBadgeText}>
+                      {totalPendingOrders > 99 ? "99+" : totalPendingOrders}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => router.push("/vendor/create-restaurant")}
@@ -405,8 +444,19 @@ export default function VendorDashboardScreen() {
                       )
                     }
                   >
-                    <Ionicons name="receipt-outline" size={18} color="#fff" />
-                    <Text style={styles.ordersButtonText}>Orders</Text>
+                    <View style={styles.ordersButtonInner}>
+                      <Ionicons name="receipt-outline" size={18} color="#fff" />
+                      <Text style={styles.ordersButtonText}>Orders</Text>
+                      {(pendingOrderCounts[restaurant.restaurantId?.toLowerCase() ?? ""] ?? 0) > 0 && (
+                        <View style={styles.orderBadge}>
+                          <Text style={styles.orderBadgeText}>
+                            {(pendingOrderCounts[restaurant.restaurantId?.toLowerCase() ?? ""] ?? 0) > 99
+                              ? "99+"
+                              : pendingOrderCounts[restaurant.restaurantId?.toLowerCase() ?? ""]}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -690,10 +740,51 @@ const styles = StyleSheet.create({
   ordersButton: {
     backgroundColor: "#4caf50",
   },
+  ordersButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    position: "relative",
+  },
   ordersButtonText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+  orderBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#d32f2f",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  orderBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  headerBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#d32f2f",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  headerBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
   },
   fab: {
     position: "absolute",
