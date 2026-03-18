@@ -56,6 +56,10 @@
                     <RadzenAlert AlertStyle="AlertStyle.Success" Title="Success" Text="@successMessage" />
                 }
 
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center; color: #6b7280;">
+                    By registering, you agree to our <RadzenLink Path="/terms" Text="Terms of Service" Style="font-size: inherit;" /> and <RadzenLink Path="/privacy" Text="Privacy Policy" Style="font-size: inherit;" />.
+                </RadzenText>
+
                 <RadzenButton Text="Register" Icon="person_add" Click="@HandleRegister" Variant="Variant.Filled"
                     Style="width: 100%;" IsBusy="@loading" />
 

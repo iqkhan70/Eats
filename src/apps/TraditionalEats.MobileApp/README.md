@@ -88,6 +88,10 @@ npm run web
 
 To build and ship the app to TestFlight (using the production API at **https://www.kram.tech**), see **[TESTFLIGHT.md](./TESTFLIGHT.md)** for step-by-step instructions (Expo account, EAS Build, Apple credentials, submit).
 
+### Google Play
+
+To build and ship the Android app to Google Play, see **[GOOGLE_PLAY.md](./GOOGLE_PLAY.md)** for step-by-step instructions (Google Play Developer account, EAS Build, Google Service Account, first manual upload, then EAS Submit).
+
 ## Project Structure
 
 ```

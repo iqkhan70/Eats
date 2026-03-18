@@ -1,0 +1,53 @@
+@page "/privacy"
+@using Radzen
+@using Radzen.Blazor
+@inject NavigationManager NavigationManager
+
+<PageTitle>Privacy Policy - Kram</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 800px; margin: 0 auto; box-sizing: border-box;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">Privacy Policy</RadzenText>
+    </RadzenStack>
+
+    <RadzenCard>
+        <RadzenStack Gap="1.5rem">
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Your privacy matters to us. This policy explains how Kram (kram.tech) handles your information in plain terms.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Who we are</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Kram is the service provider for this platform. We run the app and website you use to place orders or book services and—if you're a vendor—to manage your business.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">What we collect</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                We collect what we need to run the service: your name, email, phone, address, and payment information when you place orders or book services. Vendors provide business details to list their offerings. We use this to process transactions, communicate with you, and improve the app.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">How we use it</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Your data is used to fulfill orders and services, send updates, and provide support. We don't sell your personal information to third parties. We may use anonymized data to improve our service.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Security</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                We take reasonable steps to protect your information. Payment data is handled by secure payment processors. We store your data securely and limit who can access it.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Your choices</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                You can update your profile, addresses, and payment methods in the app. You can delete your account by contacting us. We'll remove your data in line with our retention practices.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Contact</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Questions about your privacy? Email us at support&#64;kram.tech.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: #9ca3af; margin-top: 1rem;">Last updated: March 2025</RadzenText>
+        </RadzenStack>
+    </RadzenCard>
+</RadzenStack>

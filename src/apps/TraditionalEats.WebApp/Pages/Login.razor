@@ -32,6 +32,10 @@
             <RadzenButton Text="Login" Icon="login" Click="@HandleLogin" Variant="Variant.Filled" Style="width: 100%;"
                 IsBusy="@loading" />
 
+            <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center; color: #6b7280;">
+                By signing in, you agree to our <RadzenLink Path="/terms" Text="Terms of Service" Style="font-size: inherit;" /> and <RadzenLink Path="/privacy" Text="Privacy Policy" Style="font-size: inherit;" />.
+            </RadzenText>
+
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem">
                 <RadzenLink Path="/forgot-password" Text="Forgot your password?" />
             </RadzenStack>

@@ -1,0 +1,48 @@
+@page "/terms"
+@using Radzen
+@using Radzen.Blazor
+@inject NavigationManager NavigationManager
+
+<PageTitle>Terms of Service - Kram</PageTitle>
+
+<RadzenStack Gap="1.5rem" Style="padding: 1rem; width: 100%; max-width: 800px; margin: 0 auto; box-sizing: border-box;">
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+        <RadzenButton Icon="arrow_back" Click="@(() => NavigationManager.NavigateTo("/"))" Variant="Variant.Flat" Size="ButtonSize.Small" />
+        <RadzenText TextStyle="TextStyle.H1">Terms of Service</RadzenText>
+    </RadzenStack>
+
+    <RadzenCard>
+        <RadzenStack Gap="1.5rem">
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Welcome to Kram. We're here to connect you with local businesses and the services they offer.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Who we are</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Kram (kram.tech) is the service provider for this platform. We operate the app and website that lets you discover businesses, place orders or book services, and—if you're a vendor—manage your offerings and orders.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Using the service</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                When you use Kram, you agree to use it in a respectful way. Don't misuse the platform, harass others, or violate any laws. We reserve the right to suspend accounts that break these guidelines.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Orders and payments</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Orders and transactions are placed through our platform. Payment is processed securely. Vendors receive orders through the app and fulfill them. We're not the business—we're the connection between you and them.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Changes</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                We may update these terms from time to time. We'll notify you of significant changes through the app or by email. Continued use means you accept the updated terms.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.H5">Contact</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" Style="line-height: 1.6;">
+                Questions? Reach out at support&#64;kram.tech. We're happy to help.
+            </RadzenText>
+
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: #9ca3af; margin-top: 1rem;">Last updated: March 2025</RadzenText>
+        </RadzenStack>
+    </RadzenCard>
+</RadzenStack>
