@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,25 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../../services/api";
 import AppHeader from "../../../components/AppHeader";
+
+const statusOptions = [
+  "Pending",
+  "Preparing",
+  "Ready",
+  "Completed",
+  "Refunded",
+  "Cancelled",
+] as const;
+type OrderStatus = (typeof statusOptions)[number];
+
+const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
+  Pending: ["Preparing", "Cancelled"],
+  Preparing: ["Ready", "Cancelled"],
+  Ready: ["Completed", "Cancelled"],
+  Completed: [],
+  Refunded: [],
+  Cancelled: [],
+};
 
 interface OrderItem {
   orderItemId: string;
@@ -88,6 +108,98 @@ export default function VendorOrderDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+
+  const loadOrder = useCallback(async () => {
+    if (!orderId || !restaurantId) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get<Order>(
+        `/MobileBff/vendor/restaurants/${restaurantId}/orders/${orderId}`,
+      );
+      setOrder(res.data ?? null);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Failed to load order.";
+      setError(status ? `${msg} (HTTP ${status})` : String(msg));
+      setOrder(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId, restaurantId]);
+
+  const updateOrderStatus = useCallback(
+    async (newStatus: OrderStatus) => {
+      if (!orderId) return;
+      setUpdatingStatus(true);
+      try {
+        await api.put(`/MobileBff/orders/${orderId}/status`, {
+          status: newStatus,
+          notes: null,
+        });
+        await loadOrder();
+      } catch (e: any) {
+        const msg =
+          e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          e?.message ||
+          "Failed to update status.";
+        Alert.alert("Update failed", msg);
+      } finally {
+        setUpdatingStatus(false);
+      }
+    },
+    [orderId, loadOrder],
+  );
+
+  const refundOrder = useCallback(async () => {
+    if (!orderId) return;
+    setRefunding(true);
+    try {
+      await api.post(`/MobileBff/orders/${orderId}/refund`);
+      await loadOrder();
+      Alert.alert("Refund initiated", "Refund request sent successfully.");
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Failed to initiate refund.";
+      Alert.alert("Refund failed", msg);
+    } finally {
+      setRefunding(false);
+    }
+  }, [orderId, loadOrder]);
+
+  const showStatusPicker = useCallback(() => {
+    if (!order) return;
+    const current = order.status as OrderStatus;
+
+    if (!statusOptions.includes(current)) {
+      Alert.alert("Cannot update", `Unknown order status: ${order.status}`);
+      return;
+    }
+
+    const nextList = allowedNextStatuses[current];
+    if (!nextList || nextList.length === 0) {
+      Alert.alert("Cannot update", `Order is already ${order.status}.`);
+      return;
+    }
+
+    Alert.alert("Update status", `Current: "${order.status}"`, [
+      ...nextList.map((s) => ({
+        text: s,
+        onPress: () => void updateOrderStatus(s),
+      })),
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [order, updateOrderStatus]);
 
   const title = useMemo(() => {
     if (!orderId) return "Order Details";
@@ -95,38 +207,15 @@ export default function VendorOrderDetailsScreen() {
   }, [orderId]);
 
   useEffect(() => {
-    const load = async () => {
-      if (!orderId || !restaurantId) {
-        setError(
-          "Missing order context. Please open the order from the vendor orders list.",
-        );
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await api.get<Order>(
-          `/MobileBff/vendor/restaurants/${restaurantId}/orders/${orderId}`,
-        );
-        setOrder(res.data ?? null);
-      } catch (e: any) {
-        const status = e?.response?.status;
-        const msg =
-          e?.response?.data?.message ||
-          e?.response?.data?.error ||
-          e?.message ||
-          "Failed to load order.";
-        setError(status ? `${msg} (HTTP ${status})` : String(msg));
-        setOrder(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void load();
-  }, [orderId, restaurantId]);
+    if (!orderId || !restaurantId) {
+      setError(
+        "Missing order context. Please open the order from the vendor orders list.",
+      );
+      setLoading(false);
+      return;
+    }
+    void loadOrder();
+  }, [orderId, restaurantId, loadOrder]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -198,6 +287,65 @@ export default function VendorOrderDetailsScreen() {
                 >
                   <Text style={styles.badgeText}>{order.status}</Text>
                 </View>
+              </View>
+
+              <View style={styles.statusActions}>
+                {statusOptions.includes(order.status as OrderStatus) &&
+                  (allowedNextStatuses[order.status as OrderStatus]?.length ??
+                    0) > 0 && (
+                  <TouchableOpacity
+                    style={[
+                      styles.statusButton,
+                      { backgroundColor: getStatusColor(order.status) },
+                      updatingStatus && styles.statusButtonDisabled,
+                    ]}
+                    onPress={showStatusPicker}
+                    disabled={updatingStatus}
+                    activeOpacity={0.8}
+                  >
+                    {updatingStatus ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="swap-horizontal" size={18} color="#fff" />
+                        <Text style={styles.statusButtonText}>Update Status</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {order.status === "Completed" && (
+                  <TouchableOpacity
+                    style={[
+                      styles.refundButton,
+                      refunding && styles.statusButtonDisabled,
+                    ]}
+                    onPress={() => {
+                      Alert.alert(
+                        "Refund order?",
+                        "This will trigger a Stripe refund (if payment was captured).",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Refund",
+                            style: "destructive",
+                            onPress: () => void refundOrder(),
+                          },
+                        ],
+                      );
+                    }}
+                    disabled={refunding}
+                    activeOpacity={0.8}
+                  >
+                    {refunding ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="cash-outline" size={18} color="#fff" />
+                        <Text style={styles.statusButtonText}>Refund</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
 
               {!!order.paymentStatus && (
@@ -369,6 +517,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+  },
+  statusActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+    flexWrap: "wrap",
+  },
+  statusButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  refundButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#dc3545",
+  },
+  statusButtonDisabled: {
+    opacity: 0.6,
+  },
+  statusButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   label: { color: "#333", fontWeight: "800" },
   paymentRow: {

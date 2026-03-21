@@ -149,6 +149,7 @@ public class OrderPlacedEventHandler : BackgroundService
             {
                 type = "order_placed",
                 orderId = evt.OrderId,
+                restaurantId = evt.RestaurantId,
                 items = evt.Items.Select(i => new
                 {
                     menuItemId = i.MenuItemId,
@@ -174,8 +175,9 @@ public class OrderPlacedEventHandler : BackgroundService
                 "Order placed",
                 metadataJson);
 
-            var groupName = $"vendor_chat_{conversation.ConversationId}";
-            await hubContext.Clients.Group(groupName).SendAsync("ReceiveVendorMessage", new
+            var conversationGroup = $"vendor_chat_{conversation.ConversationId}";
+            var restaurantGroup = $"vendor_restaurant_{evt.RestaurantId}";
+            await hubContext.Clients.Groups(new[] { conversationGroup, restaurantGroup }).SendAsync("ReceiveVendorMessage", new
             {
                 MessageId = saved.MessageId,
                 ConversationId = saved.ConversationId,

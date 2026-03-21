@@ -15,6 +15,7 @@ export interface OrderPlacedItem {
 export interface OrderPlacedMetadata {
   type: "order_placed";
   orderId: string;
+  restaurantId?: string;
   items: OrderPlacedItem[];
   total: number;
   serviceFee: number;

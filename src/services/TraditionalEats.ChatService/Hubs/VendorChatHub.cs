@@ -73,6 +73,47 @@ public class VendorChatHub : Hub
         await Clients.Group(groupName).SendAsync("UserLeft", new { UserId = userId, ConversationId = conversationId });
     }
 
+    /// <summary>
+    /// Join a restaurant group to receive real-time order notifications (Restaurant Mode).
+    /// Vendor must own the restaurant.
+    /// </summary>
+    public async Task JoinVendorRestaurant(Guid restaurantId)
+    {
+        var userId = GetUserId();
+        if (userId == null)
+        {
+            await Clients.Caller.SendAsync("Error", "Unauthorized");
+            return;
+        }
+
+        var roles = GetUserRoles();
+        if (roles.Count == 0)
+        {
+            await Clients.Caller.SendAsync("Error", "Unable to determine user role");
+            return;
+        }
+
+        var bearerToken = GetBearerToken();
+        var hasAccess = await _chatService.VerifyVendorRestaurantAccessAsync(restaurantId, userId.Value, roles, bearerToken);
+        if (!hasAccess)
+        {
+            await Clients.Caller.SendAsync("Error", "You don't have access to this restaurant");
+            return;
+        }
+
+        var groupName = GetRestaurantGroupName(restaurantId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+    }
+
+    /// <summary>
+    /// Leave a restaurant group (when turning off Restaurant Mode).
+    /// </summary>
+    public async Task LeaveVendorRestaurant(Guid restaurantId)
+    {
+        var groupName = GetRestaurantGroupName(restaurantId);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+    }
+
     public async Task SendVendorMessage(Guid conversationId, string message, string? metadataJson = null)
     {
         var userId = GetUserId();
@@ -158,6 +199,7 @@ public class VendorChatHub : Hub
     }
 
     private static string GetConversationGroupName(Guid conversationId) => $"vendor_chat_{conversationId}";
+    private static string GetRestaurantGroupName(Guid restaurantId) => $"vendor_restaurant_{restaurantId}";
 
     private static string ChooseBestRole(IEnumerable<string> roles)
     {

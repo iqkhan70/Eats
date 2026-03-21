@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import BottomSearchBar from "../../components/BottomSearchBar";
+import { useRestaurantMode } from "../../contexts/RestaurantModeContext";
 
 interface Restaurant {
   restaurantId: string;
@@ -33,6 +34,7 @@ interface Restaurant {
 export default function VendorDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const restaurantMode = useRestaurantMode();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -337,6 +339,39 @@ export default function VendorDashboardScreen() {
           </View>
         </LinearGradient>
 
+        {/* Restaurant Mode: Accepting orders toggle */}
+        {restaurants.length > 0 && restaurantMode && (
+          <View style={styles.acceptingToggle}>
+            <View style={styles.acceptingToggleContent}>
+              <Text style={styles.acceptingToggleLabel}>
+                Accepting orders
+              </Text>
+              <Text style={styles.acceptingToggleHint}>
+                {restaurantMode.acceptingOrders
+                  ? "You'll get full-screen alerts for new orders"
+                  : "Turn on to receive new order alerts"}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.acceptingSwitch,
+                restaurantMode.acceptingOrders && styles.acceptingSwitchOn,
+              ]}
+              onPress={() =>
+                restaurantMode.setAcceptingOrders(!restaurantMode.acceptingOrders)
+              }
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.acceptingSwitchThumb,
+                  restaurantMode.acceptingOrders && styles.acceptingSwitchThumbOn,
+                ]}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {restaurants.length > 0 &&
           stripeOnboardingStatus &&
           stripeOnboardingStatus !== "Complete" && (
@@ -568,6 +603,55 @@ const styles = StyleSheet.create({
   },
   addButton: {
     padding: 8,
+  },
+  acceptingToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    margin: 16,
+    marginBottom: 0,
+    padding: 16,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  acceptingToggleContent: {
+    flex: 1,
+  },
+  acceptingToggleLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+  },
+  acceptingToggleHint: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  acceptingSwitch: {
+    width: 52,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#ccc",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  acceptingSwitchOn: {
+    backgroundColor: "#28a745",
+  },
+  acceptingSwitchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    alignSelf: "flex-start",
+  },
+  acceptingSwitchThumbOn: {
+    alignSelf: "flex-end",
   },
   stripeBanner: {
     backgroundColor: "#fff3cd",

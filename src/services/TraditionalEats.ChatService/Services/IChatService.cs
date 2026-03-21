@@ -22,6 +22,7 @@ public interface IChatService
     Task<List<VendorConversation>> GetVendorInboxAsync(Guid vendorUserId, string? bearerToken);
     Task<List<VendorConversation>> GetAdminVendorInboxAsync(int take = 100);
     Task<bool> VerifyVendorConversationAccessAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
+    Task<bool> VerifyVendorRestaurantAccessAsync(Guid restaurantId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
     Task<List<VendorChatMessage>> GetVendorMessagesAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
     Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message, string? metadataJson = null);
 }

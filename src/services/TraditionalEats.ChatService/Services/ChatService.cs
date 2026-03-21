@@ -487,6 +487,21 @@ public class ChatService : IChatService
         return false;
     }
 
+    public async Task<bool> VerifyVendorRestaurantAccessAsync(Guid restaurantId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null)
+    {
+        if (userRoles == null) return false;
+        var roles = userRoles.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
+        if (roles.Count == 0) return false;
+
+        if (roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        if (roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase)))
+            return await VerifyRestaurantOwnerAsync(restaurantId, userId, bearerToken);
+
+        return false;
+    }
+
     public async Task<List<VendorChatMessage>> GetVendorMessagesAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null)
     {
         var hasAccess = await VerifyVendorConversationAccessAsync(conversationId, userId, userRoles, bearerToken);

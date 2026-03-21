@@ -29,6 +29,28 @@ export interface VendorConversation {
 }
 
 let vendorHubConnection: SignalR.HubConnection | null = null;
+const messageListeners = new Set<OnVendorMessageReceived>();
+
+/**
+ * Add a listener for vendor messages (e.g. Restaurant Mode).
+ * Returns an unsubscribe function.
+ */
+export function addVendorMessageListener(
+  callback: OnVendorMessageReceived,
+): () => void {
+  messageListeners.add(callback);
+  return () => messageListeners.delete(callback);
+}
+
+function broadcastMessage(msg: VendorChatMessage): void {
+  for (const cb of messageListeners) {
+    try {
+      cb(msg);
+    } catch (e) {
+      console.warn("Vendor message listener error:", e);
+    }
+  }
+}
 
 export async function createOrGetVendorConversation(
   restaurantId: string,
@@ -72,9 +94,18 @@ export async function connectVendorChatHub(
   onError: OnVendorError,
   onConnectionStateChanged?: OnVendorConnectionStateChanged,
 ): Promise<boolean> {
+  messageListeners.add(onMessage);
+
   if (vendorHubConnection?.state === SignalR.HubConnectionState.Connected) {
     onConnectionStateChanged?.(true);
     return true;
+  }
+
+  if (vendorHubConnection) {
+    try {
+      await vendorHubConnection.stop();
+    } catch (_) {}
+    vendorHubConnection = null;
   }
 
   const token = await AsyncStorage.getItem("access_token");
@@ -95,19 +126,20 @@ export async function connectVendorChatHub(
 
   vendorHubConnection.on("ReceiveVendorMessage", (payload: unknown) => {
     try {
-      const msg = payload as VendorChatMessage;
-      if (msg?.message != null) {
-        onMessage({
-          messageId: msg.messageId ?? "",
-          conversationId: msg.conversationId ?? "",
-          senderId: msg.senderId ?? "",
-          senderRole: msg.senderRole ?? "",
-          senderDisplayName: (msg as { senderDisplayName?: string })
-            .senderDisplayName,
-          message: msg.message ?? "",
-          sentAt: msg.sentAt ?? new Date().toISOString(),
-          metadataJson: (msg as { metadataJson?: string }).metadataJson,
-        });
+      const raw = payload as Record<string, unknown>;
+      const msg: VendorChatMessage = {
+        messageId: String(raw?.messageId ?? raw?.MessageId ?? ""),
+        conversationId: String(raw?.conversationId ?? raw?.ConversationId ?? ""),
+        senderId: String(raw?.senderId ?? raw?.SenderId ?? ""),
+        senderRole: String(raw?.senderRole ?? raw?.SenderRole ?? ""),
+        senderDisplayName: (raw?.senderDisplayName ?? raw?.SenderDisplayName) as string | undefined,
+        message: String(raw?.message ?? raw?.Message ?? ""),
+        sentAt: String(raw?.sentAt ?? raw?.SentAt ?? new Date().toISOString()),
+        metadataJson: (raw?.metadataJson ?? raw?.MetadataJson) as string | undefined,
+      };
+      if (msg.message != null || msg.metadataJson != null) {
+        onMessage(msg);
+        broadcastMessage(msg);
       }
     } catch (e) {
       onError(String(e));
@@ -150,6 +182,25 @@ export async function leaveVendorConversation(
 ): Promise<void> {
   if (vendorHubConnection?.state === SignalR.HubConnectionState.Connected) {
     await vendorHubConnection.invoke("LeaveVendorConversation", conversationId);
+  }
+}
+
+/**
+ * Join a restaurant group to receive real-time order notifications (Restaurant Mode).
+ * Call when vendor enables "Accepting orders".
+ */
+export async function joinVendorRestaurant(restaurantId: string): Promise<void> {
+  if (vendorHubConnection?.state === SignalR.HubConnectionState.Connected) {
+    await vendorHubConnection.invoke("JoinVendorRestaurant", restaurantId);
+  }
+}
+
+/**
+ * Leave a restaurant group (when turning off Restaurant Mode).
+ */
+export async function leaveVendorRestaurant(restaurantId: string): Promise<void> {
+  if (vendorHubConnection?.state === SignalR.HubConnectionState.Connected) {
+    await vendorHubConnection.invoke("LeaveVendorRestaurant", restaurantId);
   }
 }
 
