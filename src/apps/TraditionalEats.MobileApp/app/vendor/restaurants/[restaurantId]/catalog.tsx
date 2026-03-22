@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,6 +52,7 @@ export default function ManageCatalogScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [restaurantName, setRestaurantName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const normalizeCategoryName = (raw: any): string | undefined => {
     if (typeof raw === 'string') return raw.trim() || undefined;
@@ -214,7 +216,41 @@ export default function ManageCatalogScreen() {
         </View>
       ) : (
         <View style={styles.menuList}>
-          {menuItems.map((item) => {
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search menu items..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close-circle" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+          </View>
+          {(() => {
+            const filtered = searchQuery.trim()
+              ? menuItems.filter(item => {
+                  const q = searchQuery.toLowerCase();
+                  return item.name.toLowerCase().includes(q) ||
+                         (item.description?.toLowerCase().includes(q) ?? false);
+                })
+              : menuItems;
+            if (filtered.length === 0) {
+              return (
+                <View style={styles.emptySearchContainer}>
+                  <Ionicons name="search" size={48} color="#ccc" />
+                  <Text style={styles.emptySearchText}>No results for "{searchQuery}"</Text>
+                </View>
+              );
+            }
+            return filtered.map((item) => {
             const categoryText =
               typeof item.categoryName === 'string' ? item.categoryName.trim() : '';
 
@@ -287,7 +323,8 @@ export default function ManageCatalogScreen() {
                 </View>
               </View>
             );
-          })}
+          });
+          })()}
         </View>
       )}
 
@@ -334,6 +371,26 @@ const styles = StyleSheet.create({
   addButtonLarge: { marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#f97316', borderRadius: 8 },
   addButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginBottom: 16,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 0,
+  },
+  emptySearchContainer: { alignItems: 'center', paddingVertical: 40 },
+  emptySearchText: { fontSize: 16, color: '#999', marginTop: 12 },
   menuList: { padding: 16 },
   menuItemCard: {
     backgroundColor: '#fff',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -81,6 +81,7 @@ export default function CatalogScreen() {
   const [userCanReview, setUserCanReview] = useState(false);
   const [fullSizeImageItem, setFullSizeImageItem] = useState<MenuItem | null>(null);
   const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isAddingToCartRef = useRef(false);
 
@@ -266,7 +267,15 @@ export default function CatalogScreen() {
     }
   };
 
-  const menuItemsByCategory = menuItems.reduce((acc, item) => {
+  const filteredItems = searchQuery.trim()
+    ? menuItems.filter(item => {
+        const q = searchQuery.toLowerCase();
+        return item.name.toLowerCase().includes(q) ||
+               (item.description?.toLowerCase().includes(q) ?? false);
+      })
+    : menuItems;
+
+  const menuItemsByCategory = filteredItems.reduce((acc, item) => {
     const categoryName = item.categoryName || 'Other';
     if (!acc[categoryName]) acc[categoryName] = [];
     acc[categoryName].push(item);
@@ -332,6 +341,25 @@ export default function CatalogScreen() {
 
         {activeTab === 'catalog' ? (
           <>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search menu items..."
+                placeholderTextColor="#999"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={20} color="#999" />
+                </TouchableOpacity>
+              )}
+            </View>
+
             <ScrollView horizontal contentContainerStyle={styles.categoriesScroll} showsHorizontalScrollIndicator={false}>
               <TouchableOpacity style={[styles.categoryChip, selectedCategoryId === null && styles.categoryChipActive]} onPress={() => filterByCategory(null)}>
                 <Text style={[styles.categoryChipText, selectedCategoryId === null && styles.categoryChipTextActive]}>All</Text>
@@ -392,10 +420,12 @@ export default function CatalogScreen() {
               </View>
             ))}
 
-            {menuItems.length === 0 && (
+            {filteredItems.length === 0 && (
               <View style={styles.emptyContainer}>
-                <Ionicons name="list" size={64} color="#ccc" />
-                <Text style={styles.emptyText}>No catalog items found</Text>
+                <Ionicons name={searchQuery ? "search" : "list"} size={64} color="#ccc" />
+                <Text style={styles.emptyText}>
+                  {searchQuery ? `No results for "${searchQuery}"` : 'No catalog items found'}
+                </Text>
               </View>
             )}
           </>
@@ -489,6 +519,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     marginTop: 12,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 0,
   },
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: {

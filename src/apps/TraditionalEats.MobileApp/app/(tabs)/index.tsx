@@ -562,13 +562,13 @@ export default function HomeScreen() {
                       </Text>
                     )}
                     <View style={styles.ratingContainer}>
-                      {restaurant.rating && (
+                      {restaurant.rating > 0 && (
                         <>
                           <Ionicons name="star" size={16} color="#FFD700" />
                           <Text style={styles.rating}>
                             {restaurant.rating.toFixed(1)}
                           </Text>
-                          {restaurant.reviewCount && (
+                          {restaurant.reviewCount > 0 && (
                             <Text style={styles.reviewCount}>
                               ({restaurant.reviewCount} reviews)
                             </Text>

@@ -31,6 +31,10 @@
     }
     else if (menuItems.Any())
     {
+        <RadzenTextBox @bind-Value="searchQuery" Placeholder="Search menu items..." 
+                       Style="width: 100%; margin-bottom: 1rem;" 
+                       Change="@(_ => StateHasChanged())" />
+
         @if (categories.Any())
         {
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap; margin-bottom: 1rem;">
@@ -46,6 +50,16 @@
                                   Size="ButtonSize.Small" />
                 }
             </RadzenStack>
+        }
+
+        @if (!menuItemsByCategory.Any() && !string.IsNullOrWhiteSpace(searchQuery))
+        {
+            <RadzenCard>
+                <RadzenStack AlignItems="AlignItems.Center" Gap="1rem" Style="padding: 2rem;">
+                    <RadzenIcon Icon="search_off" Style="font-size: 48px; color: #ccc;" />
+                    <RadzenText TextStyle="TextStyle.Body1" Style="color: #999;">No results for "@searchQuery"</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
         }
 
         @foreach (var categoryGroup in menuItemsByCategory)
@@ -145,6 +159,7 @@
     private List<MenuItemDto> menuItems = new();
     private List<CategoryDto> categories = new();
     private Guid? selectedCategoryId = null;
+    private string searchQuery = string.Empty;
     private List<ReviewDto> reviews = new();
     private bool loadingReviews = false;
     private RestaurantRatingDto? restaurantRating;
@@ -324,10 +339,23 @@
         }
     }
 
-    private IEnumerable<IGrouping<string, MenuItemDto>> menuItemsByCategory =>
-        menuItems
-            .GroupBy(m => m.CategoryName ?? "Other")
-            .OrderBy(g => g.Key);
+    private IEnumerable<IGrouping<string, MenuItemDto>> menuItemsByCategory
+    {
+        get
+        {
+            var items = menuItems.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                var q = searchQuery.Trim().ToLowerInvariant();
+                items = items.Where(m =>
+                    m.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (m.Description?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+            return items
+                .GroupBy(m => m.CategoryName ?? "Other")
+                .OrderBy(g => g.Key);
+        }
+    }
 
     public class MenuItemDto
     {
