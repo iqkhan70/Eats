@@ -179,7 +179,7 @@ services:
       Services__PaymentService__BaseUrl: "http://payment-service:5004"
       Services__PaymentService__InternalApiKey: ${PAYMENT_SERVICE_INTERNAL_API_KEY:-}
       ServiceFee__Rate: ${SERVICE_FEE_RATE:-0.06}
-      ServiceFee__Minimum: ${SERVICE_FEE_MINIMUM:-1}
+      ServiceFee__Minimum: ${SERVICE_FEE_MINIMUM:-1.5}
       ServiceFee__Cap: ${SERVICE_FEE_CAP:-7}
     depends_on:
       mysql: { condition: service_healthy }
@@ -525,7 +525,7 @@ services:
       Jwt__Issuer: ${JWT_ISSUER:-Kram}
       Jwt__Audience: ${JWT_AUDIENCE:-Kram}
       ServiceFee__Rate: ${SERVICE_FEE_RATE:-0.06}
-      ServiceFee__Minimum: ${SERVICE_FEE_MINIMUM:-1}
+      ServiceFee__Minimum: ${SERVICE_FEE_MINIMUM:-1.5}
       ServiceFee__Cap: ${SERVICE_FEE_CAP:-7}
     depends_on:
       redis: { condition: service_healthy }
@@ -578,7 +578,7 @@ services:
       Jwt__Issuer: ${JWT_ISSUER:-Kram}
       Jwt__Audience: ${JWT_AUDIENCE:-Kram}
       ServiceFee__Rate: ${SERVICE_FEE_RATE:-0.06}
-      ServiceFee__Minimum: ${SERVICE_FEE_MINIMUM:-1}
+      ServiceFee__Minimum: ${SERVICE_FEE_MINIMUM:-1.5}
       ServiceFee__Cap: ${SERVICE_FEE_CAP:-7}
     depends_on:
       redis: { condition: service_healthy }
