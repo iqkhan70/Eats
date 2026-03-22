@@ -96,11 +96,9 @@ class ApiClient {
           const isAppleEmailRequired =
             url.includes('/auth/apple') && status === 400 && error.response?.data?.code === 'APPLE_EMAIL_REQUIRED';
 
-          // Only suppress logging for:
-          // 1. GET cart requests that return 404/204 (empty cart is valid)
-          // 2. geocode-zip 404 (ZIP not in table; handled by fallback)
-          // 3. 401 on login (invalid credentials; UI shows message)
-          // 4. 401 errors on vendor/admin endpoints (handled by UI)
+          const isStaffManagement =
+            url.includes('/staff') && (status === 404 || status === 409);
+
           const shouldSuppress =
             (isCartGetEndpoint && isExpectedEmptyResponse) ||
             isGeocodeZip404 ||
@@ -110,7 +108,8 @@ class ApiClient {
             isOrderDetail403 ||
             isRestaurant404 ||
             isAdminUserNotFound ||
-            isAppleEmailRequired;
+            isAppleEmailRequired ||
+            isStaffManagement;
 
           if (!shouldSuppress) {
             console.error('❌ API Error:', {

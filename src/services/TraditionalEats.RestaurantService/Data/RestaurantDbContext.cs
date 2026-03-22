@@ -13,6 +13,7 @@ public class RestaurantDbContext : DbContext
     public DbSet<DeliveryZone> DeliveryZones { get; set; }
     public DbSet<RestaurantHours> RestaurantHours { get; set; }
     public DbSet<ZipCodeLookup> ZipCodeLookups { get; set; }
+    public DbSet<RestaurantStaff> RestaurantStaff { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +54,16 @@ public class RestaurantDbContext : DbContext
             entity.HasIndex(e => new { e.RestaurantId, e.DayOfWeek }).IsUnique();
             entity.HasOne(e => e.Restaurant)
                 .WithMany(r => r.Hours)
+                .HasForeignKey(e => e.RestaurantId);
+        });
+
+        modelBuilder.Entity<RestaurantStaff>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.RestaurantId, e.UserId }).IsUnique();
+            entity.HasOne(e => e.Restaurant)
+                .WithMany()
                 .HasForeignKey(e => e.RestaurantId);
         });
 

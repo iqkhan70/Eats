@@ -23,6 +23,15 @@ public interface IRestaurantService
     Task<List<RestaurantDto>> GetVendorRestaurantsAsync(Guid vendorId);
     Task<bool> DeleteRestaurantAsync(Guid restaurantId, Guid vendorId);
 
+    // Staff endpoints
+    Task<bool> AddStaffAsync(Guid restaurantId, Guid ownerId, Guid staffUserId);
+    Task<bool> RemoveStaffAsync(Guid restaurantId, Guid ownerId, Guid staffUserId);
+    Task<List<RestaurantStaffDto>> GetRestaurantStaffAsync(Guid restaurantId, Guid ownerId);
+    Task<List<RestaurantDto>> GetStaffRestaurantsAsync(Guid staffUserId);
+    Task<bool> IsStaffOfRestaurantAsync(Guid restaurantId, Guid userId);
+    Task<bool> IsOwnerOrStaffAsync(Guid restaurantId, Guid userId);
+    Task<int> GetStaffLinkCountAsync(Guid userId);
+
     // Admin endpoints
     Task<List<RestaurantDto>> GetAllRestaurantsAsync(int skip = 0, int take = 100);
     Task<bool> AdminUpdateRestaurantAsync(Guid restaurantId, UpdateRestaurantDto dto);
@@ -688,6 +697,85 @@ public class RestaurantService : IRestaurantService
             }).ToList()
         };
     }
+    // ---- Staff management ----
+
+    public async Task<bool> AddStaffAsync(Guid restaurantId, Guid ownerId, Guid staffUserId)
+    {
+        var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.RestaurantId == restaurantId && r.OwnerId == ownerId);
+        if (restaurant == null) return false;
+
+        var exists = await _context.RestaurantStaff.AnyAsync(s => s.RestaurantId == restaurantId && s.UserId == staffUserId);
+        if (exists) return true;
+
+        _context.RestaurantStaff.Add(new RestaurantStaff
+        {
+            Id = Guid.NewGuid(),
+            RestaurantId = restaurantId,
+            UserId = staffUserId,
+        });
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveStaffAsync(Guid restaurantId, Guid ownerId, Guid staffUserId)
+    {
+        var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.RestaurantId == restaurantId && r.OwnerId == ownerId);
+        if (restaurant == null) return false;
+
+        var staff = await _context.RestaurantStaff.FirstOrDefaultAsync(s => s.RestaurantId == restaurantId && s.UserId == staffUserId);
+        if (staff == null) return false;
+
+        _context.RestaurantStaff.Remove(staff);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<RestaurantStaffDto>> GetRestaurantStaffAsync(Guid restaurantId, Guid ownerId)
+    {
+        var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.RestaurantId == restaurantId && r.OwnerId == ownerId);
+        if (restaurant == null) return new();
+
+        return await _context.RestaurantStaff
+            .Where(s => s.RestaurantId == restaurantId)
+            .Select(s => new RestaurantStaffDto { UserId = s.UserId, RestaurantId = s.RestaurantId, CreatedAt = s.CreatedAt })
+            .ToListAsync();
+    }
+
+    public async Task<List<RestaurantDto>> GetStaffRestaurantsAsync(Guid staffUserId)
+    {
+        var restaurantIds = await _context.RestaurantStaff
+            .Where(s => s.UserId == staffUserId)
+            .Select(s => s.RestaurantId)
+            .ToListAsync();
+
+        if (restaurantIds.Count == 0) return new();
+
+        var restaurants = await _context.Restaurants
+            .Include(r => r.DeliveryZones)
+            .Include(r => r.Hours)
+            .Where(r => restaurantIds.Contains(r.RestaurantId))
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        return restaurants.Select(MapToDto).ToList();
+    }
+
+    public async Task<bool> IsStaffOfRestaurantAsync(Guid restaurantId, Guid userId)
+    {
+        return await _context.RestaurantStaff.AnyAsync(s => s.RestaurantId == restaurantId && s.UserId == userId);
+    }
+
+    public async Task<bool> IsOwnerOrStaffAsync(Guid restaurantId, Guid userId)
+    {
+        var isOwner = await _context.Restaurants.AnyAsync(r => r.RestaurantId == restaurantId && r.OwnerId == userId);
+        if (isOwner) return true;
+        return await IsStaffOfRestaurantAsync(restaurantId, userId);
+    }
+
+    public async Task<int> GetStaffLinkCountAsync(Guid userId)
+    {
+        return await _context.RestaurantStaff.CountAsync(s => s.UserId == userId);
+    }
 }
 
 // DTOs
@@ -771,4 +859,11 @@ public record RestaurantHoursDto
     public TimeOnly? OpenTime { get; set; }
     public TimeOnly? CloseTime { get; set; }
     public bool IsClosed { get; set; }
+}
+
+public record RestaurantStaffDto
+{
+    public Guid UserId { get; set; }
+    public Guid RestaurantId { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

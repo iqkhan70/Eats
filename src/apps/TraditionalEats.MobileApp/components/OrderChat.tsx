@@ -150,12 +150,12 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
                 router.replace("/login");
                 return;
               }
-              console.warn("Chat join/read:", msg);
+              console.log("Chat join/read:", msg);
             });
         }
       })
       .catch((e) => {
-        if (mounted) console.warn("Chat connect:", e?.message ?? e);
+        if (mounted) console.log("Chat connect:", e?.message ?? e);
       });
 
     return () => {

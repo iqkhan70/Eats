@@ -499,6 +499,35 @@ public class ChatService : IChatService
         if (roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase)))
             return await VerifyRestaurantOwnerAsync(restaurantId, userId, bearerToken);
 
+        // Staff: check via RestaurantService is-owner-or-staff endpoint
+        if (roles.Any(r => string.Equals(r, "Staff", StringComparison.OrdinalIgnoreCase)))
+            return await VerifyStaffAccessAsync(restaurantId, userId, bearerToken);
+
+        return false;
+    }
+
+    private async Task<bool> VerifyStaffAccessAsync(Guid restaurantId, Guid userId, string? bearerToken)
+    {
+        var restaurantClient = _httpClientFactory.CreateClient("RestaurantService");
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            restaurantClient.DefaultRequestHeaders.Remove("Authorization");
+            restaurantClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {bearerToken.Trim()}");
+        }
+
+        try
+        {
+            var resp = await restaurantClient.GetAsync($"/api/restaurant/{restaurantId}/is-owner-or-staff/{userId}");
+            if (!resp.IsSuccessStatusCode) return false;
+            var json = await resp.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("hasAccess", out var val))
+                return val.GetBoolean();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "VerifyStaffAccessAsync: Failed for restaurant {RestaurantId}, user {UserId}", restaurantId, userId);
+        }
         return false;
     }
 

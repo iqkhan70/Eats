@@ -261,7 +261,7 @@ export default function VendorOrdersScreen() {
         return;
       }
 
-      const vendor = await authService.isVendor();
+      const vendor = await authService.isVendorOrStaff();
       if (!isMountedRef.current) return;
 
       setIsVendor(vendor);

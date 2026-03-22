@@ -40,6 +40,7 @@ export default function VendorDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVendor, setIsVendor] = useState(false);
+  const [isStaffOnly, setIsStaffOnly] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [searchTextDebounced, setSearchTextDebounced] = useState("");
   const [stripeOnboardingStatus, setStripeOnboardingStatus] = useState<
@@ -94,17 +95,18 @@ export default function VendorDashboardScreen() {
       if (isAuthenticated && isVendor) {
         loadRestaurants();
         loadPendingOrderCounts();
-        // Sync onboarding status from Stripe so we show Complete when user just finished in browser (webhook may be missed)
-        api
-          .post<{ status?: string }>(
-            "/MobileBff/payments/vendor/refresh-onboarding-status",
-          )
-          .then((res) =>
-            setStripeOnboardingStatus(res.data?.status ?? "Pending"),
-          )
-          .catch(() => loadStripeOnboardingStatus());
+        if (!isStaffOnly) {
+          api
+            .post<{ status?: string }>(
+              "/MobileBff/payments/vendor/refresh-onboarding-status",
+            )
+            .then((res) =>
+              setStripeOnboardingStatus(res.data?.status ?? "Pending"),
+            )
+            .catch(() => loadStripeOnboardingStatus());
+        }
       }
-    }, [isAuthenticated, isVendor]),
+    }, [isAuthenticated, isVendor, isStaffOnly]),
   );
 
   const checkAuthAndLoad = async () => {
@@ -113,14 +115,16 @@ export default function VendorDashboardScreen() {
 
     if (authenticated) {
       const vendor = await authService.isVendor();
-      setIsVendor(vendor);
+      const staff = await authService.isStaff();
+      setIsVendor(vendor || staff);
+      setIsStaffOnly(staff && !vendor);
 
-      if (vendor) {
-        await Promise.all([loadRestaurants(), loadStripeOnboardingStatus()]);
+      if (vendor || staff) {
+        await Promise.all([loadRestaurants(), ...(vendor ? [loadStripeOnboardingStatus()] : [])]);
       } else {
         Alert.alert(
           "Access Denied",
-          "You must be a vendor to access this page.",
+          "You must be a vendor or staff to access this page.",
         );
         router.back();
       }
@@ -309,12 +313,14 @@ export default function VendorDashboardScreen() {
             <Text style={styles.backLabel}>Back</Text>
           </TouchableOpacity>
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              onPress={() => router.push("/vendor/documents")}
-              style={styles.iconButton}
-            >
-              <Ionicons name="document-text-outline" size={20} color="#fff" />
-            </TouchableOpacity>
+            {!isStaffOnly && (
+              <TouchableOpacity
+                onPress={() => router.push("/vendor/documents")}
+                style={styles.iconButton}
+              >
+                <Ionicons name="document-text-outline" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => router.push("/vendor/orders")}
               style={styles.iconButton}
@@ -330,12 +336,14 @@ export default function VendorDashboardScreen() {
                 )}
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/vendor/create-restaurant")}
-              style={styles.iconButton}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-            </TouchableOpacity>
+            {!isStaffOnly && (
+              <TouchableOpacity
+                onPress={() => router.push("/vendor/create-restaurant")}
+                style={styles.iconButton}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
         </LinearGradient>
 
@@ -372,7 +380,8 @@ export default function VendorDashboardScreen() {
           </View>
         )}
 
-        {restaurants.length > 0 &&
+        {!isStaffOnly &&
+          restaurants.length > 0 &&
           stripeOnboardingStatus &&
           stripeOnboardingStatus !== "Complete" && (
             <View style={styles.stripeBanner}>
@@ -449,27 +458,31 @@ export default function VendorDashboardScreen() {
                 )}
 
                 <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.editButton]}
-                    onPress={() =>
-                      handleEditRestaurant(restaurant.restaurantId)
-                    }
-                  >
-                    <Ionicons name="create-outline" size={18} color="#6200ee" />
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
+                  {!isStaffOnly && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.editButton]}
+                      onPress={() =>
+                        handleEditRestaurant(restaurant.restaurantId)
+                      }
+                    >
+                      <Ionicons name="create-outline" size={18} color="#6200ee" />
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+                  )}
 
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.menuButton]}
-                    onPress={() => handleManageMenu(restaurant.restaurantId)}
-                  >
-                    <Ionicons
-                      name="restaurant-outline"
-                      size={18}
-                      color="#fff"
-                    />
-                    <Text style={styles.menuButtonText}>Catalog</Text>
-                  </TouchableOpacity>
+                  {!isStaffOnly && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.menuButton]}
+                      onPress={() => handleManageMenu(restaurant.restaurantId)}
+                    >
+                      <Ionicons
+                        name="restaurant-outline"
+                        size={18}
+                        color="#fff"
+                      />
+                      <Text style={styles.menuButtonText}>Catalog</Text>
+                    </TouchableOpacity>
+                  )}
 
                   <TouchableOpacity
                     style={[styles.actionButton, styles.ordersButton]}
@@ -494,22 +507,40 @@ export default function VendorDashboardScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDeleteRestaurant(restaurant)}
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#d32f2f" />
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
+                  {!isStaffOnly && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.staffButton]}
+                      onPress={() =>
+                        router.push(
+                          `/vendor/restaurants/${restaurant.restaurantId}/staff`,
+                        )
+                      }
+                    >
+                      <Ionicons name="people-outline" size={18} color="#fff" />
+                      <Text style={styles.staffButtonText}>Staff</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {!isStaffOnly && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => handleDeleteRestaurant(restaurant)}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#d32f2f" />
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             ))}
           </View>
         )}
 
-        <TouchableOpacity style={styles.fab} onPress={handleCreateRestaurant}>
-          <Ionicons name="add" size={28} color="#fff" />
-        </TouchableOpacity>
+        {!isStaffOnly && (
+          <TouchableOpacity style={styles.fab} onPress={handleCreateRestaurant}>
+            <Ionicons name="add" size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       <BottomSearchBar
@@ -807,6 +838,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#f97316",
   },
   menuButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  staffButton: {
+    backgroundColor: "#2196f3",
+  },
+  staffButtonText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",

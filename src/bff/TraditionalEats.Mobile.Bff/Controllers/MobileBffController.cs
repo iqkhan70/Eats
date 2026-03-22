@@ -952,7 +952,7 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpPost("orders/{orderId}/refund")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> RefundOrder(Guid orderId)
     {
         try
@@ -1905,28 +1905,30 @@ public class MobileBffController : ControllerBase
     // ----------------------------
 
     [HttpGet("vendor/pending-order-counts")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorPendingOrderCounts()
     {
         try
         {
             var restClient = _httpClientFactory.CreateClient("RestaurantService");
             ForwardBearerToken(restClient);
-            var restResponse = await restClient.GetAsync("/api/restaurant/vendor/my-restaurants");
-            if (!restResponse.IsSuccessStatusCode)
-                return StatusCode((int)restResponse.StatusCode, new { error = "Failed to fetch vendor restaurants" });
 
-            var restJson = await restResponse.Content.ReadAsStringAsync();
-            var ids = new List<Guid>();
-            try
+            // Fetch both owned and staff-linked restaurant IDs
+            var ids = new HashSet<Guid>();
+            foreach (var url in new[] { "/api/restaurant/vendor/my-restaurants", "/api/restaurant/staff/my-restaurants" })
             {
-                using var doc = JsonDocument.Parse(restJson);
-                foreach (var el in doc.RootElement.EnumerateArray())
+                try
                 {
-                    if (TryGetRestaurantId(el, out var id) && id != default) ids.Add(id);
+                    var resp = await restClient.GetAsync(url);
+                    if (!resp.IsSuccessStatusCode) continue;
+                    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        if (TryGetRestaurantId(el, out var id) && id != default) ids.Add(id);
+                    }
                 }
+                catch { /* ignore */ }
             }
-            catch { /* ignore parse errors */ }
 
             if (ids.Count == 0)
                 return Ok(new Dictionary<string, int>());
@@ -1946,7 +1948,7 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpGet("vendor/restaurants/{restaurantId}/orders")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorOrders(Guid restaurantId)
     {
         try
@@ -1967,7 +1969,7 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpGet("vendor/restaurants/{restaurantId}/orders/{orderId}")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorOrder(Guid restaurantId, Guid orderId)
     {
         try
@@ -1988,7 +1990,7 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpPut("orders/{orderId}/status")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
     {
         try
@@ -2110,7 +2112,7 @@ public class MobileBffController : ControllerBase
     }
 
     [HttpGet("vendor-chat/inbox")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorInbox([FromQuery] int take = 100)
     {
         try
@@ -2152,7 +2154,7 @@ public class MobileBffController : ControllerBase
     // ----------------------------
 
     [HttpGet("vendor/my-restaurants")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetMyRestaurants()
     {
         try
@@ -2160,18 +2162,234 @@ public class MobileBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("RestaurantService");
             ForwardBearerToken(client);
 
+            // Fetch owned restaurants (vendors/admins)
             var response = await client.GetAsync("/api/restaurant/vendor/my-restaurants");
-            var content = await response.Content.ReadAsStringAsync();
+            var ownedJson = response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync() : "[]";
 
-            if (response.IsSuccessStatusCode)
-                return JsonString(content);
+            // Also fetch staff-linked restaurants
+            var staffResponse = await client.GetAsync("/api/restaurant/staff/my-restaurants");
+            var staffJson = staffResponse.IsSuccessStatusCode ? await staffResponse.Content.ReadAsStringAsync() : "[]";
 
-            return StatusCode((int)response.StatusCode, content);
+            // Merge both lists, deduplicating by restaurantId
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var merged = new List<JsonElement>();
+            foreach (var json in new[] { ownedJson, staffJson })
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(json);
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        if (TryGetRestaurantId(el, out var id))
+                        {
+                            var key = id.ToString();
+                            if (seen.Add(key)) merged.Add(el.Clone());
+                        }
+                    }
+                }
+                catch { /* ignore parse errors */ }
+            }
+
+            return new ContentResult
+            {
+                Content = System.Text.Json.JsonSerializer.Serialize(merged),
+                ContentType = "application/json",
+                StatusCode = 200
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching vendor restaurants");
             return StatusCode(500, new { error = "Failed to fetch vendor restaurants" });
+        }
+    }
+
+    // ---- Staff management (Vendor adds/removes staff) ----
+
+    [HttpPost("vendor/restaurants/{restaurantId}/staff")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> AddRestaurantStaff(Guid restaurantId, [FromBody] AddStaffByEmailRequest request)
+    {
+        try
+        {
+            // Resolve email to userId via Identity
+            var identityClient = _httpClientFactory.CreateClient("IdentityService");
+            ForwardBearerToken(identityClient);
+            var lookupResp = await identityClient.GetAsync($"/api/auth/user-by-email?email={Uri.EscapeDataString(request.Email)}");
+            if (!lookupResp.IsSuccessStatusCode)
+                return NotFound(new { error = "No user found with that email" });
+
+            var lookupJson = await lookupResp.Content.ReadAsStringAsync();
+            Guid staffUserId;
+            try
+            {
+                using var doc = JsonDocument.Parse(lookupJson);
+                var root = doc.RootElement;
+                var idStr = (root.TryGetProperty("userId", out var uel) ? uel : root.GetProperty("UserId")).GetString();
+                staffUserId = Guid.Parse(idStr!);
+            }
+            catch
+            {
+                return NotFound(new { error = "Could not resolve user" });
+            }
+
+            // Assign the Staff role to this user if they don't have it
+            try
+            {
+                await identityClient.PostAsJsonAsync("/api/auth/assign-staff-role", new { userId = staffUserId });
+            }
+            catch { /* best-effort */ }
+
+            // Add staff link in RestaurantService
+            var restClient = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(restClient);
+            var resp = await restClient.PostAsJsonAsync($"/api/restaurant/vendor/{restaurantId}/staff", new { userId = staffUserId });
+            var content = await resp.Content.ReadAsStringAsync();
+            return StatusCode((int)resp.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding restaurant staff");
+            return StatusCode(500, new { error = "Failed to add staff" });
+        }
+    }
+
+    [HttpDelete("vendor/restaurants/{restaurantId}/staff/{staffUserId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RemoveRestaurantStaff(Guid restaurantId, Guid staffUserId)
+    {
+        try
+        {
+            var restClient = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(restClient);
+            var resp = await restClient.DeleteAsync($"/api/restaurant/vendor/{restaurantId}/staff/{staffUserId}");
+            if (!resp.IsSuccessStatusCode)
+            {
+                var content = await resp.Content.ReadAsStringAsync();
+                return StatusCode((int)resp.StatusCode, content);
+            }
+
+            // If this user has no remaining staff links, revoke the Staff role
+            try
+            {
+                var countResp = await restClient.GetAsync($"/api/restaurant/staff/{staffUserId}/link-count");
+                var remaining = 1; // default to non-zero so we don't accidentally revoke
+                if (countResp.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(await countResp.Content.ReadAsStringAsync());
+                    if (doc.RootElement.TryGetProperty("count", out var countEl))
+                        remaining = countEl.GetInt32();
+                }
+
+                if (remaining == 0)
+                {
+                    var identityClient = _httpClientFactory.CreateClient("IdentityService");
+                    ForwardBearerToken(identityClient);
+                    try
+                    {
+                        await identityClient.PostAsJsonAsync("/api/auth/revoke-staff-role", new { userId = staffUserId });
+                    }
+                    catch { /* best-effort role cleanup */ }
+                }
+            }
+            catch { /* best-effort — staff link already removed, which is the important part */ }
+
+            return Ok(new { message = "Staff removed" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing restaurant staff");
+            return StatusCode(500, new { error = "Failed to remove staff" });
+        }
+    }
+
+    [HttpGet("vendor/restaurants/{restaurantId}/staff")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetRestaurantStaff(Guid restaurantId)
+    {
+        try
+        {
+            var restClient = _httpClientFactory.CreateClient("RestaurantService");
+            ForwardBearerToken(restClient);
+            var resp = await restClient.GetAsync($"/api/restaurant/vendor/{restaurantId}/staff");
+            if (!resp.IsSuccessStatusCode)
+            {
+                var errContent = await resp.Content.ReadAsStringAsync();
+                return StatusCode((int)resp.StatusCode, errContent);
+            }
+
+            var staffJson = await resp.Content.ReadAsStringAsync();
+            using var staffDoc = JsonDocument.Parse(staffJson);
+            var staffList = staffDoc.RootElement.EnumerateArray().ToList();
+
+            if (staffList.Count == 0)
+                return Ok(Array.Empty<object>());
+
+            // Enrich with email from IdentityService
+            var userIds = staffList
+                .Select(el =>
+                {
+                    if (el.TryGetProperty("userId", out var u) || el.TryGetProperty("UserId", out u))
+                    {
+                        if (Guid.TryParse(u.GetString(), out var id)) return id;
+                    }
+                    return (Guid?)null;
+                })
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            var emailMap = new Dictionary<Guid, string>();
+            if (userIds.Count > 0)
+            {
+                try
+                {
+                    var identityClient = _httpClientFactory.CreateClient("IdentityService");
+                    ForwardBearerToken(identityClient);
+                    var lookupResp = await identityClient.PostAsJsonAsync("/api/auth/users-by-ids", new { userIds });
+                    if (lookupResp.IsSuccessStatusCode)
+                    {
+                        using var usersDoc = JsonDocument.Parse(await lookupResp.Content.ReadAsStringAsync());
+                        foreach (var u in usersDoc.RootElement.EnumerateArray())
+                        {
+                            var uid = u.TryGetProperty("userId", out var uidEl) ? uidEl.GetString() : null;
+                            var email = u.TryGetProperty("email", out var eEl) ? eEl.GetString() : null;
+                            if (uid != null && Guid.TryParse(uid, out var parsedId) && !string.IsNullOrWhiteSpace(email))
+                                emailMap[parsedId] = email!;
+                        }
+                    }
+                }
+                catch { /* best-effort enrichment */ }
+            }
+
+            var enriched = staffList.Select(el =>
+            {
+                var userId = "";
+                if (el.TryGetProperty("userId", out var u) || el.TryGetProperty("UserId", out u))
+                    userId = u.GetString() ?? "";
+
+                var createdAt = "";
+                if (el.TryGetProperty("createdAt", out var c) || el.TryGetProperty("CreatedAt", out c))
+                    createdAt = c.GetString() ?? "";
+
+                var restaurantIdStr = "";
+                if (el.TryGetProperty("restaurantId", out var r) || el.TryGetProperty("RestaurantId", out r))
+                    restaurantIdStr = r.GetString() ?? "";
+
+                string? email = null;
+                if (Guid.TryParse(userId, out var parsedUid))
+                    emailMap.TryGetValue(parsedUid, out email);
+
+                return new { userId, restaurantId = restaurantIdStr, createdAt, email };
+            }).ToList();
+
+            return Ok(enriched);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching restaurant staff");
+            return StatusCode(500, new { error = "Failed to fetch staff" });
         }
     }
 
@@ -3097,3 +3315,4 @@ public record UpdateDocumentStatusRequest(bool IsActive);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
 public record CustomerInfoDto(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
+public record AddStaffByEmailRequest(string Email);

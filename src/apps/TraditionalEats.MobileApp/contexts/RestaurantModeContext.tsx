@@ -63,6 +63,7 @@ export function RestaurantModeProvider({
   const [restaurantNameById, setRestaurantNameById] = useState<
     Record<string, string>
   >({});
+  const [hubConnected, setHubConnected] = useState(false);
   const connectedRef = useRef(false);
   const joinedRestaurantsRef = useRef<Set<string>>(new Set());
   const acceptingOrdersRef = useRef(acceptingOrders);
@@ -134,10 +135,10 @@ export function RestaurantModeProvider({
     void (async () => {
       const val = await loadAcceptingState();
       if (!mounted) return;
-      const vendor = await authService.isVendor();
+      const vendorOrStaff = await authService.isVendorOrStaff();
       if (!mounted) return;
-      setIsVendor(vendor);
-      if (vendor) {
+      setIsVendor(vendorOrStaff);
+      if (vendorOrStaff) {
         await loadRestaurants();
       }
     })();
@@ -171,12 +172,14 @@ export function RestaurantModeProvider({
 
     const unsub = addVendorMessageListener(onMessage);
 
-    const onError = (err: string) => {
-      console.warn("RestaurantMode SignalR:", err);
+    const onError = (_err: string) => {
+      // Silenced — SignalR auto-reconnects; transient negotiation
+      // failures are expected on mobile networks.
     };
 
     const onState = (connected: boolean) => {
       connectedRef.current = connected;
+      setHubConnected(connected);
       if (!connected && acceptingOrdersRef.current) {
         connectVendorChatHub(() => {}, onError, onState).catch(() => {});
       }
@@ -202,11 +205,14 @@ export function RestaurantModeProvider({
       return;
     }
 
+    if (!hubConnected) return;
+
     try { require("expo-keep-awake").activateKeepAwakeAsync().catch(() => {}); } catch {}
 
     const joinAll = async () => {
       for (const r of restaurants) {
         if (!r.restaurantId) continue;
+        if (joinedRestaurantsRef.current.has(r.restaurantId)) continue;
         try {
           await joinVendorRestaurant(r.restaurantId);
           joinedRestaurantsRef.current.add(r.restaurantId);
@@ -225,7 +231,7 @@ export function RestaurantModeProvider({
       }
       joinedRestaurantsRef.current.clear();
     };
-  }, [acceptingOrders, restaurants]);
+  }, [acceptingOrders, restaurants, hubConnected]);
 
   const currentOrder = pendingOrders[0] ?? null;
   const restaurantId = currentOrder?.restaurantId ?? "";

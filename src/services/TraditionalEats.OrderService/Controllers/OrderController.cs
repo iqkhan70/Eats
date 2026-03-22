@@ -662,7 +662,7 @@ public class OrderController : ControllerBase
     // ----------------------------
 
     [HttpGet("vendor/pending-order-counts")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorPendingOrderCounts([FromQuery] string? restaurantIds = null)
     {
         try
@@ -686,7 +686,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("vendor/restaurants/{restaurantId}/orders")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorOrders(Guid restaurantId)
     {
         try
@@ -702,7 +702,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("vendor/restaurants/{restaurantId}/orders/{orderId}")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorOrder(Guid restaurantId, Guid orderId)
     {
         try
@@ -725,7 +725,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("vendor/restaurants/{restaurantId}/orders/paged")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> GetVendorOrdersPaged(
         Guid restaurantId,
         [FromQuery] int skip = 0,
@@ -820,7 +820,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpPut("{orderId}/status")]
-    [Authorize(Roles = "Vendor,Admin")]
+    [Authorize(Roles = "Vendor,Staff,Admin")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
     {
         try

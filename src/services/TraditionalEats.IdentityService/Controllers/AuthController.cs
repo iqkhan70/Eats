@@ -225,6 +225,100 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("assign-staff-role")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> AssignStaffRole([FromBody] AssignStaffRoleRequest request)
+    {
+        try
+        {
+            var user = await _authService.GetUserByIdAsync(request.UserId);
+            if (user == null)
+                return NotFound(new { message = "User not found" });
+
+            var success = await _authService.AssignRoleAsync(user.Email, "Staff");
+            if (!success)
+                return BadRequest(new { message = "Role assignment failed" });
+
+            return Ok(new { message = "Staff role assigned" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Staff role assignment failed for userId {UserId}", request.UserId);
+            return StatusCode(500, new { message = "Staff role assignment failed" });
+        }
+    }
+
+    [HttpPost("revoke-staff-role")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RevokeStaffRole([FromBody] RevokeStaffRoleRequest request)
+    {
+        try
+        {
+            var user = await _authService.GetUserByIdAsync(request.UserId);
+            if (user == null)
+                return NotFound(new { message = "User not found" });
+
+            var success = await _authService.RemoveRoleAsync(user.Email, "Staff");
+            if (!success)
+                return BadRequest(new { message = "Cannot remove role" });
+
+            return Ok(new { message = "Staff role revoked" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Staff role revocation failed for userId {UserId}", request.UserId);
+            return StatusCode(500, new { message = "Staff role revocation failed" });
+        }
+    }
+
+    [HttpPost("users-by-ids")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetUsersByIds([FromBody] UsersByIdsRequest request)
+    {
+        try
+        {
+            if (request.UserIds == null || request.UserIds.Count == 0)
+                return Ok(Array.Empty<object>());
+
+            var results = new List<object>();
+            foreach (var id in request.UserIds.Distinct().Take(50))
+            {
+                var user = await _authService.GetUserByIdAsync(id);
+                if (user != null)
+                    results.Add(new { userId = user.UserId, email = user.Email, displayName = user.DisplayName });
+            }
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get users by IDs");
+            return StatusCode(500, new { message = "Failed to get users by IDs" });
+        }
+    }
+
+    [HttpGet("user-by-email")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Vendor")]
+    public async Task<IActionResult> GetUserByEmail([FromQuery] string email)
+    {
+        try
+        {
+            var normalizedEmail = email?.Trim().ToLower() ?? "";
+            if (string.IsNullOrEmpty(normalizedEmail))
+                return BadRequest(new { message = "Email is required" });
+
+            var user = await _authService.GetUserByEmailAsync(normalizedEmail);
+            if (user == null)
+                return NotFound(new { message = "User not found" });
+
+            return Ok(new { userId = user.UserId, email = user.Email, displayName = user.DisplayName });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get user by email");
+            return StatusCode(500, new { message = "Failed to get user by email" });
+        }
+    }
+
     [HttpGet("user-roles/{email}")]
     [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetUserRoles(string email)
@@ -401,5 +495,8 @@ public record AppleLoginRequest(string IdToken, string? Email, string? FullName)
 public record RefreshTokenRequest(string RefreshToken);
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
+public record AssignStaffRoleRequest(Guid UserId);
+public record RevokeStaffRoleRequest(Guid UserId);
+public record UsersByIdsRequest(List<Guid> UserIds);
 public record ForgotPasswordRequest(string Email);
 public record ResetPasswordRequest(string Token, string Email, string NewPassword, string ConfirmPassword);

@@ -44,7 +44,10 @@ export default function ProfileScreen() {
       setIsAuthenticated(authenticated);
 
       if (authenticated) {
-        const vendor = await authService.isVendor();
+        // Refresh token so newly-assigned roles (e.g. Staff) are picked up
+        await authService.refreshAccessToken().catch(() => {});
+
+        const vendor = await authService.isVendorOrStaff();
         const admin = await authService.isAdmin();
         const coordinator = await authService.isCoordinator();
         setIsVendor(vendor);

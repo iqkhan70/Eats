@@ -220,12 +220,12 @@ export default function VendorChat({
               router.replace("/login");
               return;
             }
-            console.warn("Vendor chat join:", msg);
+            console.log("Vendor chat join:", msg);
           });
         }
       })
       .catch((e) => {
-        if (mounted) console.warn("Vendor chat connect:", e?.message ?? e);
+        if (mounted) console.log("Vendor chat connect:", e?.message ?? e);
       });
 
     return () => {

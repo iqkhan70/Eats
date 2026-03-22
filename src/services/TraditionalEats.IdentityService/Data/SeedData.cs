@@ -14,7 +14,8 @@ public static class SeedData
             new Role { Id = Guid.NewGuid(), Name = "Vendor", Description = "Restaurant owner who can manage their restaurant and menu" },
             new Role { Id = Guid.NewGuid(), Name = "Admin", Description = "Administrator with full system access" },
             new Role { Id = Guid.NewGuid(), Name = "Coordinator", Description = "Can approve vendor requests only; no other admin access" },
-            new Role { Id = Guid.NewGuid(), Name = "Driver", Description = "Delivery driver" }
+            new Role { Id = Guid.NewGuid(), Name = "Driver", Description = "Delivery driver" },
+            new Role { Id = Guid.NewGuid(), Name = "Staff", Description = "Restaurant staff (cashier/front desk) who can view and manage orders for their assigned restaurant" }
         };
 
         foreach (var role in roles)

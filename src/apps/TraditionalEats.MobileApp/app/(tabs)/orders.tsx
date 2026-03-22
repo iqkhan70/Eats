@@ -99,7 +99,7 @@ export default function OrdersScreen() {
         setIsAuthenticated(authenticated);
 
         if (authenticated) {
-          const vendor = await authService.isVendor();
+          const vendor = await authService.isVendorOrStaff();
           if (!isMounted) return;
 
           if (vendor) {

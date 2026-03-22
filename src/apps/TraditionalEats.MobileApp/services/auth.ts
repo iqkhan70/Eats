@@ -334,6 +334,21 @@ class AuthService {
     return await this.isInRole('Vendor');
   }
 
+  /**
+   * Check if user is restaurant staff
+   */
+  async isStaff(): Promise<boolean> {
+    return await this.isInRole('Staff');
+  }
+
+  /**
+   * Check if user is a vendor or staff (can access vendor dashboard)
+   */
+  async isVendorOrStaff(): Promise<boolean> {
+    const roles = await this.getUserRoles();
+    return roles.includes('Vendor') || roles.includes('Staff');
+  }
+
   private async storeTokens(accessToken: string, refreshToken: string): Promise<void> {
     await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, accessToken);
     await AsyncStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);

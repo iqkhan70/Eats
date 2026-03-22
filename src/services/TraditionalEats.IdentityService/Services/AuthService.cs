@@ -26,8 +26,10 @@ public interface IAuthService
     Task<bool> RegisterAsync(string firstName, string lastName, string? displayName, string email, string phoneNumber, string password, string role = "Customer");
     Task LogoutAsync(string refreshToken);
     Task<bool> UserExistsAsync(string email);
+    Task<UserBasicInfo?> GetUserByEmailAsync(string email);
     Task<bool> AssignRoleAsync(string email, string role);
     Task<bool> RemoveRoleAsync(string email, string role);
+    Task<UserBasicInfo?> GetUserByIdAsync(Guid userId);
     Task<List<string>> GetUserRolesAsync(string email);
     Task<ForgotPasswordResult> ForgotPasswordAsync(string email);
     Task<ResetPasswordResult> ResetPasswordAsync(string email, string token, string newPassword);
@@ -47,6 +49,7 @@ public record VendorApprovalDto(Guid Id, Guid UserId, string UserEmail, string? 
 
 public record ForgotPasswordResult(bool Success, string Message);
 public record ResetPasswordResult(bool Success, string Message);
+public record UserBasicInfo(Guid UserId, string Email, string? DisplayName);
 
 /// <summary>Matches CustomerService GET /api/customer/by-user/{userId} response (camelCase).</summary>
 internal record CustomerInfoResponse(Guid CustomerId, Guid UserId, string FirstName, string LastName, string? Email, string? PhoneNumber);
@@ -503,6 +506,21 @@ public class AuthService : IAuthService
     {
         var normalizedEmail = email.ToLower().Trim();
         return await _context.Users.AnyAsync(u => u.Email == normalizedEmail);
+    }
+
+    public async Task<UserBasicInfo?> GetUserByEmailAsync(string email)
+    {
+        var normalizedEmail = email.ToLower().Trim();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        if (user == null) return null;
+        return new UserBasicInfo(user.Id, user.Email, null);
+    }
+
+    public async Task<UserBasicInfo?> GetUserByIdAsync(Guid userId)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null) return null;
+        return new UserBasicInfo(user.Id, user.Email, null);
     }
 
     public async Task<bool> AssignRoleAsync(string email, string role)

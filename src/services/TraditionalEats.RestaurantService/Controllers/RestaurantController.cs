@@ -345,7 +345,93 @@ public class RestaurantController : ControllerBase
             return StatusCode(500, new { message = "Failed to update Elo rating" });
         }
     }
+    // ---- Staff management ----
+
+    [HttpPost("vendor/{restaurantId}/staff")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> AddStaff(Guid restaurantId, [FromBody] AddStaffRequest request)
+    {
+        try
+        {
+            var ownerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var success = await _restaurantService.AddStaffAsync(restaurantId, ownerId, request.UserId);
+            if (!success) return NotFound(new { message = "Restaurant not found or you don't have permission" });
+            return Ok(new { message = "Staff added" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add staff");
+            return StatusCode(500, new { message = "Failed to add staff" });
+        }
+    }
+
+    [HttpDelete("vendor/{restaurantId}/staff/{staffUserId}")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> RemoveStaff(Guid restaurantId, Guid staffUserId)
+    {
+        try
+        {
+            var ownerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var success = await _restaurantService.RemoveStaffAsync(restaurantId, ownerId, staffUserId);
+            if (!success) return NotFound(new { message = "Staff or restaurant not found" });
+            return Ok(new { message = "Staff removed" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove staff");
+            return StatusCode(500, new { message = "Failed to remove staff" });
+        }
+    }
+
+    [HttpGet("vendor/{restaurantId}/staff")]
+    [Authorize(Roles = "Vendor,Admin")]
+    public async Task<IActionResult> GetRestaurantStaff(Guid restaurantId)
+    {
+        try
+        {
+            var ownerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var staff = await _restaurantService.GetRestaurantStaffAsync(restaurantId, ownerId);
+            return Ok(staff);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get restaurant staff");
+            return StatusCode(500, new { message = "Failed to get restaurant staff" });
+        }
+    }
+
+    [HttpGet("staff/my-restaurants")]
+    [Authorize(Roles = "Staff,Vendor,Admin")]
+    public async Task<IActionResult> GetMyStaffRestaurants()
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var restaurants = await _restaurantService.GetStaffRestaurantsAsync(userId);
+            return Ok(restaurants);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get staff restaurants");
+            return StatusCode(500, new { message = "Failed to get staff restaurants" });
+        }
+    }
+
+    [HttpGet("{restaurantId}/is-owner-or-staff/{userId}")]
+    public async Task<IActionResult> IsOwnerOrStaff(Guid restaurantId, Guid userId)
+    {
+        var result = await _restaurantService.IsOwnerOrStaffAsync(restaurantId, userId);
+        return Ok(new { hasAccess = result });
+    }
+
+    [HttpGet("staff/{userId}/link-count")]
+    public async Task<IActionResult> GetStaffLinkCount(Guid userId)
+    {
+        var count = await _restaurantService.GetStaffLinkCountAsync(userId);
+        return Ok(new { count });
+    }
 }
 
 public record ToggleStatusRequest(bool IsActive);
 public record UpdateEloRatingRequest(decimal EloRating);
+public record AddStaffRequest(Guid UserId);
