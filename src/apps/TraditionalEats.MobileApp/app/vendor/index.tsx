@@ -457,7 +457,13 @@ export default function VendorDashboardScreen() {
                   </Text>
                 )}
 
-                <View style={styles.actionButtons}>
+                {!restaurant.isActive && (
+                  <Text style={styles.inactiveHint}>
+                    This vendor is deactivated. Contact administrator to reactivate.
+                  </Text>
+                )}
+
+                <View style={[styles.actionButtons, !restaurant.isActive && styles.actionButtonsDisabled]}>
                   {!isStaffOnly && (
                     <TouchableOpacity
                       style={[styles.actionButton, styles.editButton]}
@@ -472,15 +478,16 @@ export default function VendorDashboardScreen() {
 
                   {!isStaffOnly && (
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.menuButton]}
+                      style={[styles.actionButton, styles.menuButton, !restaurant.isActive && styles.disabledButton]}
                       onPress={() => handleManageMenu(restaurant.restaurantId)}
+                      disabled={!restaurant.isActive}
                     >
                       <Ionicons
                         name="restaurant-outline"
                         size={18}
-                        color="#fff"
+                        color={restaurant.isActive ? "#fff" : "#aaa"}
                       />
-                      <Text style={styles.menuButtonText}>Catalog</Text>
+                      <Text style={[styles.menuButtonText, !restaurant.isActive && styles.disabledButtonText]}>Catalog</Text>
                     </TouchableOpacity>
                   )}
 
@@ -509,25 +516,27 @@ export default function VendorDashboardScreen() {
 
                   {!isStaffOnly && (
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.staffButton]}
+                      style={[styles.actionButton, styles.staffButton, !restaurant.isActive && styles.disabledButton]}
                       onPress={() =>
                         router.push(
                           `/vendor/restaurants/${restaurant.restaurantId}/staff`,
                         )
                       }
+                      disabled={!restaurant.isActive}
                     >
-                      <Ionicons name="people-outline" size={18} color="#fff" />
-                      <Text style={styles.staffButtonText}>Staff</Text>
+                      <Ionicons name="people-outline" size={18} color={restaurant.isActive ? "#fff" : "#aaa"} />
+                      <Text style={[styles.staffButtonText, !restaurant.isActive && styles.disabledButtonText]}>Staff</Text>
                     </TouchableOpacity>
                   )}
 
-                  {!isStaffOnly && restaurant.isActive && (
+                  {!isStaffOnly && (
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton]}
+                      style={[styles.actionButton, styles.deleteButton, !restaurant.isActive && styles.disabledButton]}
                       onPress={() => handleDeleteRestaurant(restaurant)}
+                      disabled={!restaurant.isActive}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#d32f2f" />
-                      <Text style={styles.deleteButtonText}>Delete</Text>
+                      <Ionicons name="trash-outline" size={18} color={restaurant.isActive ? "#d32f2f" : "#aaa"} />
+                      <Text style={[styles.deleteButtonText, !restaurant.isActive && styles.disabledButtonText]}>Delete</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -808,11 +817,29 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 16,
   },
+  inactiveHint: {
+    fontSize: 13,
+    color: "#d32f2f",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 16,
+  },
   actionButtons: {
     flexDirection: "row",
     gap: 8,
     marginTop: 8,
     padding: 16,
+  },
+  actionButtonsDisabled: {
+    opacity: 0.45,
+  },
+  disabledButton: {
+    backgroundColor: "#e0e0e0",
+    borderColor: "#e0e0e0",
+  },
+  disabledButtonText: {
+    color: "#aaa",
   },
   actionButton: {
     flex: 1,
