@@ -43,11 +43,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidateAudience = !string.IsNullOrEmpty(jwtAudience), // Only validate if audience is set (matches Web BFF)
+            ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
+            ValidIssuers = new[] { jwtIssuer, "TraditionalEats" },
+            ValidAudiences = new[] { jwtAudience, "TraditionalEats" },
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret ?? "YourSuperSecretKeyThatIsAtLeast32CharactersLong!"))
         };
         // Don't fail if token is missing (for anonymous access)

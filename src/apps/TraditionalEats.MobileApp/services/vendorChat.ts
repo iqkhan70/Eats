@@ -47,7 +47,7 @@ function broadcastMessage(msg: VendorChatMessage): void {
     try {
       cb(msg);
     } catch (e) {
-      console.warn("Vendor message listener error:", e);
+      console.log("Vendor message listener error:", e);
     }
   }
 }

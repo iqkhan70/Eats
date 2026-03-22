@@ -2,6 +2,11 @@
   "ConnectionStrings": {
     "NotificationDb": "server=localhost;port=3306;database=traditional_eats_notification;user=root;password=YOUR_PASSWORD_HERE"
   },
+  "Services": {
+    "CustomerService": "http://localhost:5001",
+    "OrderService": "http://localhost:5002",
+    "OrderService:InternalApiKey": ""
+  },
   "Vonage": {
     "Enabled": true,
     "ApiKey": "YOUR_VONAGE_API_KEY",

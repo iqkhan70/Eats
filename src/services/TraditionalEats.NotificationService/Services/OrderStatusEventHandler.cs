@@ -163,10 +163,9 @@ public class OrderStatusEventHandler : BackgroundService
         _logger.LogInformation("Handling order status changed: OrderId={OrderId}, OldStatus={OldStatus}, NewStatus={NewStatus}",
             evt.OrderId, evt.OldStatus, evt.NewStatus);
 
-        // Only send notifications when status changes to "Ready"
-        if (evt.NewStatus != "Ready")
+        if (evt.NewStatus != "Ready" && evt.NewStatus != "Completed")
         {
-            _logger.LogInformation("Status is not 'Ready', skipping notification. NewStatus={NewStatus}", evt.NewStatus);
+            _logger.LogInformation("Status '{NewStatus}' does not trigger notifications, skipping.", evt.NewStatus);
             return;
         }
 
@@ -174,72 +173,148 @@ public class OrderStatusEventHandler : BackgroundService
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
         var customerService = scope.ServiceProvider.GetRequiredService<ICustomerService>();
 
-        try
-        {
-            // Get customer information
-            var customer = await customerService.GetCustomerAsync(evt.CustomerId);
-            if (customer == null)
-            {
-                _logger.LogWarning("Customer not found: CustomerId={CustomerId}", evt.CustomerId);
-                return;
-            }
+        CustomerDto? customer = null;
+        try { customer = await customerService.GetCustomerAsync(evt.CustomerId); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to fetch customer {CustomerId}, notifications skipped", evt.CustomerId); }
 
-            // Prepare notification message
-            var subject = "Your Order is Ready for Pickup!";
-            var emailBody = $@"
+        if (customer == null)
+        {
+            _logger.LogWarning("Customer not found: CustomerId={CustomerId}, skipping notifications", evt.CustomerId);
+            return;
+        }
+
+        var orderShort = evt.OrderId.ToString()[..8];
+
+        if (evt.NewStatus == "Ready")
+        {
+            await SendOrderReadyNotificationsAsync(notificationService, evt, customer, orderShort);
+        }
+        else if (evt.NewStatus == "Completed")
+        {
+            var orderClient = scope.ServiceProvider.GetRequiredService<IOrderServiceClient>();
+            await SendOrderCompleteReceiptAsync(notificationService, orderClient, evt, customer, orderShort);
+        }
+    }
+
+    private async Task SendOrderReadyNotificationsAsync(
+        INotificationService notificationService, OrderStatusChangedEvent evt, CustomerDto customer, string orderShort)
+    {
+        var subject = "Your Order is Ready for Pickup!";
+        var emailBody = $@"
 <html>
-<body>
-    <h2>Your Order is Ready for Pickup!</h2>
-    <p>Hello {customer.FirstName},</p>
-    <p>Your order #{evt.OrderId.ToString().Substring(0, 8)} is now ready for pickup!</p>
+<body style=""font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;"">
+    <h2 style=""color: #f97316;"">Your Order is Ready!</h2>
+    <p>Hi {customer.FirstName},</p>
+    <p>Your order <strong>#{orderShort}</strong> is now ready for pickup.</p>
     <p>Please come to the restaurant to collect your order.</p>
-    <p>Thank you for choosing Kram!</p>
+    <br/>
+    <p style=""color: #666;"">Thank you for choosing Kram!</p>
 </body>
 </html>";
 
-            var smsBody = $"Your order #{evt.OrderId.ToString().Substring(0, 8)} is ready for pickup! Please come to the restaurant to collect it. - Kram";
+        var smsBody = $"Hi {customer.FirstName}, your order #{orderShort} is ready for pickup! Please come to the restaurant to collect it. - Kram";
 
-            // Send email notification
-            if (!string.IsNullOrEmpty(customer.Email))
-            {
-                var emailSent = await notificationService.SendNotificationAsync(new SendNotificationDto(
-                    evt.CustomerId,
-                    "email",
-                    "OrderReady",
-                    subject,
-                    emailBody,
-                    customer.Email,
-                    null
-                ));
+        await TrySendEmailAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderReady", subject, emailBody, customer.Email);
+        await TrySendSmsAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderReady", "Order Ready", smsBody, customer.PhoneNumber);
+    }
 
-                _logger.LogInformation("Email notification sent: OrderId={OrderId}, CustomerId={CustomerId}, Sent={Sent}",
-                    evt.OrderId, evt.CustomerId, emailSent);
-            }
+    private async Task SendOrderCompleteReceiptAsync(
+        INotificationService notificationService, IOrderServiceClient orderClient, OrderStatusChangedEvent evt, CustomerDto customer, string orderShort)
+    {
+        OrderDetailsDto? orderDetails = null;
+        try { orderDetails = await orderClient.GetOrderDetailsAsync(evt.OrderId); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to fetch order details for receipt: OrderId={OrderId}", evt.OrderId); }
 
-            // Send SMS notification
-            if (string.IsNullOrEmpty(customer.PhoneNumber))
-            {
-                _logger.LogWarning("Skipping SMS: customer has no phone number. OrderId={OrderId}, CustomerId={CustomerId}", evt.OrderId, evt.CustomerId);
-            }
-            else
-            {
-                var smsSent = await notificationService.SendNotificationAsync(new SendNotificationDto(
-                    evt.CustomerId,
-                    "sms",
-                    "OrderReady",
-                    "Order Ready",
-                    smsBody,
-                    customer.PhoneNumber,
-                    null
-                ));
+        var itemsHtml = "";
+        var itemsText = "";
+        var totalStr = "N/A";
 
-                _logger.LogInformation("SMS notification sent: OrderId={OrderId}, CustomerId={CustomerId}, Sent={Sent}",
-                    evt.OrderId, evt.CustomerId, smsSent);
-            }
+        if (orderDetails != null)
+        {
+            totalStr = $"${orderDetails.Total:F2}";
+            var rows = orderDetails.Items.Select(i =>
+                $"<tr><td style=\"padding:4px 8px;\">{i.Name}</td><td style=\"padding:4px 8px;text-align:center;\">{i.Quantity}</td><td style=\"padding:4px 8px;text-align:right;\">${i.TotalPrice:F2}</td></tr>");
+            itemsHtml = string.Join("\n", rows);
+
+            var lines = orderDetails.Items.Select(i => $"  {i.Quantity}x {i.Name} - ${i.TotalPrice:F2}");
+            itemsText = string.Join("\n", lines);
+        }
+
+        var subject = $"Your Kram Receipt - Order #{orderShort}";
+        var emailBody = $@"
+<html>
+<body style=""font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;"">
+    <h2 style=""color: #f97316;"">Order Complete - Receipt</h2>
+    <p>Hi {customer.FirstName},</p>
+    <p>Your order <strong>#{orderShort}</strong> is complete. Here's your receipt:</p>
+    <table style=""width:100%; border-collapse:collapse; margin:16px 0;"">
+        <thead>
+            <tr style=""border-bottom:2px solid #eee;"">
+                <th style=""padding:8px; text-align:left;"">Item</th>
+                <th style=""padding:8px; text-align:center;"">Qty</th>
+                <th style=""padding:8px; text-align:right;"">Price</th>
+            </tr>
+        </thead>
+        <tbody>
+            {itemsHtml}
+        </tbody>
+    </table>
+    {(orderDetails != null ? $@"
+    <table style=""width:100%; margin-top:8px;"">
+        <tr><td style=""padding:2px 8px;"">Subtotal</td><td style=""padding:2px 8px; text-align:right;"">${orderDetails.Subtotal:F2}</td></tr>
+        <tr><td style=""padding:2px 8px;"">Tax</td><td style=""padding:2px 8px; text-align:right;"">${orderDetails.Tax:F2}</td></tr>
+        {(orderDetails.DeliveryFee > 0 ? $"<tr><td style=\"padding:2px 8px;\">Delivery</td><td style=\"padding:2px 8px; text-align:right;\">${orderDetails.DeliveryFee:F2}</td></tr>" : "")}
+        {(orderDetails.ServiceFee > 0 ? $"<tr><td style=\"padding:2px 8px;\">Service Fee</td><td style=\"padding:2px 8px; text-align:right;\">${orderDetails.ServiceFee:F2}</td></tr>" : "")}
+        <tr style=""border-top:2px solid #333; font-weight:bold;""><td style=""padding:8px;"">Total</td><td style=""padding:8px; text-align:right;"">{totalStr}</td></tr>
+    </table>" : "")}
+    <br/>
+    <p style=""color: #666;"">Thank you for choosing Kram!</p>
+</body>
+</html>";
+
+        var smsBody = orderDetails != null
+            ? $"Hi {customer.FirstName}, your order #{orderShort} is complete! Total: {totalStr}. Thank you for choosing Kram!"
+            : $"Hi {customer.FirstName}, your order #{orderShort} is complete! Thank you for choosing Kram!";
+
+        await TrySendEmailAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderComplete", subject, emailBody, customer.Email);
+        await TrySendSmsAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderComplete", "Order Complete", smsBody, customer.PhoneNumber);
+    }
+
+    private async Task TrySendEmailAsync(
+        INotificationService svc, Guid customerId, Guid orderId, string type, string subject, string body, string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            _logger.LogInformation("Skipping email ({Type}): no email for customer {CustomerId}", type, customerId);
+            return;
+        }
+        try
+        {
+            var sent = await svc.SendNotificationAsync(new SendNotificationDto(customerId, "email", type, subject, body, email, null));
+            _logger.LogInformation("Email {Type}: OrderId={OrderId}, Sent={Sent}", type, orderId, sent);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling order status changed event: OrderId={OrderId}", evt.OrderId);
+            _logger.LogWarning(ex, "Email {Type} failed for OrderId={OrderId}, ignoring", type, orderId);
+        }
+    }
+
+    private async Task TrySendSmsAsync(
+        INotificationService svc, Guid customerId, Guid orderId, string type, string subject, string body, string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+        {
+            _logger.LogInformation("Skipping SMS ({Type}): no phone for customer {CustomerId}", type, customerId);
+            return;
+        }
+        try
+        {
+            var sent = await svc.SendNotificationAsync(new SendNotificationDto(customerId, "sms", type, subject, body, phone, null));
+            _logger.LogInformation("SMS {Type}: OrderId={OrderId}, Sent={Sent}", type, orderId, sent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SMS {Type} failed for OrderId={OrderId}, ignoring", type, orderId);
         }
     }
 
@@ -316,4 +391,70 @@ public record CustomerDto(
     string LastName,
     string? Email,
     string? PhoneNumber
+);
+
+public interface IOrderServiceClient
+{
+    Task<OrderDetailsDto?> GetOrderDetailsAsync(Guid orderId);
+}
+
+public class OrderServiceClient : IOrderServiceClient
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<OrderServiceClient> _logger;
+
+    public OrderServiceClient(HttpClient httpClient, IConfiguration configuration, ILogger<OrderServiceClient> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<OrderDetailsDto?> GetOrderDetailsAsync(Guid orderId)
+    {
+        try
+        {
+            var apiKey = _configuration["Services:OrderService:InternalApiKey"];
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/order/internal/{orderId}/details");
+            if (!string.IsNullOrEmpty(apiKey))
+                request.Headers.Add("X-Internal-Api-Key", apiKey);
+
+            var response = await _httpClient.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadFromJsonAsync<OrderDetailsDto>();
+
+            _logger.LogWarning("Failed to fetch order details: OrderId={OrderId}, Status={Status}", orderId, response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Exception fetching order details: OrderId={OrderId}", orderId);
+            return null;
+        }
+    }
+}
+
+public record OrderDetailsDto(
+    Guid OrderId,
+    Guid CustomerId,
+    Guid RestaurantId,
+    string Status,
+    decimal Subtotal,
+    decimal Tax,
+    decimal DeliveryFee,
+    decimal ServiceFee,
+    decimal Total,
+    string? DeliveryAddress,
+    string? SpecialInstructions,
+    DateTime CreatedAt,
+    DateTime? DeliveredAt,
+    List<OrderItemDto> Items
+);
+
+public record OrderItemDto(
+    string Name,
+    int Quantity,
+    decimal UnitPrice,
+    decimal TotalPrice
 );

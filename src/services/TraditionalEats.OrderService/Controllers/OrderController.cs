@@ -625,6 +625,53 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
+    /// Internal: full order details for receipts/notifications (NotificationService).
+    /// </summary>
+    [HttpGet("internal/{orderId}/details")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InternalGetOrderDetails(Guid orderId, [FromHeader(Name = "X-Internal-Api-Key")] string? apiKey = null)
+    {
+        var expectedKey = _configuration["InternalApiKey"] ?? _configuration["Services:OrderService:InternalApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+            return Unauthorized(new { message = "Invalid or missing internal API key" });
+
+        try
+        {
+            var order = await _orderService.GetOrderAsync(orderId);
+            if (order == null) return NotFound(new { message = "Order not found" });
+
+            return Ok(new
+            {
+                orderId = order.OrderId,
+                customerId = order.CustomerId,
+                restaurantId = order.RestaurantId,
+                status = order.Status,
+                subtotal = order.Subtotal,
+                tax = order.Tax,
+                deliveryFee = order.DeliveryFee,
+                serviceFee = order.ServiceFee,
+                total = order.Total,
+                deliveryAddress = order.DeliveryAddress,
+                specialInstructions = order.SpecialInstructions,
+                createdAt = order.CreatedAt,
+                deliveredAt = order.DeliveredAt,
+                items = order.Items.Select(i => new
+                {
+                    name = i.Name,
+                    quantity = i.Quantity,
+                    unitPrice = i.UnitPrice,
+                    totalPrice = i.TotalPrice
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "InternalGetOrderDetails failed for {OrderId}", orderId);
+            return StatusCode(500, new { message = "Failed to get order details" });
+        }
+    }
+
+    /// <summary>
     /// Internal: minimal order metadata used for cross-service authorization checks (e.g. ChatService).
     /// </summary>
     [HttpGet("internal/{orderId}/metadata")]

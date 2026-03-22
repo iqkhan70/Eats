@@ -911,8 +911,8 @@ public class AuthService : IAuthService
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         // Get JWT issuer and audience with fallbacks
-        var jwtIssuer = _configuration["Jwt:Issuer"] ?? "TraditionalEats";
-        var jwtAudience = _configuration["Jwt:Audience"] ?? "TraditionalEats";
+        var jwtIssuer = _configuration["Jwt:Issuer"] ?? "Kram";
+        var jwtAudience = _configuration["Jwt:Audience"] ?? "Kram";
 
         var expirationMinutes = _configuration.GetValue("Jwt:AccessTokenExpirationMinutes", 60);
         var token = new JwtSecurityToken(

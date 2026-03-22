@@ -240,6 +240,8 @@ services:
       RabbitMQ__UserName: ${RABBITMQ_USER:-admin}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Services__CustomerService: "http://customer-service:5001"
+      Services__OrderService: "http://order-service:5002"
+      Services__OrderService__InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
       Email__Enabled: ${EMAIL_ENABLED:-true}
       Email__Provider: ${EMAIL_PROVIDER:-Mailgun}
       Email__MailgunApiKey: ${EMAIL_MAILGUN_API_KEY:-}
@@ -259,6 +261,7 @@ services:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      order-service: { condition: service_started }
     networks:
       - internal
     restart: unless-stopped

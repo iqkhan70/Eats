@@ -55,8 +55,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
+            ValidIssuers = new[] { jwtIssuer, "TraditionalEats" },
+            ValidAudiences = new[] { jwtAudience, "TraditionalEats" },
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
@@ -74,6 +74,14 @@ builder.Services.AddHttpClient<ICustomerService, CustomerService>(client =>
 {
     var customerServiceUrl = builder.Configuration["Services:CustomerService"] ?? "http://localhost:5001";
     client.BaseAddress = new Uri(customerServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Register OrderService client for fetching order details (receipts)
+builder.Services.AddHttpClient<IOrderServiceClient, OrderServiceClient>(client =>
+{
+    var orderServiceUrl = builder.Configuration["Services:OrderService"] ?? "http://localhost:5002";
+    client.BaseAddress = new Uri(orderServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
