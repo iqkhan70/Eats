@@ -10,9 +10,9 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../../../services/api";
 
 interface StaffMember {
@@ -25,7 +25,6 @@ interface StaffMember {
 
 export default function ManageStaffScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { restaurantId } = useLocalSearchParams<{ restaurantId: string }>();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,13 +118,35 @@ export default function ManageStaffScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#333" />
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            loadStaff();
+          }}
+        />
+      }
+    >
+      <LinearGradient
+        colors={["#f97316", "#eab308"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.header}
+      >
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={28} color="#fff" />
+          <Text style={styles.backLabel}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Manage Staff</Text>
-      </View>
+
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          Staff
+        </Text>
+
+        <View style={{ width: 60 }} />
+      </LinearGradient>
 
       <View style={styles.addSection}>
         <Text style={styles.addLabel}>Add staff by email</Text>
@@ -157,18 +178,7 @@ export default function ManageStaffScreen() {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadStaff();
-            }}
-          />
-        }
-      >
+      <View style={styles.list}>
         {staff.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={48} color="#ccc" />
@@ -203,8 +213,8 @@ export default function ManageStaffScreen() {
             </View>
           ))
         )}
-      </ScrollView>
-    </View>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -212,15 +222,30 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: {
+    padding: 16,
+    paddingTop: 60,
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    justifyContent: "space-between",
   },
-  backBtn: { marginRight: 12 },
-  title: { fontSize: 18, fontWeight: "700", color: "#333" },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    gap: 4,
+  },
+  backLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+    flex: 1,
+    textAlign: "center",
+  },
   addSection: {
     backgroundColor: "#fff",
     padding: 16,
