@@ -521,7 +521,7 @@ export default function VendorDashboardScreen() {
                     </TouchableOpacity>
                   )}
 
-                  {!isStaffOnly && (
+                  {!isStaffOnly && restaurant.isActive && (
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
                       onPress={() => handleDeleteRestaurant(restaurant)}
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4caf50",
   },
   inactiveBadge: {
-    backgroundColor: "#ccc",
+    backgroundColor: "#d32f2f",
   },
   statusText: {
     fontSize: 12,

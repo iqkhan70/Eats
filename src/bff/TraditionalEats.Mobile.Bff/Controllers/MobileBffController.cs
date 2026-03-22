@@ -2469,7 +2469,7 @@ public class MobileBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("RestaurantService");
             ForwardBearerToken(client);
 
-            var response = await client.DeleteAsync($"/api/restaurant/{restaurantId}");
+            var response = await client.DeleteAsync($"/api/restaurant/vendor/{restaurantId}");
             var content = await response.Content.ReadAsStringAsync();
 
             return StatusCode((int)response.StatusCode, content);
