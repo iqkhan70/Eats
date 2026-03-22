@@ -1632,9 +1632,9 @@ public class WebBffController : ControllerBase
     [AllowAnonymous]
     public IActionResult GetServiceFeeConfig()
     {
-        var rate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.06m);
-        var minimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.00m);
-        var cap = _configuration.GetValue<decimal>("ServiceFee:Cap", 7.00m);
+        var rate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.05m);
+        var minimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.50m);
+        var cap = _configuration.GetValue<decimal>("ServiceFee:Cap", 0m);
         return Ok(new { rate, minimum, cap });
     }
 
@@ -2804,7 +2804,7 @@ public class WebBffController : ControllerBase
                 return BadRequest(new { message = "Document type is required" });
             }
 
-            _logger.LogInformation("Uploading document: {FileName}, Type: {DocumentType}, Size: {FileSize}", 
+            _logger.LogInformation("Uploading document: {FileName}, Type: {DocumentType}, Size: {FileSize}",
                 file.FileName, documentType, file.Length);
 
             var client = _httpClientFactory.CreateClient("DocumentService");
@@ -2831,13 +2831,13 @@ public class WebBffController : ControllerBase
 
                 var response = await client.PostAsync("/api/document/upload", content);
                 var responseContent = await response.Content.ReadAsStringAsync();
-                
+
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError("DocumentService returned error: {StatusCode} - {Content}", 
+                    _logger.LogError("DocumentService returned error: {StatusCode} - {Content}",
                         response.StatusCode, responseContent);
                 }
-                
+
                 return JsonContent(responseContent, (int)response.StatusCode);
             }
             finally

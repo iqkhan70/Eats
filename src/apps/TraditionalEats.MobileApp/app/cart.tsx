@@ -46,9 +46,9 @@ export default function CartScreen() {
   const [checkingPayment, setCheckingPayment] = useState(false);
 
   // Service fee from config (rate, minimum, cap) - fetched from MobileBff
-  const [serviceFeeRate, setServiceFeeRate] = useState(0.06);
-  const [serviceFeeMinimum, setServiceFeeMinimum] = useState(1);
-  const [serviceFeeCap, setServiceFeeCap] = useState(7);
+  const [serviceFeeRate, setServiceFeeRate] = useState(0.05);
+  const [serviceFeeMinimum, setServiceFeeMinimum] = useState(1.5);
+  const [serviceFeeCap, setServiceFeeCap] = useState(0);
 
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -94,11 +94,16 @@ export default function CartScreen() {
                 setCart(cartData);
                 currentCart = cartData;
               } else {
-                throw new Error(`Cart created (${cartId}) but could not be loaded`);
+                throw new Error(
+                  `Cart created (${cartId}) but could not be loaded`,
+                );
               }
             } catch (error: any) {
               console.error("Failed to create cart for custom order:", error);
-              Alert.alert("Error", "Failed to start an order for this payment request.");
+              Alert.alert(
+                "Error",
+                "Failed to start an order for this payment request.",
+              );
               return;
             }
           } else if (
@@ -127,14 +132,25 @@ export default function CartScreen() {
                           amount,
                           params.customOrderDescription,
                         );
-                        if (!specialInstructions.trim() && params.customOrderDescription?.trim()) {
-                          setSpecialInstructions(params.customOrderDescription.trim());
+                        if (
+                          !specialInstructions.trim() &&
+                          params.customOrderDescription?.trim()
+                        ) {
+                          setSpecialInstructions(
+                            params.customOrderDescription.trim(),
+                          );
                         }
                         setCustomOrderCreated(true);
                       }
                     } catch (e: any) {
-                      console.error("Failed to replace cart for custom order:", e);
-                      Alert.alert("Error", "Failed to start a new cart for this payment request.");
+                      console.error(
+                        "Failed to replace cart for custom order:",
+                        e,
+                      );
+                      Alert.alert(
+                        "Error",
+                        "Failed to start a new cart for this payment request.",
+                      );
                     }
                   },
                 },
@@ -149,7 +165,10 @@ export default function CartScreen() {
               amount,
               params.customOrderDescription,
             );
-            if (!specialInstructions.trim() && params.customOrderDescription?.trim()) {
+            if (
+              !specialInstructions.trim() &&
+              params.customOrderDescription?.trim()
+            ) {
               setSpecialInstructions(params.customOrderDescription.trim());
             }
             setCustomOrderCreated(true);
@@ -288,17 +307,24 @@ export default function CartScreen() {
               .map((i) => i.menuItemId)
               .filter((id) => id && id !== EMPTY_MENU_ITEM_ID);
             if (menuItemIds.length > 0) {
-              const dealRes = await api.get<Record<string, { discountPercent: number; endTime: string }>>(
-                `/MobileBff/catalog/menu-items/deal-info`,
-                { params: { menuItemIds: menuItemIds.join(",") } }
-              );
+              const dealRes = await api.get<
+                Record<string, { discountPercent: number; endTime: string }>
+              >(`/MobileBff/catalog/menu-items/deal-info`, {
+                params: { menuItemIds: menuItemIds.join(",") },
+              });
               const map: Record<string, number> = {};
               const data = dealRes.data;
               if (data && typeof data === "object") {
                 const now = Date.now();
                 for (const [id, info] of Object.entries(data)) {
-                  if (info?.discountPercent != null && info.discountPercent > 0 && info.discountPercent <= 100) {
-                    const end = info.endTime ? new Date(info.endTime).getTime() : Infinity;
+                  if (
+                    info?.discountPercent != null &&
+                    info.discountPercent > 0 &&
+                    info.discountPercent <= 100
+                  ) {
+                    const end = info.endTime
+                      ? new Date(info.endTime).getTime()
+                      : Infinity;
                     if (end > now) map[id] = info.discountPercent;
                   }
                 }
@@ -504,7 +530,10 @@ export default function CartScreen() {
           paymentRedirectUrl,
         );
         // If user cancelled/abandoned Stripe checkout, auto-cancel the order so it doesn't stay in PaymentPending
-        if (authResult?.type === "success" && authResult.url?.includes("status=cancelled")) {
+        if (
+          authResult?.type === "success" &&
+          authResult.url?.includes("status=cancelled")
+        ) {
           const orderIdMatch = authResult.url.match(/[?&]orderId=([^&]+)/);
           const orderIdToCancel = orderIdMatch?.[1] ?? result.orderId;
           try {
@@ -663,13 +692,17 @@ export default function CartScreen() {
         ))}
 
         {/* Deal applied at checkout - OrderService applies best discount per item (highest of restaurant/item) */}
-        {((dealDiscountPercent != null && dealDiscountPercent > 0) || Object.keys(itemDealMap).length > 0) && (
+        {((dealDiscountPercent != null && dealDiscountPercent > 0) ||
+          Object.keys(itemDealMap).length > 0) && (
           <View style={styles.dealBanner}>
             <Ionicons name="flame" size={18} color="#f97316" />
             <Text style={styles.dealBannerText}>
-              {Object.keys(itemDealMap).length > 0 && (dealDiscountPercent == null || dealDiscountPercent === 0)
+              {Object.keys(itemDealMap).length > 0 &&
+              (dealDiscountPercent == null || dealDiscountPercent === 0)
                 ? "Best deal applied at checkout"
-                : dealDiscountPercent != null && dealDiscountPercent > 0 && Object.keys(itemDealMap).length === 0
+                : dealDiscountPercent != null &&
+                    dealDiscountPercent > 0 &&
+                    Object.keys(itemDealMap).length === 0
                   ? `${dealDiscountPercent}% off applied at checkout`
                   : "Best deal applied at checkout"}
             </Text>
@@ -692,10 +725,10 @@ export default function CartScreen() {
           const amountBeforeServiceFee =
             roundedDiscountedSubtotal + discountedTax + cart.deliveryFee;
           const rawFee = amountBeforeServiceFee * serviceFeeRate;
-          const serviceFee = Math.max(
-            serviceFeeMinimum,
-            Math.min(rawFee, serviceFeeCap),
-          );
+          const serviceFee =
+            serviceFeeCap > 0
+              ? Math.max(serviceFeeMinimum, Math.min(rawFee, serviceFeeCap))
+              : Math.max(serviceFeeMinimum, rawFee);
           const totalWithServiceFee = amountBeforeServiceFee + serviceFee;
           const hasDiscount =
             (dealDiscountPercent != null && dealDiscountPercent > 0) ||
@@ -705,7 +738,9 @@ export default function CartScreen() {
               {hasDiscount && (
                 <>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Subtotal (before deal)</Text>
+                    <Text style={styles.summaryLabel}>
+                      Subtotal (before deal)
+                    </Text>
                     <Text style={styles.summaryValueStrikethrough}>
                       ${cart.subtotal.toFixed(2)}
                     </Text>
@@ -811,7 +846,9 @@ export default function CartScreen() {
 
         <View style={styles.deliverySection}>
           <Text style={styles.deliveryLabel}>Name for pickup</Text>
-          <Text style={styles.deliveryHint}>From your profile—the vendor will look for this name</Text>
+          <Text style={styles.deliveryHint}>
+            From your profile—the vendor will look for this name
+          </Text>
           <TextInput
             style={[styles.deliveryInput, styles.deliveryInputReadOnly]}
             value={deliveryAddress}
@@ -893,9 +930,19 @@ const styles = StyleSheet.create({
 
   itemInfo: { flex: 1, marginRight: 12 },
   itemName: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 4 },
-  itemPriceRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  itemPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   itemPrice: { fontSize: 12, color: "#666" },
-  cartItemDealBadge: { backgroundColor: "#2e7d32", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  cartItemDealBadge: {
+    backgroundColor: "#2e7d32",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
   cartItemDealBadgeText: { fontSize: 11, fontWeight: "600", color: "#fff" },
 
   quantityControls: {
@@ -940,7 +987,11 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { fontSize: 14, color: "#666" },
   summaryValue: { fontSize: 14, color: "#333" },
-  summaryValueStrikethrough: { fontSize: 14, color: "#999", textDecorationLine: "line-through" },
+  summaryValueStrikethrough: {
+    fontSize: 14,
+    color: "#999",
+    textDecorationLine: "line-through",
+  },
   summaryLabelDeal: { fontSize: 14, color: "#2e7d32", fontWeight: "600" },
   summaryValueDeal: { fontSize: 14, color: "#2e7d32", fontWeight: "600" },
   divider: { height: 1, backgroundColor: "#e0e0e0", marginVertical: 8 },

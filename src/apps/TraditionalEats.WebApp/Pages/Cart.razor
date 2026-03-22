@@ -87,7 +87,10 @@
                 </RadzenStack>
                 @{
                     var amountBeforeServiceFee = cart.Subtotal + cart.Tax + cart.DeliveryFee;
-                    var serviceFee = Math.Min(amountBeforeServiceFee * serviceFeeRate, serviceFeeCap);
+                    var rawFee = amountBeforeServiceFee * serviceFeeRate;
+                    var serviceFee = serviceFeeCap > 0
+                        ? Math.Max(serviceFeeMinimum, Math.Min(rawFee, serviceFeeCap))
+                        : Math.Max(serviceFeeMinimum, rawFee);
                     var totalWithServiceFee = amountBeforeServiceFee + serviceFee;
                 }
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
@@ -144,9 +147,9 @@
     private string specialInstructions = string.Empty;
     private bool paymentReady = true; // Default to true, check when cart loads
     private string paymentBlockedMessage = "This vendor is not set up to accept payments yet. Please contact the vendor directly or try again later.";
-    private decimal serviceFeeRate = 0.06m;
-    private decimal serviceFeeMinimum = 1.00m;
-    private decimal serviceFeeCap = 7.00m;
+    private decimal serviceFeeRate = 0.03m;
+    private decimal serviceFeeMinimum = 1.50m;
+    private decimal serviceFeeCap = 0m;
 
     private bool isPlaceOrderDisabled => placingOrder || string.IsNullOrWhiteSpace(deliveryAddress) || !paymentReady;
 

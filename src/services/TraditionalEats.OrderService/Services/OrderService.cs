@@ -1159,12 +1159,14 @@ public class OrderService : IOrderService
         var orderTax = orderSubtotal * 0.08m; // 8% tax
         var orderDeliveryFee = 0.00m; // Fixed delivery fee
         var amountBeforeServiceFee = orderSubtotal + orderTax + orderDeliveryFee;
-        // Service fee: 6% rate, min $1, cap $7. From ServiceFee:Rate, ServiceFee:Minimum, ServiceFee:Cap (env: ServiceFee__*).
-        var serviceFeeRate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.06m);
-        var serviceFeeMinimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.00m);
-        var serviceFeeCap = _configuration.GetValue<decimal>("ServiceFee:Cap", 7.00m);
+        // Service fee: $1.50 minimum OR 3% of order, whichever is higher. No cap.
+        var serviceFeeRate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.05m);
+        var serviceFeeMinimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.50m);
+        var serviceFeeCap = _configuration.GetValue<decimal>("ServiceFee:Cap", 0m);
         var rawFee = amountBeforeServiceFee * serviceFeeRate;
-        var orderServiceFee = Math.Max(serviceFeeMinimum, Math.Min(rawFee, serviceFeeCap));
+        var orderServiceFee = serviceFeeCap > 0
+            ? Math.Max(serviceFeeMinimum, Math.Min(rawFee, serviceFeeCap))
+            : Math.Max(serviceFeeMinimum, rawFee);
         var orderTotal = amountBeforeServiceFee + orderServiceFee;
 
         _logger.LogInformation("PlaceOrderAsync: Calculated order totals - Subtotal={Subtotal}, Tax={Tax}, DeliveryFee={DeliveryFee}, ServiceFee={ServiceFee}, Total={Total}",

@@ -1894,9 +1894,9 @@ public class MobileBffController : ControllerBase
     [AllowAnonymous]
     public IActionResult GetServiceFeeConfig()
     {
-        var rate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.06m);
-        var minimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.00m);
-        var cap = _configuration.GetValue<decimal>("ServiceFee:Cap", 7.00m);
+        var rate = _configuration.GetValue<decimal>("ServiceFee:Rate", 0.05m);
+        var minimum = _configuration.GetValue<decimal>("ServiceFee:Minimum", 1.50m);
+        var cap = _configuration.GetValue<decimal>("ServiceFee:Cap", 0m);
         return Ok(new { rate, minimum, cap });
     }
 
@@ -2661,13 +2661,13 @@ public class MobileBffController : ControllerBase
 
             var response = await client.PostAsJsonAsync("/api/review", request);
             var content = await response.Content.ReadAsStringAsync();
-            
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("ReviewService returned {StatusCode} when creating review: {Content}", 
+                _logger.LogWarning("ReviewService returned {StatusCode} when creating review: {Content}",
                     response.StatusCode, content);
             }
-            
+
             return JsonString(content, (int)response.StatusCode);
         }
         catch (HttpRequestException ex)
@@ -2710,13 +2710,13 @@ public class MobileBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("ReviewService");
             var response = await client.GetAsync($"/api/review/restaurant/{restaurantId}?skip={skip}&take={take}");
             var content = await response.Content.ReadAsStringAsync();
-            
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("ReviewService returned {StatusCode} for restaurant {RestaurantId}: {Content}", 
+                _logger.LogWarning("ReviewService returned {StatusCode} for restaurant {RestaurantId}: {Content}",
                     response.StatusCode, restaurantId, content);
             }
-            
+
             return JsonString(content, (int)response.StatusCode);
         }
         catch (HttpRequestException ex)
@@ -2739,13 +2739,13 @@ public class MobileBffController : ControllerBase
             var client = _httpClientFactory.CreateClient("ReviewService");
             var response = await client.GetAsync($"/api/review/restaurant/{restaurantId}/rating");
             var content = await response.Content.ReadAsStringAsync();
-            
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("ReviewService returned {StatusCode} for rating of restaurant {RestaurantId}: {Content}", 
+                _logger.LogWarning("ReviewService returned {StatusCode} for rating of restaurant {RestaurantId}: {Content}",
                     response.StatusCode, restaurantId, content);
             }
-            
+
             return JsonString(content, (int)response.StatusCode);
         }
         catch (HttpRequestException ex)
@@ -2786,13 +2786,13 @@ public class MobileBffController : ControllerBase
             ForwardBearerToken(client);
             var response = await client.GetAsync($"/api/review/me?skip={skip}&take={take}");
             var content = await response.Content.ReadAsStringAsync();
-            
+
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("ReviewService returned {StatusCode} for user reviews: {Content}", 
+                _logger.LogWarning("ReviewService returned {StatusCode} for user reviews: {Content}",
                     response.StatusCode, content);
             }
-            
+
             return JsonString(content, (int)response.StatusCode);
         }
         catch (HttpRequestException ex)
@@ -2988,7 +2988,7 @@ public class MobileBffController : ControllerBase
                 return BadRequest(new { message = "Document type is required" });
             }
 
-            _logger.LogInformation("Uploading document: {FileName}, Type: {DocumentType}, Size: {FileSize}", 
+            _logger.LogInformation("Uploading document: {FileName}, Type: {DocumentType}, Size: {FileSize}",
                 file.FileName, documentType, file.Length);
 
             var client = _httpClientFactory.CreateClient("DocumentService");
@@ -3015,13 +3015,13 @@ public class MobileBffController : ControllerBase
 
                 var response = await client.PostAsync("/api/document/upload", content);
                 var responseContent = await response.Content.ReadAsStringAsync();
-                
+
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError("DocumentService returned error: {StatusCode} - {Content}", 
+                    _logger.LogError("DocumentService returned error: {StatusCode} - {Content}",
                         response.StatusCode, responseContent);
                 }
-                
+
                 return JsonString(responseContent, (int)response.StatusCode);
             }
             finally
