@@ -60,10 +60,10 @@ export async function connectChatHub(
   hubConnection = new SignalR.HubConnectionBuilder()
     .withUrl(hubUrl, {
       accessTokenFactory: async () => (await AsyncStorage.getItem('access_token')) ?? '',
-      // Use LongPolling on React Native; WebSockets often fail negotiation on device/simulator
       transport: SignalR.HttpTransportType.LongPolling,
     })
     .withAutomaticReconnect()
+    .configureLogging(SignalR.LogLevel.None)
     .build();
 
   hubConnection.on('ReceiveMessage', (payload: unknown) => {

@@ -122,6 +122,7 @@ export async function connectVendorChatHub(
       transport: SignalR.HttpTransportType.LongPolling,
     })
     .withAutomaticReconnect()
+    .configureLogging(SignalR.LogLevel.None)
     .build();
 
   vendorHubConnection.on("ReceiveVendorMessage", (payload: unknown) => {
