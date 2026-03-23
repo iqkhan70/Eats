@@ -185,48 +185,60 @@ public class OrderStatusEventHandler : BackgroundService
 
         var orderShort = evt.OrderId.ToString()[..8];
 
+        RestaurantInfoDto? restaurant = null;
+        try { restaurant = await scope.ServiceProvider.GetRequiredService<IRestaurantServiceClient>().GetRestaurantAsync(evt.RestaurantId); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to fetch restaurant {RestaurantId} for notification", evt.RestaurantId); }
+
         if (evt.NewStatus == "Ready")
         {
-            await SendOrderReadyNotificationsAsync(notificationService, evt, customer, orderShort);
+            await SendOrderReadyNotificationsAsync(notificationService, evt, customer, orderShort, restaurant);
         }
         else if (evt.NewStatus == "Completed")
         {
             var orderClient = scope.ServiceProvider.GetRequiredService<IOrderServiceClient>();
-            await SendOrderCompleteReceiptAsync(notificationService, orderClient, evt, customer, orderShort);
+            await SendOrderCompleteReceiptAsync(notificationService, orderClient, evt, customer, orderShort, restaurant);
         }
     }
 
     private async Task SendOrderReadyNotificationsAsync(
-        INotificationService notificationService, OrderStatusChangedEvent evt, CustomerDto customer, string orderShort)
+        INotificationService notificationService, OrderStatusChangedEvent evt, CustomerDto customer, string orderShort, RestaurantInfoDto? restaurant)
     {
-        var subject = "Your Order is Ready for Pickup!";
+        var restaurantName = restaurant?.Name ?? "the restaurant";
+        var addressLine = !string.IsNullOrWhiteSpace(restaurant?.Address) ? restaurant.Address : null;
+
+        var subject = $"Your Order is Ready for Pickup at {restaurantName}!";
         var emailBody = $@"
 <html>
 <body style=""font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;"">
     <h2 style=""color: #f97316;"">Your Order is Ready!</h2>
     <p>Hi {customer.FirstName},</p>
-    <p>Your order <strong>#{orderShort}</strong> is now ready for pickup.</p>
+    <p>Your order <strong>#{orderShort}</strong> from <strong>{restaurantName}</strong> is now ready for pickup.</p>
+    {(addressLine != null ? $"<p style=\"margin-top:8px;\"><strong>Pickup at:</strong> {addressLine}</p>" : "")}
     <p>Please come to the restaurant to collect your order.</p>
     <br/>
     <p style=""color: #666;"">Thank you for choosing Kram!</p>
 </body>
 </html>";
 
-        var smsBody = $"Hi {customer.FirstName}, your order #{orderShort} is ready for pickup! Please come to the restaurant to collect it. - Kram";
+        var smsBody = addressLine != null
+            ? $"Hi {customer.FirstName}, your order #{orderShort} from {restaurantName} is ready for pickup at {addressLine}. - Kram"
+            : $"Hi {customer.FirstName}, your order #{orderShort} from {restaurantName} is ready for pickup! - Kram";
 
         await TrySendEmailAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderReady", subject, emailBody, customer.Email);
         await TrySendSmsAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderReady", "Order Ready", smsBody, customer.PhoneNumber);
     }
 
     private async Task SendOrderCompleteReceiptAsync(
-        INotificationService notificationService, IOrderServiceClient orderClient, OrderStatusChangedEvent evt, CustomerDto customer, string orderShort)
+        INotificationService notificationService, IOrderServiceClient orderClient, OrderStatusChangedEvent evt, CustomerDto customer, string orderShort, RestaurantInfoDto? restaurant)
     {
+        var restaurantName = restaurant?.Name ?? "Restaurant";
+        var addressLine = !string.IsNullOrWhiteSpace(restaurant?.Address) ? restaurant.Address : null;
+
         OrderDetailsDto? orderDetails = null;
         try { orderDetails = await orderClient.GetOrderDetailsAsync(evt.OrderId); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to fetch order details for receipt: OrderId={OrderId}", evt.OrderId); }
 
         var itemsHtml = "";
-        var itemsText = "";
         var totalStr = "N/A";
 
         if (orderDetails != null)
@@ -235,18 +247,16 @@ public class OrderStatusEventHandler : BackgroundService
             var rows = orderDetails.Items.Select(i =>
                 $"<tr><td style=\"padding:4px 8px;\">{i.Name}</td><td style=\"padding:4px 8px;text-align:center;\">{i.Quantity}</td><td style=\"padding:4px 8px;text-align:right;\">${i.TotalPrice:F2}</td></tr>");
             itemsHtml = string.Join("\n", rows);
-
-            var lines = orderDetails.Items.Select(i => $"  {i.Quantity}x {i.Name} - ${i.TotalPrice:F2}");
-            itemsText = string.Join("\n", lines);
         }
 
-        var subject = $"Your Kram Receipt - Order #{orderShort}";
+        var subject = $"Your Kram Receipt - Order #{orderShort} from {restaurantName}";
         var emailBody = $@"
 <html>
 <body style=""font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;"">
     <h2 style=""color: #f97316;"">Order Complete - Receipt</h2>
     <p>Hi {customer.FirstName},</p>
-    <p>Your order <strong>#{orderShort}</strong> is complete. Here's your receipt:</p>
+    <p>Your order <strong>#{orderShort}</strong> from <strong>{restaurantName}</strong> is complete. Here's your receipt:</p>
+    {(addressLine != null ? $"<p style=\"color:#666;\"><strong>Restaurant:</strong> {restaurantName}, {addressLine}</p>" : "")}
     <table style=""width:100%; border-collapse:collapse; margin:16px 0;"">
         <thead>
             <tr style=""border-bottom:2px solid #eee;"">
@@ -273,8 +283,8 @@ public class OrderStatusEventHandler : BackgroundService
 </html>";
 
         var smsBody = orderDetails != null
-            ? $"Hi {customer.FirstName}, your order #{orderShort} is complete! Total: {totalStr}. Thank you for choosing Kram!"
-            : $"Hi {customer.FirstName}, your order #{orderShort} is complete! Thank you for choosing Kram!";
+            ? $"Hi {customer.FirstName}, your order #{orderShort} from {restaurantName} is complete! Total: {totalStr}. Thank you for choosing Kram!"
+            : $"Hi {customer.FirstName}, your order #{orderShort} from {restaurantName} is complete! Thank you for choosing Kram!";
 
         await TrySendEmailAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderComplete", subject, emailBody, customer.Email);
         await TrySendSmsAsync(notificationService, evt.CustomerId, evt.OrderId, "OrderComplete", "Order Complete", smsBody, customer.PhoneNumber);
@@ -457,4 +467,46 @@ public record OrderItemDto(
     int Quantity,
     decimal UnitPrice,
     decimal TotalPrice
+);
+
+public interface IRestaurantServiceClient
+{
+    Task<RestaurantInfoDto?> GetRestaurantAsync(Guid restaurantId);
+}
+
+public class RestaurantServiceClient : IRestaurantServiceClient
+{
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<RestaurantServiceClient> _logger;
+
+    public RestaurantServiceClient(HttpClient httpClient, ILogger<RestaurantServiceClient> logger)
+    {
+        _httpClient = httpClient;
+        _logger = logger;
+    }
+
+    public async Task<RestaurantInfoDto?> GetRestaurantAsync(Guid restaurantId)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"/api/restaurant/{restaurantId}");
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadFromJsonAsync<RestaurantInfoDto>();
+
+            _logger.LogWarning("Restaurant not found: {RestaurantId}, Status={Status}", restaurantId, response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch restaurant: {RestaurantId}", restaurantId);
+            return null;
+        }
+    }
+}
+
+public record RestaurantInfoDto(
+    Guid RestaurantId,
+    string Name,
+    string? Address,
+    string? PhoneNumber
 );

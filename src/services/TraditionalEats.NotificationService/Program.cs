@@ -85,6 +85,14 @@ builder.Services.AddHttpClient<IOrderServiceClient, OrderServiceClient>(client =
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// Register RestaurantService client for fetching restaurant name/address (notifications)
+builder.Services.AddHttpClient<IRestaurantServiceClient, RestaurantServiceClient>(client =>
+{
+    var restaurantServiceUrl = builder.Configuration["Services:RestaurantService"] ?? "http://localhost:5007";
+    client.BaseAddress = new Uri(restaurantServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 // Background service for handling order status events
 builder.Services.AddHostedService<OrderStatusEventHandler>();
 
