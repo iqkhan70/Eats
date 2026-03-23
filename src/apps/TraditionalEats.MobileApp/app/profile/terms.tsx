@@ -47,7 +47,7 @@ export default function TermsScreen() {
           Questions? Reach out at support@kram.tech. We're happy to help.
         </Text>
 
-        <Text style={styles.footer}>Last updated: March 2025</Text>
+        <Text style={styles.footer}>Last updated: March 2026</Text>
       </ScrollView>
     </View>
   );

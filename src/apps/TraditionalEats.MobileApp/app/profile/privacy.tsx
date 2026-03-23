@@ -45,8 +45,9 @@ export default function PrivacyScreen() {
         <Text style={styles.section}>Your choices</Text>
         <Text style={styles.body}>
           You can update your profile, addresses, and payment methods in the app. You can
-          delete your account by contacting us. We'll remove your data in line with our
-          retention practices.
+          permanently delete your account at any time from Settings → Delete Account. When
+          you delete your account, all your personal data, order history, and saved
+          information are removed from our systems.
         </Text>
 
         <Text style={styles.section}>Contact</Text>
@@ -54,7 +55,7 @@ export default function PrivacyScreen() {
           Questions about your privacy? Email us at support@kram.tech.
         </Text>
 
-        <Text style={styles.footer}>Last updated: March 2025</Text>
+        <Text style={styles.footer}>Last updated: March 2026</Text>
       </ScrollView>
     </View>
   );

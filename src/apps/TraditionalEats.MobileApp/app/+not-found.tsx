@@ -13,11 +13,11 @@ export default function NotFoundScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.content}>
         <View style={styles.iconWrap}>
-          <Ionicons name="construct-outline" size={64} color={PRIMARY} />
+          <Ionicons name="search-outline" size={64} color={PRIMARY} />
         </View>
-        <Text style={styles.title}>Page Under Construction</Text>
+        <Text style={styles.title}>Page Not Found</Text>
         <Text style={styles.subtitle}>
-          This feature is coming soon. Thanks for your patience!
+          Sorry, we couldn't find the page you were looking for.
         </Text>
         <TouchableOpacity
           style={styles.button}
