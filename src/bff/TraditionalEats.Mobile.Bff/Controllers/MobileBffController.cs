@@ -1185,6 +1185,31 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    [HttpDelete("auth/account")]
+    [Authorize]
+    public async Task<IActionResult> DeleteAccount()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("IdentityService");
+            var token = Request.Headers["Authorization"].ToString();
+            if (!string.IsNullOrEmpty(token))
+                client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", token);
+
+            var response = await client.DeleteAsync("/api/auth/account");
+            var content = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+                return JsonString(content);
+
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting account");
+            return StatusCode(500, new { error = "Failed to delete account" });
+        }
+    }
+
     [HttpPost("auth/forgot-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)

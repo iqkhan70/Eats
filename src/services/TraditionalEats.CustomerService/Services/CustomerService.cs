@@ -17,6 +17,7 @@ public interface ICustomerService
     Task<bool> UpdateAddressAsync(Guid userId, Guid addressId, AddressDto address);
     Task<bool> DeleteAddressAsync(Guid userId, Guid addressId);
     Task<List<AddressDto>> GetAddressesAsync(Guid customerId);
+    Task<bool> DeleteCustomerByUserIdAsync(Guid userId);
 }
 
 public class CustomerService : ICustomerService
@@ -184,6 +185,31 @@ public class CustomerService : ICustomerService
 
         _context.Addresses.Remove(addr);
         await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteCustomerByUserIdAsync(Guid userId)
+    {
+        var customer = await _context.Customers
+            .Include(c => c.PII)
+            .Include(c => c.Addresses)
+            .Include(c => c.Preferences)
+            .FirstOrDefaultAsync(c => c.UserId == userId);
+
+        if (customer == null)
+            return false;
+
+        if (customer.Addresses?.Any() == true)
+            _context.Addresses.RemoveRange(customer.Addresses);
+        if (customer.Preferences?.Any() == true)
+            _context.Preferences.RemoveRange(customer.Preferences);
+        if (customer.PII != null)
+            _context.CustomerPIIs.Remove(customer.PII);
+
+        _context.Customers.Remove(customer);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Customer deleted for userId {UserId}", userId);
         return true;
     }
 

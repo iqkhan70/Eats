@@ -115,6 +115,11 @@ class AuthService {
     }
   }
 
+  async deleteAccount(): Promise<void> {
+    await api.delete('/MobileBff/auth/account');
+    await this.clearTokens();
+  }
+
   async getAccessToken(): Promise<string | null> {
     return await AsyncStorage.getItem(this.ACCESS_TOKEN_KEY);
   }

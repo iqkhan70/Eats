@@ -1,15 +1,18 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 import AppHeader from "../../components/AppHeader";
+import { authService } from "../../services/auth";
 
 function SettingRow({
   icon,
@@ -53,6 +56,59 @@ function SettingRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const version = Constants.expoConfig?.version ?? "1.0.0";
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to delete your account? This action is permanent and cannot be undone. All your data, order history, and saved information will be removed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete My Account",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Final Confirmation",
+              "This will permanently delete your account. You will not be able to recover it.",
+              [
+                { text: "Go Back", style: "cancel" },
+                {
+                  text: "Delete Permanently",
+                  style: "destructive",
+                  onPress: async () => {
+                    setDeleting(true);
+                    try {
+                      await authService.deleteAccount();
+                      Alert.alert(
+                        "Account Deleted",
+                        "Your account has been permanently deleted.",
+                        [
+                          {
+                            text: "OK",
+                            onPress: () => router.replace("/(tabs)"),
+                          },
+                        ]
+                      );
+                    } catch (e: any) {
+                      Alert.alert(
+                        "Error",
+                        e?.response?.data?.message ||
+                          e?.message ||
+                          "Failed to delete account. Please try again."
+                      );
+                    } finally {
+                      setDeleting(false);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -97,6 +153,28 @@ export default function SettingsScreen() {
             isLast
           />
         </View>
+
+        <Text style={[styles.sectionTitle, { marginTop: 24, color: "#d32f2f" }]}>
+          Danger Zone
+        </Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={[styles.row, styles.rowLast]}
+            onPress={handleDeleteAccount}
+            activeOpacity={0.7}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator size="small" color="#d32f2f" />
+            ) : (
+              <Ionicons name="trash-outline" size={24} color="#d32f2f" />
+            )}
+            <Text style={[styles.rowLabel, { color: "#d32f2f" }]}>
+              Delete Account
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#d32f2f" />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );
@@ -137,7 +215,19 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginLeft: 12,
   },
+  rowValue: {
+    fontSize: 14,
+    color: "#6b7280",
+  },
   rowLast: {
     borderBottomWidth: 0,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6b7280",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });

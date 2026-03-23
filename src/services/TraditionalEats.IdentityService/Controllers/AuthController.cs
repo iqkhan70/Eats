@@ -461,6 +461,29 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpDelete("account")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> DeleteAccount()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { message = "Invalid user" });
+
+        try
+        {
+            var deleted = await _authService.DeleteAccountAsync(userId);
+            if (!deleted)
+                return NotFound(new { message = "Account not found" });
+
+            return Ok(new { message = "Account deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Delete account failed for userId {UserId}", userId);
+            return StatusCode(500, new { message = "Failed to delete account" });
+        }
+    }
+
     [HttpPost("reset-password")]
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)

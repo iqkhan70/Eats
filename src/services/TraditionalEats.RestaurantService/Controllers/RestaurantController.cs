@@ -430,6 +430,22 @@ public class RestaurantController : ControllerBase
         var count = await _restaurantService.GetStaffLinkCountAsync(userId);
         return Ok(new { count });
     }
+
+    [HttpDelete("staff/by-user/{userId}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RemoveAllStaffLinks(Guid userId)
+    {
+        try
+        {
+            var removed = await _restaurantService.RemoveAllStaffLinksAsync(userId);
+            return Ok(new { removed });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove staff links for userId {UserId}", userId);
+            return StatusCode(500, new { message = "Failed to remove staff links" });
+        }
+    }
 }
 
 public record ToggleStatusRequest(bool IsActive);

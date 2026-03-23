@@ -39,6 +39,8 @@ public interface IAuthService
     Task<bool> ApproveVendorRequestAsync(Guid requestId, Guid adminUserId);
     /// <summary>Admin: Sync Identity users to Customer records. Creates missing Customer records.</summary>
     Task<SyncUsersToCustomersResult> SyncUsersToCustomersAsync();
+    /// <summary>Permanently delete the authenticated user's account and all related data.</summary>
+    Task<bool> DeleteAccountAsync(Guid userId);
 }
 
 public record SyncUsersToCustomersResult(int TotalUsers, int Created, int AlreadyExisted, int Failed, List<string> Errors);
@@ -774,6 +776,60 @@ public class AuthService : IAuthService
         }
 
         return new SyncUsersToCustomersResult(users.Count, created, alreadyExisted, failed, errors);
+    }
+
+    public async Task<bool> DeleteAccountAsync(Guid userId)
+    {
+        var user = await _context.Users
+            .Include(u => u.UserRoles)
+            .Include(u => u.RefreshTokens)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+            return false;
+
+        _context.RefreshTokens.RemoveRange(user.RefreshTokens);
+
+        var externalLogins = await _context.UserExternalLogins.Where(x => x.UserId == userId).ToListAsync();
+        _context.UserExternalLogins.RemoveRange(externalLogins);
+
+        _context.UserRoles.RemoveRange(user.UserRoles);
+
+        var loginAttempts = await _context.LoginAttempts.Where(x => x.UserId == userId).ToListAsync();
+        _context.LoginAttempts.RemoveRange(loginAttempts);
+
+        var vendorRequests = await _context.VendorApprovalRequests.Where(x => x.UserId == userId).ToListAsync();
+        _context.VendorApprovalRequests.RemoveRange(vendorRequests);
+
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
+
+        try
+        {
+            var customerServiceUrl = _configuration["Services:CustomerService"] ?? "http://localhost:5001";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(customerServiceUrl);
+            await client.DeleteAsync($"/api/customer/by-user/{userId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete customer record for userId {UserId}; identity data already removed", userId);
+        }
+
+        try
+        {
+            var restaurantServiceUrl = _configuration["Services:RestaurantService"] ?? "http://localhost:5007";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(restaurantServiceUrl);
+            await client.DeleteAsync($"/api/restaurant/staff/by-user/{userId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to remove staff links for userId {UserId}; identity data already removed", userId);
+        }
+
+        _logger.LogInformation("Account deleted for userId {UserId}", userId);
+        return true;
     }
 
     public async Task<ForgotPasswordResult> ForgotPasswordAsync(string email)

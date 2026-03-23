@@ -154,6 +154,24 @@ public class CustomerController : ControllerBase
         }
     }
 
+    [HttpDelete("by-user/{userId:guid}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> DeleteCustomerByUserId(Guid userId)
+    {
+        try
+        {
+            var deleted = await _customerService.DeleteCustomerByUserIdAsync(userId);
+            if (!deleted)
+                return NotFound(new { message = "Customer not found" });
+            return Ok(new { message = "Customer deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete customer for userId {UserId}", userId);
+            return StatusCode(500, new { message = "Failed to delete customer" });
+        }
+    }
+
     [HttpPut("addresses/{addressId:guid}")]
     public async Task<IActionResult> UpdateAddress(Guid addressId, [FromBody] AddressDto request)
     {

@@ -31,6 +31,7 @@ public interface IRestaurantService
     Task<bool> IsStaffOfRestaurantAsync(Guid restaurantId, Guid userId);
     Task<bool> IsOwnerOrStaffAsync(Guid restaurantId, Guid userId);
     Task<int> GetStaffLinkCountAsync(Guid userId);
+    Task<int> RemoveAllStaffLinksAsync(Guid userId);
 
     // Admin endpoints
     Task<List<RestaurantDto>> GetAllRestaurantsAsync(int skip = 0, int take = 100);
@@ -775,6 +776,15 @@ public class RestaurantService : IRestaurantService
     public async Task<int> GetStaffLinkCountAsync(Guid userId)
     {
         return await _context.RestaurantStaff.CountAsync(s => s.UserId == userId);
+    }
+
+    public async Task<int> RemoveAllStaffLinksAsync(Guid userId)
+    {
+        var links = await _context.RestaurantStaff.Where(s => s.UserId == userId).ToListAsync();
+        if (links.Count == 0) return 0;
+        _context.RestaurantStaff.RemoveRange(links);
+        await _context.SaveChangesAsync();
+        return links.Count;
     }
 }
 
