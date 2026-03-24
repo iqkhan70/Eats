@@ -102,16 +102,17 @@ jobs:
         env:
           DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
         run: |
-          if [ -z "$DOCR_TOKEN" ]; then
+          TOKEN=$(printf '%s' "$DOCR_TOKEN" | tr -d '\r')
+          if [ -z "$TOKEN" ]; then
             echo "❌ ERROR: DOCR_TOKEN secret is not configured!"
             echo ""
             echo "Create it in GitHub: Settings → Secrets and variables → Actions → New repository secret"
             echo "Name: DOCR_TOKEN"
-            echo "Value: DigitalOcean API token with registry access"
+            echo "Value: DigitalOcean API token with Registry read/write (or Full access)"
             exit 1
           fi
 
-          echo "$DOCR_TOKEN" | docker login $REGISTRY -u doctl --password-stdin
+          echo "$TOKEN" | docker login "$REGISTRY" -u "$TOKEN" --password-stdin
           echo "✅ Logged into DigitalOcean Container Registry"
 
       # ------------------------------
@@ -283,7 +284,8 @@ jobs:
             cd ${{ env.APP_DIR }}
 
             echo "🔐 Logging into DigitalOcean Container Registry..."
-            echo "$DOCR_TOKEN" | docker login ${{ env.REGISTRY }} -u doctl --password-stdin
+            TOKEN=$(printf '%s' "$DOCR_TOKEN" | tr -d '\r')
+            echo "$TOKEN" | docker login ${{ env.REGISTRY }} -u "$TOKEN" --password-stdin
 
             echo "📥 Pulling images from registry..."
             docker compose -f deploy/digitalocean/docker-compose.prod.yml --env-file .env pull || {

@@ -30,7 +30,7 @@ Deploys to **staging** when code is pushed to the `dev` branch.
 
 **Required GitHub Secrets:**
 
-- `DOCR_TOKEN` - DigitalOcean API token with registry access
+- `DOCR_TOKEN` - DigitalOcean **API token** (Personal Access Token) with **Registry** read/write (or **Full access**). Paste the raw token only—no `Bearer` prefix, no quotes. If login fails with `unauthorized`, regenerate the token in [DigitalOcean → API → Tokens](https://cloud.digitalocean.com/account/api/tokens) and update the secret; workflows use the same `docker login` style as `deploy/digitalocean/deploy.sh` (token as username and password).
 - `SSH_PRIVATE_KEY` - Private SSH key for accessing the staging server
 - `STAGING_SERVER_IP` - (Optional) Staging server IP address (if `DROPLET_IP_STAGING` file is not committed)
 
