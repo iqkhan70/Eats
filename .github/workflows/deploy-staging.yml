@@ -279,12 +279,16 @@ jobs:
         env:
           DOCR_TOKEN: ${{ secrets.DOCR_TOKEN }}
         run: |
+          TOKEN=$(printf '%s' "$DOCR_TOKEN" | tr -d '\r')
+          if [ -z "$TOKEN" ]; then
+            echo "❌ ERROR: DOCR_TOKEN secret is empty"
+            exit 1
+          fi
           ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST_STG }} << EOF
             set -e
             cd ${{ env.APP_DIR }}
 
             echo "🔐 Logging into DigitalOcean Container Registry..."
-            TOKEN=$(printf '%s' "$DOCR_TOKEN" | tr -d '\r')
             echo "$TOKEN" | docker login ${{ env.REGISTRY }} -u "$TOKEN" --password-stdin
 
             echo "📥 Pulling images from registry..."
