@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,8 +18,6 @@ import { api } from "../../services/api";
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const hasRedirectedRef = useRef(false);
-
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -32,7 +30,6 @@ export default function ProfileScreen() {
   // Refresh whenever screen becomes active (after login/logout, switching tabs, etc.)
   useFocusEffect(
     useCallback(() => {
-      hasRedirectedRef.current = false;
       checkAuthStatus();
     }, []),
   );
@@ -88,13 +85,6 @@ export default function ProfileScreen() {
         setIsCoordinator(false);
         setVendorRequestPending(false);
         setUserEmail(null);
-
-        // No valid session: redirect directly to sign-in
-        if (!hasRedirectedRef.current) {
-          hasRedirectedRef.current = true;
-          router.replace("/login");
-          return;
-        }
       }
     } catch (e) {
       setIsAuthenticated(false);
@@ -103,10 +93,6 @@ export default function ProfileScreen() {
       setIsCoordinator(false);
       setVendorRequestPending(false);
       setUserEmail(null);
-      if (!hasRedirectedRef.current) {
-        hasRedirectedRef.current = true;
-        router.replace("/login");
-      }
     } finally {
       setCheckingAuth(false);
     }
@@ -161,7 +147,7 @@ export default function ProfileScreen() {
             setIsVendor(false);
             setIsAdmin(false);
             setIsCoordinator(false);
-            router.replace("/login");
+            router.replace("/(tabs)/profile");
           } catch (error: any) {
             Alert.alert("Error", "Failed to sign out");
           }
@@ -176,12 +162,53 @@ export default function ProfileScreen() {
     { icon: "settings-outline", label: "Settings", route: "/profile/settings" },
   ];
 
-  // Redirecting to login - show loading briefly
-  if (checkingAuth || !isAuthenticated) {
+  if (checkingAuth) {
     return (
       <View style={[styles.container, styles.centerContainer]}>
         <ActivityIndicator size="large" color="#f97316" />
         <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <ScrollView style={styles.scrollView}>
+          <LinearGradient
+            colors={["#f97316", "#eab308"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.header, { paddingTop: Math.max(insets.top + 20, 60) }]}
+          >
+            <View style={styles.avatarContainer}>
+              <Ionicons name="person-outline" size={48} color="#fff" />
+            </View>
+            <Text style={styles.userName}>Welcome</Text>
+            <Text style={styles.userEmail}>
+              Browse vendors without an account
+            </Text>
+          </LinearGradient>
+          <View style={styles.guestCard}>
+            <Text style={styles.guestHint}>
+              Sign in to place orders, save addresses, and manage your account.
+            </Text>
+            <TouchableOpacity
+              style={styles.guestPrimaryButton}
+              onPress={() => router.push("/login")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.guestPrimaryButtonText}>Sign In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.guestSecondaryButton}
+              onPress={() => router.push("/login?tab=signup")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.guestSecondaryButtonText}>Create Account</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -403,5 +430,46 @@ const styles = StyleSheet.create({
     color: "#666",
     marginLeft: 16,
     fontStyle: "italic",
+  },
+
+  guestCard: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  guestHint: {
+    fontSize: 15,
+    color: "#4b5563",
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  guestPrimaryButton: {
+    backgroundColor: "#f97316",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  guestPrimaryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  guestSecondaryButton: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#f97316",
+  },
+  guestSecondaryButtonText: {
+    color: "#f97316",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

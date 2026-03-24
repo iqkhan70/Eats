@@ -16,7 +16,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AppHeader from "../components/AppHeader";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import { useIdTokenAuthRequest } from "expo-auth-session/providers/google";
@@ -40,7 +40,6 @@ type Tab = "signin" | "signup";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [activeTab, setActiveTab] = useState<Tab>(
     tab === "signup" ? "signup" : "signin",
@@ -259,9 +258,17 @@ export default function LoginScreen() {
         phoneNumber,
       };
       await authService.register(credentials);
-      Alert.alert("Success", "Registration successful! Please sign in.", [
-        { text: "OK", onPress: () => setActiveTab("signin") },
-      ]);
+
+      const loginCreds: LoginCredentials = {
+        email: signupEmail.trim(),
+        password: signupPassword,
+      };
+      try {
+        await authService.login(loginCreds);
+        router.replace("/(tabs)");
+      } catch {
+        setActiveTab("signin");
+      }
     } catch (error: any) {
       Alert.alert(
         "Registration Failed",
@@ -272,9 +279,38 @@ export default function LoginScreen() {
     }
   };
 
+  /** Back: return to previous screen; if nothing to pop (e.g. cold open), go to main tabs. */
+  const handleHeaderBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)");
+    }
+  };
+
+  /** Home: always open the main tab bar (home). */
+  const goToHome = () => {
+    router.replace("/(tabs)");
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar style="dark" />
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      <AppHeader
+        title={activeTab === "signin" ? "Sign in" : "Sign up"}
+        onBack={handleHeaderBack}
+        right={
+          <TouchableOpacity
+            onPress={goToHome}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Go to home"
+          >
+            <Text style={styles.headerHomeText}>Home</Text>
+          </TouchableOpacity>
+        }
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -720,6 +756,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: BG_LIGHT,
+  },
+  headerHomeText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#fff",
   },
   keyboardView: {
     flex: 1,

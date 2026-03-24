@@ -11,13 +11,11 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authService } from "../services/auth";
 import AppHeader from "../components/AppHeader";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -68,9 +66,7 @@ export default function ForgotPasswordScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
-      <View style={{ paddingTop: Math.max(insets.top + 20, 60) }}>
-        <AppHeader title="Forgot Password" />
-      </View>
+      <AppHeader title="Forgot Password" />
 
       <View style={styles.form}>
         <Text style={styles.hint}>

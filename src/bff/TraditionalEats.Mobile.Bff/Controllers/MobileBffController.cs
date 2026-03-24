@@ -1033,18 +1033,28 @@ public class MobileBffController : ControllerBase
                 {
                     var loginJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
 
-                    string? userIdString = null;
-                    if (loginJson.TryGetProperty("userId", out var userIdElement))
-                        userIdString = userIdElement.GetString();
-                    else if (loginJson.TryGetProperty("user", out var userEl) && userEl.TryGetProperty("id", out var idEl))
-                        userIdString = idEl.GetString();
-                    else if (loginJson.TryGetProperty("id", out var idEl2))
-                        userIdString = idEl2.GetString();
+                    Guid? resolvedUserId = null;
+                    if (loginJson.TryGetProperty("userId", out var userIdElement) &&
+                        Guid.TryParse(userIdElement.GetString(), out var uidFromProp))
+                        resolvedUserId = uidFromProp;
+                    else if (loginJson.TryGetProperty("user", out var userEl) && userEl.TryGetProperty("id", out var idEl) &&
+                             Guid.TryParse(idEl.GetString(), out var uidFromUser))
+                        resolvedUserId = uidFromUser;
+                    else if (loginJson.TryGetProperty("id", out var idEl2) &&
+                             Guid.TryParse(idEl2.GetString(), out var uidFromId))
+                        resolvedUserId = uidFromId;
 
-                    if (!string.IsNullOrEmpty(userIdString) &&
-                        Guid.TryParse(userIdString, out var userId) &&
-                        guestCartId.HasValue)
+                    // Password login typically returns only tokens; user id is in JWT "sub".
+                    if (resolvedUserId == null && loginJson.TryGetProperty("accessToken", out var accessTokenEl))
                     {
+                        var jwt = accessTokenEl.GetString();
+                        if (!string.IsNullOrEmpty(jwt))
+                            resolvedUserId = DecodeUserIdFromJwt(jwt);
+                    }
+
+                    if (resolvedUserId.HasValue && guestCartId.HasValue)
+                    {
+                        var userId = resolvedUserId.Value;
                         _logger.LogInformation("Merging guest cart {GuestCartId} into user cart for user {UserId}",
                             guestCartId.Value, userId);
 

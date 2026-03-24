@@ -82,10 +82,6 @@ export default function OrdersScreen() {
   // ✅ Pull-to-refresh state
   const [refreshing, setRefreshing] = useState(false);
 
-  // Track if we've already redirected to prevent double redirects
-  const hasRedirectedRef = useRef(false);
-  const isNavigatingRef = useRef(false);
-
   // Check authentication status (only on mount)
   useEffect(() => {
     let isMounted = true;
@@ -123,27 +119,15 @@ export default function OrdersScreen() {
           }
         }
 
-        if (
-          !authenticated &&
-          !hasRedirectedRef.current &&
-          !isNavigatingRef.current
-        ) {
-          // Redirect to login if not authenticated (only once)
-          hasRedirectedRef.current = true;
-          isNavigatingRef.current = true;
-          // Use replace to avoid stacking - login is no longer a modal
-          router.replace("/login");
-          return;
+        if (!authenticated && isMounted) {
+          setLoading(false);
         }
       } catch (error) {
         console.error("Error checking authentication:", error);
         if (!isMounted) return;
 
-        if (!hasRedirectedRef.current && !isNavigatingRef.current) {
-          hasRedirectedRef.current = true;
-          isNavigatingRef.current = true;
-          router.replace("/login");
-        }
+        setIsAuthenticated(false);
+        setLoading(false);
       } finally {
         if (isMounted) {
           setCheckingAuth(false);
@@ -168,14 +152,8 @@ export default function OrdersScreen() {
     } catch (error: any) {
       console.error("Error loading orders:", error);
 
-      // If 401 Unauthorized, redirect to login (only if not already redirected)
       if (error.response?.status === 401) {
         setIsAuthenticated(false);
-        if (!hasRedirectedRef.current && !isNavigatingRef.current) {
-          hasRedirectedRef.current = true;
-          isNavigatingRef.current = true;
-          router.replace("/login");
-        }
         return;
       }
 
@@ -297,40 +275,24 @@ export default function OrdersScreen() {
   // ✅ Auto refresh whenever tab/screen becomes active (best UX)
   useFocusEffect(
     useCallback(() => {
-      // Only check auth and refresh if we haven't already redirected
-      if (hasRedirectedRef.current || isNavigatingRef.current) {
-        return;
-      }
-
-      // Check auth status when screen comes into focus
       (async () => {
         try {
           const authenticated = await authService.isAuthenticated();
           setIsAuthenticated(authenticated);
 
           if (!authenticated) {
-            if (!hasRedirectedRef.current && !isNavigatingRef.current) {
-              hasRedirectedRef.current = true;
-              isNavigatingRef.current = true;
-              router.replace("/login");
-            }
+            setLoading(false);
             return;
           }
 
-          // Only refresh if authenticated
-          if (authenticated) {
-            loadOrders();
-          }
+          loadOrders();
         } catch (error) {
           console.error("Error checking authentication on focus:", error);
-          if (!hasRedirectedRef.current && !isNavigatingRef.current) {
-            hasRedirectedRef.current = true;
-            isNavigatingRef.current = true;
-            router.replace("/login");
-          }
+          setIsAuthenticated(false);
+          setLoading(false);
         }
       })();
-    }, [loadOrders, router]),
+    }, [loadOrders]),
   );
 
   // ✅ If you ever navigate with /orders?refresh=xyz it will reload
@@ -444,28 +406,55 @@ export default function OrdersScreen() {
     }
   }
 
-  // Don't render anything if we've redirected (prevents double rendering)
-  if (hasRedirectedRef.current || isNavigatingRef.current) {
-    return null;
-  }
-
-  // Show loading while checking authentication
-  if (checkingAuth || loading) {
+  if (checkingAuth) {
     return (
       <View style={styles.container}>
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color="#6200ee" />
-          <Text style={styles.loadingText}>
-            {checkingAuth ? "Checking authentication..." : "Loading orders..."}
-          </Text>
+          <Text style={styles.loadingText}>Checking authentication...</Text>
         </View>
       </View>
     );
   }
 
-  // Don't render anything if not authenticated (should redirect)
   if (!isAuthenticated) {
-    return null;
+    return (
+      <View style={styles.container}>
+        <View style={[styles.emptyContainer, { paddingTop: insets.top + 40 }]}>
+          <Ionicons name="receipt-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>Sign in to view orders</Text>
+          <Text style={styles.emptySubtext}>
+            Create an account or sign in to see your order history and track
+            updates.
+          </Text>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => router.push("/login")}
+          >
+            <Text style={styles.browseButtonText}>Sign In</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.browseButton, styles.guestSecondaryButton]}
+            onPress={() => router.push("/(tabs)")}
+          >
+            <Text style={[styles.browseButtonText, styles.guestSecondaryButtonText]}>
+              Browse vendors
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#6200ee" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
+      </View>
+    );
   }
 
   const EmptyState = (
@@ -831,6 +820,14 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   browseButtonText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+
+  guestSecondaryButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#f97316",
+    marginTop: 10,
+  },
+  guestSecondaryButtonText: { color: "#f97316" },
 
   loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
 

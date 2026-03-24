@@ -8,6 +8,7 @@
 @inject NavigationManager NavigationManager
 @inject CartService CartService
 @inject NotificationService NotificationService
+@inject AuthService AuthService
 
 <PageTitle>Cart - Kram</PageTitle>
 
@@ -17,6 +18,21 @@
         <RadzenButton Icon="arrow_back" Click="@GoBack" Variant="Variant.Flat" Size="ButtonSize.Small" />
         <RadzenText TextStyle="TextStyle.H1">Shopping Cart</RadzenText>
     </RadzenStack>
+
+    @* Sign-in required to checkout (same expectation as mobile) *@
+    @if (!loading && cart != null && cart.Items != null && cart.Items.Any() && !isAuthenticated)
+    {
+        <RadzenCard Style="background: var(--rz-info); color: #fff; border: none;">
+            <RadzenStack Gap="0.75rem">
+                <RadzenText TextStyle="TextStyle.Subtitle1" Style="font-weight: bold;">Sign in to place your order</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" Style="color: rgba(255,255,255,0.95);">
+                    You can browse and build your cart as a guest. To complete checkout, sign in to your account.
+                </RadzenText>
+                <RadzenButton Text="Sign in" Icon="login" Click="@GoToLogin" Variant="Variant.Flat"
+                    Style="align-self: flex-start; color: var(--rz-info); background: #fff;" />
+            </RadzenStack>
+        </RadzenCard>
+    }
 
     @* Payment readiness banner - show if vendor cannot accept payments AND cart has items *@
     @if (!loading && cart != null && cart.Items != null && cart.Items.Any() && cart.RestaurantId.HasValue && !paymentReady)
@@ -118,8 +134,8 @@
                         Placeholder="e.g., 'Cut with clean knife', 'I will pick it up around 3 PM CST', etc."
                         Rows="3" Style="width: 100%;" />
                 </RadzenFormField>
-                <RadzenButton Text="Place Order" Icon="shopping_cart" Click="@PlaceOrder" Variant="Variant.Filled"
-                    IsLoading="@placingOrder" Disabled="@(isPlaceOrderDisabled || !paymentReady)" Class="w-100" />
+                <RadzenButton Text="@(isAuthenticated ? "Place Order" : "Sign in to place order")" Icon="shopping_cart" Click="@PlaceOrderOrLogin" Variant="Variant.Filled"
+                    IsLoading="@placingOrder" Disabled="@isPlaceOrderDisabled" Class="w-100" />
             </RadzenStack>
         </RadzenCard>
     }
@@ -141,6 +157,7 @@
 
 @code {
     private bool loading = true;
+    private bool isAuthenticated = false;
     private bool placingOrder = false;
     private CartDto? cart;
     private string deliveryAddress = "Delivery is not available yet, might be available later based on customer needs. Pickup only!";
@@ -155,6 +172,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        isAuthenticated = await AuthService.IsAuthenticatedAsync();
         await LoadServiceFeeConfig();
         await LoadCart();
     }
@@ -301,9 +319,35 @@
         NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: false);
     }
 
+    private void GoToLogin()
+    {
+        NavigationManager.NavigateTo("/login?returnUrl=" + Uri.EscapeDataString("/cart"));
+    }
+
+    private async Task PlaceOrderOrLogin()
+    {
+        if (!isAuthenticated)
+        {
+            GoToLogin();
+            return;
+        }
+        await PlaceOrder();
+    }
+
     private async Task PlaceOrder()
     {
         if (cart == null || string.IsNullOrWhiteSpace(deliveryAddress)) return;
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Info,
+                Summary = "Sign in required",
+                Detail = "Please sign in to place an order."
+            });
+            GoToLogin();
+            return;
+        }
 
         try
         {

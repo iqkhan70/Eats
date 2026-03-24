@@ -41,6 +41,32 @@ public class WebBffController : ControllerBase
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private static Guid? DecodeUserIdFromJwt(string jwt)
+    {
+        try
+        {
+            var parts = jwt.Split('.');
+            if (parts.Length != 3) return null;
+            var payload = parts[1];
+            var base64 = payload.Replace('-', '+').Replace('_', '/');
+            switch (base64.Length % 4) { case 2: base64 += "=="; break; case 3: base64 += "="; break; }
+            var bytes = Convert.FromBase64String(base64);
+            var json = System.Text.Encoding.UTF8.GetString(bytes);
+            var doc = JsonSerializer.Deserialize<JsonElement>(json);
+            JsonElement subEl;
+            if (doc.TryGetProperty("sub", out subEl) || doc.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out subEl))
+            {
+                var sub = subEl.GetString();
+                return Guid.TryParse(sub, out var g) ? g : null;
+            }
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private async Task TryDeleteOldAppImageAsync(string? oldPath, string? newPath)
     {
         if (string.IsNullOrWhiteSpace(oldPath) || !oldPath.Contains("appimages", StringComparison.OrdinalIgnoreCase))
@@ -1269,6 +1295,7 @@ public class WebBffController : ControllerBase
     // Orders place / get order
     // ----------------------------
 
+    [Authorize]
     [HttpPost("orders/place")]
     public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderRequest request)
     {
@@ -2494,17 +2521,29 @@ public class WebBffController : ControllerBase
                 try
                 {
                     var loginResponse = JsonSerializer.Deserialize<JsonElement>(content, JsonOptions);
-                    string? userIdString = null;
 
-                    if (loginResponse.TryGetProperty("userId", out var userIdElement))
-                        userIdString = userIdElement.GetString();
-                    else if (loginResponse.TryGetProperty("user", out var userElement) && userElement.TryGetProperty("id", out var idElement))
-                        userIdString = idElement.GetString();
-                    else if (loginResponse.TryGetProperty("id", out var idElement2))
-                        userIdString = idElement2.GetString();
+                    Guid? resolvedUserId = null;
+                    if (loginResponse.TryGetProperty("userId", out var userIdElement) &&
+                        Guid.TryParse(userIdElement.GetString(), out var uidFromProp))
+                        resolvedUserId = uidFromProp;
+                    else if (loginResponse.TryGetProperty("user", out var userElement) && userElement.TryGetProperty("id", out var idElement) &&
+                             Guid.TryParse(idElement.GetString(), out var uidFromUser))
+                        resolvedUserId = uidFromUser;
+                    else if (loginResponse.TryGetProperty("id", out var idElement2) &&
+                             Guid.TryParse(idElement2.GetString(), out var uidFromId))
+                        resolvedUserId = uidFromId;
 
-                    if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var userId) && guestCartId.HasValue)
+                    // Password login returns only tokens; user id is in JWT "sub".
+                    if (resolvedUserId == null && loginResponse.TryGetProperty("accessToken", out var accessTokenEl))
                     {
+                        var jwt = accessTokenEl.GetString();
+                        if (!string.IsNullOrEmpty(jwt))
+                            resolvedUserId = DecodeUserIdFromJwt(jwt);
+                    }
+
+                    if (resolvedUserId.HasValue && guestCartId.HasValue)
+                    {
+                        var userId = resolvedUserId.Value;
                         _logger.LogInformation("Merging guest cart {GuestCartId} into user cart for user {UserId}",
                             guestCartId.Value, userId);
 

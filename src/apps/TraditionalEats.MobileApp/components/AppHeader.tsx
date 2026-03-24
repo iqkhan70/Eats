@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Orange-to-yellow gradient (Tailwind orange-500 → yellow-500)
 const GRADIENT_COLORS = ['#f97316', '#eab308'] as const;
@@ -16,6 +17,7 @@ interface Props {
 
 export default function AppHeader({ title, showBack = true, onBack, right }: Props) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleBack = () => {
     try {
@@ -32,7 +34,10 @@ export default function AppHeader({ title, showBack = true, onBack, right }: Pro
       colors={[...GRADIENT_COLORS]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
-      style={styles.header}
+      style={[
+        styles.header,
+        { paddingTop: Math.max(insets.top, 12) + 6 },
+      ]}
     >
       {showBack ? (
         <TouchableOpacity
@@ -66,8 +71,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 14,
-    paddingTop: 48,
+    paddingBottom: 14,
     borderBottomWidth: 0,
   },
   backButton: {
@@ -100,5 +104,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginHorizontal: 8,
   },
-  right: { width: 56, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
+  right: {
+    minWidth: 56,
+    maxWidth: 128,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginRight: 4,
+    paddingLeft: 4,
+  },
 });

@@ -96,6 +96,9 @@ public class CartService
         };
         var response = await _httpClient.PostAsJsonAsync("WebBff/orders/place", request);
 
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            throw new HttpRequestException("Please sign in to place an order.");
+
         // Handle BadRequest (400) - vendor not set up for payments
         if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
         {
