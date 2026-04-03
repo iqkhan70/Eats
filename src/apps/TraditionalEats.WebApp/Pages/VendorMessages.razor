@@ -41,6 +41,32 @@
     }
     else
     {
+        @if (CanShowBroadcast)
+        {
+            <RadzenCard Style="margin-bottom: 1rem; background: #f8fafc;">
+                <RadzenStack Gap="0.75rem">
+                    <RadzenText TextStyle="TextStyle.Subtitle1">Broadcast a deal</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color);">
+                        One message is copied to every existing customer chat for the vendor you select (max 500 chats). Customers who have never ordered or chatted won’t have a thread yet.
+                    </RadzenText>
+                    @if (restaurantIdsInInbox.Count > 1)
+                    {
+                        <RadzenDropDown TValue="Guid"
+                                        Data="@broadcastRestaurantPicks"
+                                        TextProperty="Text"
+                                        ValueProperty="Value"
+                                        @bind-Value="@selectedBroadcastRestaurantId"
+                                        Style="width: 100%; max-width: 420px;" />
+                    }
+                    <RadzenTextArea @bind-Value="@broadcastBody" MaxLength="1500" Rows="3"
+                                    Placeholder="e.g. 25% off all appetizers until 8pm tonight" Style="width: 100%;" />
+                    <RadzenButton Text="Send to all chats" Icon="campaign" Variant="Variant.Flat"
+                                  Click="@SendBroadcast" IsBusy="@broadcastSending"
+                                  Disabled="@(string.IsNullOrWhiteSpace(broadcastBody))" />
+                </RadzenStack>
+            </RadzenCard>
+        }
+
         <RadzenDataGrid Data="@conversations" TItem="ConversationDto" AllowPaging="true" PageSize="20" ShowPagingSummary="true">
             <Columns>
                 <RadzenDataGridColumn TItem="ConversationDto" Property="CustomerDisplayName" Title="Customer" Width="240px" />
@@ -73,6 +99,16 @@
     private bool loading = true;
     private List<ConversationDto> conversations = new();
     private Dictionary<Guid, string> vendorNameByRestaurantId = new();
+    private List<Guid> restaurantIdsInInbox = new();
+    private List<RestaurantPick> broadcastRestaurantPicks = new();
+    private Guid selectedBroadcastRestaurantId;
+    private string broadcastBody = "";
+    private bool broadcastSending;
+    private HashSet<Guid> managedRestaurantIds = new();
+
+    private bool CanShowBroadcast =>
+        selectedBroadcastRestaurantId != Guid.Empty &&
+        (isAdmin || managedRestaurantIds.Contains(selectedBroadcastRestaurantId));
 
     protected override async Task OnInitializedAsync()
     {
@@ -102,6 +138,8 @@
             loading = true;
             conversations = await Http.GetFromJsonAsync<List<ConversationDto>>("WebBff/vendor-chat/inbox") ?? new();
             await LoadVendorNames();
+            SyncBroadcastTarget();
+            await LoadManagedRestaurantIds();
         }
         catch (Exception ex)
         {
@@ -117,6 +155,75 @@
         finally
         {
             loading = false;
+        }
+    }
+
+    private void SyncBroadcastTarget()
+    {
+        restaurantIdsInInbox = conversations
+            .Select(c => c.RestaurantId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        broadcastRestaurantPicks = restaurantIdsInInbox
+            .Select(id => new RestaurantPick(id, GetVendorLabel(id)))
+            .ToList();
+        if (restaurantIdsInInbox.Count == 0)
+            selectedBroadcastRestaurantId = Guid.Empty;
+        else if (restaurantIdsInInbox.Count == 1)
+            selectedBroadcastRestaurantId = restaurantIdsInInbox[0];
+        else if (!restaurantIdsInInbox.Contains(selectedBroadcastRestaurantId))
+            selectedBroadcastRestaurantId = restaurantIdsInInbox[0];
+    }
+
+    private async Task SendBroadcast()
+    {
+        if (selectedBroadcastRestaurantId == Guid.Empty || string.IsNullOrWhiteSpace(broadcastBody))
+            return;
+        try
+        {
+            broadcastSending = true;
+            var resp = await Http.PostAsJsonAsync(
+                $"WebBff/vendor-chat/restaurants/{selectedBroadcastRestaurantId}/broadcast",
+                new { message = broadcastBody.Trim() });
+            var json = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Broadcast failed",
+                    Detail = json.Length > 200 ? json[..200] : json
+                });
+                return;
+            }
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var sent = root.TryGetProperty("sentCount", out var s) ? s.GetInt32() : 0;
+            var threads = root.TryGetProperty("threadCount", out var t) ? t.GetInt32() : 0;
+            broadcastBody = "";
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Sent",
+                Detail = threads == 0
+                    ? "No chats for that vendor yet."
+                    : $"Delivered to {sent} chat(s)."
+            });
+            await LoadInbox();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message
+            });
+        }
+        finally
+        {
+            broadcastSending = false;
         }
     }
 
@@ -172,6 +279,45 @@
         vendorNameByRestaurantId = next;
     }
 
+    private async Task LoadManagedRestaurantIds()
+    {
+        managedRestaurantIds.Clear();
+        if (isAdmin)
+            return;
+        try
+        {
+            var response = await Http.GetAsync("WebBff/vendor/my-restaurants");
+            if (!response.IsSuccessStatusCode)
+                return;
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                Guid? gid = null;
+                if (el.TryGetProperty("restaurantId", out var r))
+                {
+                    var s = r.GetString();
+                    if (Guid.TryParse(s, out var g))
+                        gid = g;
+                }
+                else if (el.TryGetProperty("RestaurantId", out var r2))
+                {
+                    var s = r2.GetString();
+                    if (Guid.TryParse(s, out var g))
+                        gid = g;
+                }
+                if (gid.HasValue)
+                    managedRestaurantIds.Add(gid.Value);
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
     private string GetVendorLabel(Guid restaurantId)
     {
         if (restaurantId == Guid.Empty)
@@ -200,5 +346,7 @@
         public DateTime? LastMessageAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
+
+    private record RestaurantPick(Guid Value, string Text);
 }
 

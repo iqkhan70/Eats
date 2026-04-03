@@ -25,4 +25,9 @@ public interface IChatService
     Task<bool> VerifyVendorRestaurantAccessAsync(Guid restaurantId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
     Task<List<VendorChatMessage>> GetVendorMessagesAsync(Guid conversationId, Guid userId, IEnumerable<string> userRoles, string? bearerToken = null);
     Task<VendorChatMessage> SaveVendorMessageAsync(Guid conversationId, Guid senderId, string senderRole, string? senderDisplayName, string message, string? metadataJson = null);
+
+    /// <summary>Post the same message to every existing vendor↔customer chat thread for this restaurant (e.g. flash deal). Real-time clients get ReceiveVendorMessage per thread.</summary>
+    Task<BroadcastVendorMessageResult> BroadcastVendorMessageAsync(Guid restaurantId, Guid vendorUserId, IEnumerable<string> userRoles, string message, string? senderDisplayName, string? bearerToken);
 }
+
+public record BroadcastVendorMessageResult(int SentCount, int ThreadCount);

@@ -7,10 +7,15 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -23,6 +28,7 @@ import AppHeader from "../../components/AppHeader";
 import {
   getVendorInbox,
   getVendorConversationMessages,
+  broadcastVendorMessage,
   type VendorConversation,
 } from "../../services/vendorChat";
 
@@ -46,6 +52,15 @@ export default function VendorMessagesScreen() {
   const [lastSenderRoleByConversationId, setLastSenderRoleByConversationId] =
     useState<Record<string, string>>({});
 
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [broadcastText, setBroadcastText] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+  /** Restaurants you own or staff (same list as vendor dashboard). Used to hide broadcast for customer-only threads. */
+  const [managedRestaurantIds, setManagedRestaurantIds] = useState<string[]>(
+    [],
+  );
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadingRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
@@ -66,6 +81,45 @@ export default function VendorMessagesScreen() {
     if (!myUserId) return scopedConversations;
     return scopedConversations.filter((c) => c.customerId !== myUserId);
   }, [myUserId, scopedConversations]);
+
+  /** One restaurant in inbox → allow deal blast without explicit filter. */
+  const singleRestaurantFromInbox = useMemo(() => {
+    const ids = [...new Set(conversations.map((c) => c.restaurantId))];
+    return ids.length === 1 ? ids[0] : "";
+  }, [conversations]);
+
+  const broadcastRestaurantId =
+    scopedRestaurantId || singleRestaurantFromInbox;
+
+  const canShowBroadcast = useMemo(() => {
+    if (!broadcastRestaurantId) return false;
+    if (isAdminUser) return true;
+    const bid = broadcastRestaurantId.toLowerCase();
+    return managedRestaurantIds.some((id) => id.toLowerCase() === bid);
+  }, [broadcastRestaurantId, managedRestaurantIds, isAdminUser]);
+
+  const fetchManagedRestaurants = useCallback(async () => {
+    try {
+      const [admin, res] = await Promise.all([
+        authService.isAdmin(),
+        api.get<unknown[]>("/MobileBff/vendor/my-restaurants"),
+      ]);
+      setIsAdminUser(!!admin);
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const ids: string[] = [];
+      for (const row of rows) {
+        if (row && typeof row === "object") {
+          const o = row as Record<string, unknown>;
+          const id = o.restaurantId ?? o.RestaurantId;
+          if (typeof id === "string" && id.length > 0) ids.push(id);
+        }
+      }
+      setManagedRestaurantIds(ids);
+    } catch {
+      setIsAdminUser(false);
+      setManagedRestaurantIds([]);
+    }
+  }, []);
 
   const getLastSeenStorageKey = useCallback(
     (conversationId: string) => {
@@ -260,6 +314,7 @@ export default function VendorMessagesScreen() {
         const inbox = await getVendorInbox();
         setConversations(inbox);
         void loadLastSenderRoles(inbox);
+        await fetchManagedRestaurants();
       } catch (e) {
         console.error("Load vendor inbox:", e);
         if (!silent) setConversations([]);
@@ -269,7 +324,7 @@ export default function VendorMessagesScreen() {
         loadingRef.current = false;
       }
     },
-    [loadLastSenderRoles, router],
+    [fetchManagedRestaurants, loadLastSenderRoles, router],
   );
 
   useEffect(() => {
@@ -353,6 +408,97 @@ export default function VendorMessagesScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {canShowBroadcast && (
+        <View style={styles.dealBar}>
+          <TouchableOpacity
+            onPress={() => setBroadcastOpen(true)}
+            style={styles.broadcastPill}
+            accessibilityLabel="Broadcast a deal to customers who have chatted"
+          >
+            <Ionicons name="megaphone-outline" size={16} color="#1565c0" />
+            <Text style={styles.broadcastPillText}>Broadcast deal</Text>
+          </TouchableOpacity>
+          <Text style={styles.dealBarHint} numberOfLines={2}>
+            Sends one message to every chat for{" "}
+            {vendorNameById[broadcastRestaurantId] || "this vendor"}.
+          </Text>
+        </View>
+      )}
+
+      <Modal
+        visible={broadcastOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => !broadcasting && setBroadcastOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Message all chat customers</Text>
+            <Text style={styles.modalHint}>
+              Same note goes to everyone who already has a thread with this
+              vendor (e.g. % off items). Max 1500 characters.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              multiline
+              maxLength={1500}
+              placeholder="e.g. 25% off all samosas until 8pm tonight!"
+              value={broadcastText}
+              onChangeText={setBroadcastText}
+              editable={!broadcasting}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalBtnSecondary}
+                onPress={() => !broadcasting && setBroadcastOpen(false)}
+                disabled={broadcasting}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalBtnPrimary}
+                onPress={async () => {
+                  const t = broadcastText.trim();
+                  if (!t || !broadcastRestaurantId) return;
+                  try {
+                    setBroadcasting(true);
+                    const r = await broadcastVendorMessage(
+                      broadcastRestaurantId,
+                      t,
+                    );
+                    setBroadcastOpen(false);
+                    setBroadcastText("");
+                    Alert.alert(
+                      "Sent",
+                      r.threadCount === 0
+                        ? "No customer chats yet for this vendor — nothing was sent."
+                        : `Delivered to ${r.sentCount} chat${r.sentCount === 1 ? "" : "s"}.`,
+                    );
+                  } catch (e: any) {
+                    Alert.alert(
+                      "Could not send",
+                      e?.response?.data?.message ||
+                        e?.message ||
+                        "Try again later.",
+                    );
+                  } finally {
+                    setBroadcasting(false);
+                  }
+                }}
+                disabled={broadcasting || !broadcastText.trim()}
+              >
+                <Text style={styles.modalBtnPrimaryText}>
+                  {broadcasting ? "Sending…" : "Send"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {loading ? (
         <View style={styles.center}>
@@ -455,6 +601,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.06)",
   },
+  dealBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    gap: 10,
+  },
+  dealBarHint: {
+    flex: 1,
+    fontSize: 12,
+    color: "#666",
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -493,4 +654,69 @@ const styles = StyleSheet.create({
     backgroundColor: "#6200ee",
     marginRight: 10,
   },
+  broadcastPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(21, 101, 192, 0.12)",
+    marginRight: 6,
+  },
+  broadcastPillText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1565c0",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 18,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#222",
+    marginBottom: 8,
+  },
+  modalHint: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: "top",
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  modalBtnSecondary: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  modalBtnSecondaryText: { fontSize: 16, color: "#666" },
+  modalBtnPrimary: {
+    backgroundColor: "#6200ee",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  modalBtnPrimaryText: { fontSize: 16, fontWeight: "600", color: "#fff" },
 });

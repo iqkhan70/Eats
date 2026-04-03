@@ -2444,6 +2444,27 @@ public class WebBffController : ControllerBase
         }
     }
 
+    [HttpPost("vendor-chat/restaurants/{restaurantId}/broadcast")]
+    [Authorize]
+    public async Task<IActionResult> BroadcastVendorChat(Guid restaurantId, [FromBody] BroadcastVendorChatRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ChatService");
+            ForwardBearerToken(client);
+            var json = JsonSerializer.Serialize(request ?? new BroadcastVendorChatRequest(null), JsonOptions);
+            var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync($"/api/Chat/vendor/restaurants/{restaurantId}/broadcast", body);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonContent(content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting vendor chat for restaurant {RestaurantId}", restaurantId);
+            return StatusCode(500, new { error = "Failed to broadcast message" });
+        }
+    }
+
 
     [HttpPut("orders/{orderId}/status")]
     [Authorize(Roles = "Vendor,Admin")]
@@ -3406,6 +3427,7 @@ public record ResetPasswordRequest(string Token, string Email, string NewPasswor
 public record AssignRoleRequest(string Email, string Role);
 public record RevokeRoleRequest(string Email, string Role);
 public record UpdateOrderStatusRequest(string Status, string? Notes);
+public record BroadcastVendorChatRequest(string? Message);
 public record CreateReviewRequest(Guid OrderId, Guid RestaurantId, CreateReviewDto Review);
 public record CreateReviewDto(int Rating, string? Comment, List<string>? Tags);
 public record UpdateReviewDto(int? Rating, string? Comment, List<string>? Tags);

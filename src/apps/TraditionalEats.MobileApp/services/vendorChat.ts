@@ -85,6 +85,18 @@ export async function getVendorInbox(): Promise<VendorConversation[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/** Same message to every customer who already has a chat thread with this restaurant (max 500). */
+export async function broadcastVendorMessage(
+  restaurantId: string,
+  message: string,
+): Promise<{ sentCount: number; threadCount: number }> {
+  const { data } = await api.post<{ sentCount: number; threadCount: number }>(
+    `/MobileBff/vendor-chat/restaurants/${restaurantId}/broadcast`,
+    { message },
+  );
+  return data;
+}
+
 export type OnVendorMessageReceived = (message: VendorChatMessage) => void;
 export type OnVendorError = (error: string) => void;
 export type OnVendorConnectionStateChanged = (connected: boolean) => void;

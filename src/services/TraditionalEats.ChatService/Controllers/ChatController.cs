@@ -229,6 +229,61 @@ public class ChatController : ControllerBase
             return StatusCode(500, new { message = "Failed to get messages" });
         }
     }
+
+    /// <summary>Send one message to every customer who already has a chat thread with this restaurant (max 500 threads).</summary>
+    /// <remarks>Uses [Authorize] only — role-based [Authorize(Roles=...)] can 403 with empty body when JWT role claim mapping differs. Access is enforced in BroadcastVendorMessageAsync.</remarks>
+    [HttpPost("vendor/restaurants/{restaurantId}/broadcast")]
+    [Authorize]
+    public async Task<IActionResult> BroadcastVendorMessage(Guid restaurantId, [FromBody] BroadcastVendorMessageRequest request)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                return Unauthorized(new { message = "User ID claim is missing" });
+
+            var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+            userRoles.AddRange(User.FindAll("role").Select(c => c.Value).Where(v => !userRoles.Contains(v, StringComparer.OrdinalIgnoreCase)));
+            if (userRoles.Count == 0)
+                return Unauthorized(new { message = "User role claim is missing" });
+
+            var auth = Request.Headers["Authorization"].FirstOrDefault();
+            var token = (!string.IsNullOrWhiteSpace(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                ? auth.Substring("Bearer ".Length).Trim()
+                : null;
+
+            var displayName = User.FindFirstValue(ClaimTypes.Name)
+                ?? User.FindFirstValue("name")
+                ?? User.FindFirstValue(ClaimTypes.Email)
+                ?? User.FindFirstValue("email");
+
+            var result = await _chatService.BroadcastVendorMessageAsync(
+                restaurantId,
+                userId,
+                userRoles,
+                request?.Message ?? "",
+                displayName,
+                token);
+
+            return Ok(new { sentCount = result.SentCount, threadCount = result.ThreadCount });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = "You do not have access to broadcast for this restaurant." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Broadcast vendor message failed for restaurant {RestaurantId}", restaurantId);
+            return StatusCode(500, new { message = "Failed to broadcast message" });
+        }
+    }
 }
 
 public record CreateVendorConversationRequest(Guid RestaurantId);
+
+public record BroadcastVendorMessageRequest(string? Message);

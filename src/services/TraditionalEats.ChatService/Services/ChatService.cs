@@ -1,27 +1,35 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Http;
 using TraditionalEats.ChatService.Data;
 using TraditionalEats.ChatService.Entities;
+using TraditionalEats.ChatService.Hubs;
 
 namespace TraditionalEats.ChatService.Services;
 
 public class ChatService : IChatService
 {
+    private const int BroadcastMaxThreads = 500;
+    private const int BroadcastMaxMessageLength = 1500;
+
     private readonly ChatDbContext _context;
     private readonly ILogger<ChatService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly IHubContext<VendorChatHub> _vendorHubContext;
 
     public ChatService(
         ChatDbContext context,
         ILogger<ChatService> logger,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHubContext<VendorChatHub> vendorHubContext)
     {
         _context = context;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _vendorHubContext = vendorHubContext;
     }
 
     public async Task<bool> VerifyOrderAccessAsync(Guid orderId, Guid userId, string userRole, string? bearerToken = null)
@@ -496,12 +504,15 @@ public class ChatService : IChatService
         if (roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
             return true;
 
-        if (roles.Any(r => string.Equals(r, "Vendor", StringComparison.OrdinalIgnoreCase)))
-            return await VerifyRestaurantOwnerAsync(restaurantId, userId, bearerToken);
+        // Owner check first: works for vendors (and anyone listed as owner).
+        if (await VerifyRestaurantOwnerAsync(restaurantId, userId, bearerToken))
+            return true;
 
-        // Staff: check via RestaurantService is-owner-or-staff endpoint
-        if (roles.Any(r => string.Equals(r, "Staff", StringComparison.OrdinalIgnoreCase)))
-            return await VerifyStaffAccessAsync(restaurantId, userId, bearerToken);
+        // Staff at this restaurant (must run even if user also has Vendor — otherwise
+        // Vendor+Staff users fail for restaurants where they are staff but not owner).
+        if (roles.Any(r => string.Equals(r, "Staff", StringComparison.OrdinalIgnoreCase))
+            && await VerifyStaffAccessAsync(restaurantId, userId, bearerToken))
+            return true;
 
         return false;
     }
@@ -568,6 +579,65 @@ public class ChatService : IChatService
 
         await _context.SaveChangesAsync();
         return vendorMessage;
+    }
+
+    public async Task<BroadcastVendorMessageResult> BroadcastVendorMessageAsync(
+        Guid restaurantId,
+        Guid vendorUserId,
+        IEnumerable<string> userRoles,
+        string message,
+        string? senderDisplayName,
+        string? bearerToken)
+    {
+        var roles = userRoles?.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList() ?? new List<string>();
+        if (!await VerifyVendorRestaurantAccessAsync(restaurantId, vendorUserId, roles, bearerToken))
+        {
+            _logger.LogWarning("BroadcastVendorMessageAsync: forbidden restaurantId={RestaurantId} userId={UserId}", restaurantId, vendorUserId);
+            throw new UnauthorizedAccessException("You do not manage this restaurant.");
+        }
+
+        var text = message.Trim();
+        if (string.IsNullOrEmpty(text))
+            throw new ArgumentException("Message is required.", nameof(message));
+        if (text.Length > BroadcastMaxMessageLength)
+            text = text[..BroadcastMaxMessageLength];
+
+        var metadataJson = """{"type":"vendor_broadcast"}""";
+
+        // Exclude vendor↔self threads (same as mobile inbox UI) so sent count matches visible customers.
+        var conversations = await _context.VendorConversations
+            .AsNoTracking()
+            .Where(c => c.RestaurantId == restaurantId && c.CustomerId != vendorUserId)
+            .OrderByDescending(c => c.LastMessageAt ?? c.UpdatedAt)
+            .Take(BroadcastMaxThreads)
+            .Select(c => c.ConversationId)
+            .ToListAsync();
+
+        if (conversations.Count == 0)
+            return new BroadcastVendorMessageResult(0, 0);
+
+        var senderRole = roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)) ? "Admin" : "Vendor";
+        var sent = 0;
+        foreach (var conversationId in conversations)
+        {
+            var saved = await SaveVendorMessageAsync(conversationId, vendorUserId, senderRole, senderDisplayName, text, metadataJson);
+            sent++;
+            var groupName = $"vendor_chat_{conversationId}";
+            await _vendorHubContext.Clients.Group(groupName).SendAsync("ReceiveVendorMessage", new
+            {
+                MessageId = saved.MessageId,
+                ConversationId = saved.ConversationId,
+                SenderId = saved.SenderId,
+                SenderRole = saved.SenderRole,
+                SenderDisplayName = saved.SenderDisplayName,
+                Message = saved.Message,
+                SentAt = saved.SentAt,
+                MetadataJson = saved.MetadataJson
+            });
+        }
+
+        _logger.LogInformation("BroadcastVendorMessageAsync: restaurantId={RestaurantId} sent={Sent} threads={Threads}", restaurantId, sent, conversations.Count);
+        return new BroadcastVendorMessageResult(sent, conversations.Count);
     }
 
     private async Task<bool> VerifyRestaurantOwnerAsync(Guid restaurantId, Guid vendorUserId, string? bearerToken)
