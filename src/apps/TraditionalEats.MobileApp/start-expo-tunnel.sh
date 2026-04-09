@@ -38,7 +38,7 @@ pkill -f "expo start" 2>/dev/null || true
 sleep 2
 
 # Set environment variable to use staging API
-export EXPO_PUBLIC_ENV=staging
+export EXPO_PUBLIC_ENV=production
 
 # Start Expo with tunnel mode
 echo -e "${GREEN}🚀 Starting Expo with tunnel...${NC}"

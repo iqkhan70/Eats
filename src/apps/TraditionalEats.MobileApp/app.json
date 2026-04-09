@@ -17,7 +17,10 @@
     "web": {
       "favicon": "./assets/logo.png"
     },
-    "scheme": "kram",
+    "scheme": [
+      "kram",
+      "com.kram.mobile"
+    ],
     "plugins": [
       "expo-router",
       "expo-font",

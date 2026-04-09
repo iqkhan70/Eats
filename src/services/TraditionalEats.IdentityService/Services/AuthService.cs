@@ -176,24 +176,36 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(idToken))
             throw new UnauthorizedAccessException("Google ID token is required");
 
-        using var http = _httpClientFactory.CreateClient();
-        var response = await http.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}");
-        if (!response.IsSuccessStatusCode)
+        string email;
+        string? sub;
+
+        var googleAudiences = GetGoogleValidAudiences();
+        if (googleAudiences.Count > 0)
         {
-            await RecordLoginAttemptAsync(null, null, ipAddress, false, "Google token verification failed");
-            throw new UnauthorizedAccessException("Invalid Google token");
+            try
+            {
+                (email, sub) = await ValidateGoogleIdTokenAsync(idToken, googleAudiences);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Google JWT validation failed");
+                await RecordLoginAttemptAsync(null, null, ipAddress, false, "Google token validation failed");
+                throw new UnauthorizedAccessException("Invalid Google token");
+            }
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Google OAuth audiences not configured (Google:WebClientId / Google:ValidAudiences). Using legacy tokeninfo; native Android ID tokens may fail.");
+            (email, sub) = await VerifyGoogleIdTokenWithTokenInfoAsync(idToken);
+            if (string.IsNullOrEmpty(email))
+            {
+                await RecordLoginAttemptAsync(null, null, ipAddress, false, "Google token missing email");
+                throw new UnauthorizedAccessException("Google token does not contain email");
+            }
         }
 
-        var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-        var email = json.GetProperty("email").GetString();
-        var sub = json.GetProperty("sub").GetString();
-        if (string.IsNullOrEmpty(email))
-        {
-            await RecordLoginAttemptAsync(null, null, ipAddress, false, "Google token missing email");
-            throw new UnauthorizedAccessException("Google token does not contain email");
-        }
-
-        var user = await GetOrCreateExternalUserAsync(email, "Google", sub, null, null);
+        var user = await GetOrCreateExternalUserAsync(email, "Google", sub ?? email, null, null);
         user.LastLoginAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         await RecordLoginAttemptAsync(user.Id, email, ipAddress, true, null);
@@ -201,6 +213,75 @@ public class AuthService : IAuthService
         var accessToken = GenerateAccessToken(user);
         var refreshToken = await GenerateRefreshTokenAsync(user.Id);
         return (accessToken, refreshToken);
+    }
+
+    private List<string> GetGoogleValidAudiences()
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        var validAudiences = _configuration["Google:ValidAudiences"];
+        if (!string.IsNullOrWhiteSpace(validAudiences))
+        {
+            foreach (var part in validAudiences.Split(new[] { ';', ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var t = part.Trim();
+                if (t.Length > 0) set.Add(t);
+            }
+        }
+
+        var web = _configuration["Google:WebClientId"];
+        if (!string.IsNullOrWhiteSpace(web))
+            set.Add(web.Trim());
+
+        return set.ToList();
+    }
+
+    private async Task<(string Email, string? Sub)> ValidateGoogleIdTokenAsync(string idToken, IReadOnlyList<string> validAudiences)
+    {
+        var configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            "https://accounts.google.com/.well-known/openid-configuration",
+            new OpenIdConnectConfigurationRetriever(),
+            new HttpDocumentRetriever());
+        var oidc = await configManager.GetConfigurationAsync(CancellationToken.None);
+
+        var signingKeys = oidc.SigningKeys is { Count: > 0 }
+            ? oidc.SigningKeys
+            : oidc.JsonWebKeySet?.GetSigningKeys() ?? [];
+
+        var validationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKeys = signingKeys,
+            ValidateIssuer = true,
+            ValidIssuer = oidc.Issuer,
+            ValidateAudience = true,
+            ValidAudiences = validAudiences.ToList(),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        var handler = new JwtSecurityTokenHandler();
+        handler.ValidateToken(idToken, validationParameters, out var validated);
+        var jwt = (JwtSecurityToken)validated;
+        var email = jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Email)?.Value
+            ?? jwt.Claims.FirstOrDefault(c => c.Type == "email")?.Value;
+        var sub = jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(email))
+            throw new InvalidOperationException("Google ID token does not contain an email claim.");
+
+        return (email, sub);
+    }
+
+    private async Task<(string Email, string? Sub)> VerifyGoogleIdTokenWithTokenInfoAsync(string idToken)
+    {
+        using var http = _httpClientFactory.CreateClient();
+        var response = await http.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}");
+        if (!response.IsSuccessStatusCode)
+            throw new UnauthorizedAccessException("Invalid Google token");
+
+        var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var email = json.GetProperty("email").GetString();
+        var sub = json.TryGetProperty("sub", out var subEl) ? subEl.GetString() : null;
+        return (email ?? "", sub);
     }
 
     public async Task<(string AccessToken, string RefreshToken)> LoginWithAppleAsync(string idToken, string? email, string? fullName, string? ipAddress)
