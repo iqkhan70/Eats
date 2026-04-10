@@ -36,7 +36,9 @@
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "376358654488-p83ko5e2dpeqt6kpp8ac7i2hc2p42bhr.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_DEBUG": "376358654488-1jmuf2tcibrjke9kefdkiklkaeimnbb5.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_RELEASE": "376358654488-0okgci4o4gr76omddkphjps5j5s03b3i.apps.googleusercontent.com",
-        "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "true"
+        "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "true",
+        "EXPO_PUBLIC_GOOGLE_AUTH_EXPO_REDIRECT_URI": "https://auth.expo.io/@iqkhan/kram-mobile",
+        "EXPO_PUBLIC_EXPO_ACCOUNT": "iqkhan"
       }
     }
   },

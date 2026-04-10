@@ -22,8 +22,11 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import * as Application from "expo-application";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import { makeRedirectUri } from "expo-auth-session";
-import { useIdTokenAuthRequest } from "expo-auth-session/providers/google";
+import { exchangeCodeAsync, makeRedirectUri } from "expo-auth-session";
+import {
+  discovery as googleDiscovery,
+  useIdTokenAuthRequest,
+} from "expo-auth-session/providers/google";
 import {
   authService,
   LoginCredentials,
@@ -302,6 +305,7 @@ export default function LoginScreen() {
   /** Must match Google’s redirect and openAuthSessionAsync returnUrl (Android: event.url.startsWith(returnUrl)). */
   const oauthAndroidReturnUrl = React.useMemo(() => {
     if (Platform.OS !== "android") return packageRedirectUri;
+    if (androidBrowserOAuthRedirect) return packageRedirectUri;
     if (isExpoGo || androidOAuthUseWebClient) return packageRedirectUri;
     return androidInstalledRedirectUri ?? packageRedirectUri;
   }, [
@@ -466,7 +470,8 @@ export default function LoginScreen() {
             : Boolean(
                 googleWebClientId &&
                   (googleAndroidClientId ||
-                    androidOAuthUseWebClient),
+                    androidOAuthUseWebClient ||
+                    androidBrowserOAuthRedirect),
               )
           : Boolean(googleWebClientId);
 
@@ -483,6 +488,78 @@ export default function LoginScreen() {
               ? "Google Sign-In is not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID in your .env."
               : "Google Sign-In is not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your .env.",
       );
+      return;
+    }
+
+    if (Platform.OS === "android" && !isExpoGo && androidBrowserOAuthRedirect) {
+      if (!googleAuthRequest?.url) {
+        Alert.alert(
+          "Google Sign-In unavailable",
+          "Google sign-in is still loading. Please try again in a moment.",
+        );
+        return;
+      }
+
+      try {
+        setSocialLoading(true);
+        googleOAuthSessionActiveRef.current = true;
+
+        const result = await WebBrowser.openAuthSessionAsync(
+          googleAuthRequest.url,
+          packageRedirectUri,
+        );
+
+        if (result.type === "cancel" || result.type === "dismiss") {
+          return;
+        }
+
+        if (result.type !== "success") {
+          Alert.alert("Sign In Failed", "Could not complete Google sign-in.");
+          return;
+        }
+
+        const parsed = googleAuthRequest.parseReturnUrl(result.url);
+        if (parsed.type !== "success" || !parsed.params.code) {
+          const errMessage =
+            parsed.type === "error"
+              ? parsed.error?.description || parsed.error?.message
+              : "Could not complete Google sign-in.";
+          Alert.alert("Sign In Failed", errMessage);
+          return;
+        }
+
+        const tokenResponse = await exchangeCodeAsync(
+          {
+            clientId: googleWebClientId || effectiveWeb || fallback,
+            code: parsed.params.code,
+            redirectUri: androidBrowserOAuthRedirect,
+            extraParams: {
+              code_verifier: googleAuthRequest.codeVerifier || "",
+            },
+          },
+          googleDiscovery,
+        );
+
+        const idToken = tokenResponse.idToken;
+        if (!idToken) {
+          Alert.alert(
+            "Sign In Failed",
+            "Google sign-in completed but no ID token was returned.",
+          );
+          return;
+        }
+
+        await authService.loginWithExternalToken("google", idToken);
+        router.replace("/(tabs)");
+      } catch (error: any) {
+        Alert.alert(
+          "Sign In Failed",
+          error?.message || "Could not sign in with Google",
+        );
+      } finally {
+        googleOAuthSessionActiveRef.current = false;
+        setSocialLoading(false);
+      }
       return;
     }
 

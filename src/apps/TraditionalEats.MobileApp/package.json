@@ -1,6 +1,6 @@
 {
   "name": "kram-mobile",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "expo-router/entry",
   "scripts": {
     "clean": "rm -rf android/build android/app/build android/.cxx android/app/.cxx ios/build ios/Pods/build node_modules/.cache .expo dist",

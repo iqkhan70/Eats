@@ -3,7 +3,7 @@
     "name": "Kram",
     "owner": "iqkhan",
     "slug": "kram-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",

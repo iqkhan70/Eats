@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
+import * as Application from "expo-application";
 import AppHeader from "../../components/AppHeader";
 import { authService } from "../../services/auth";
 
@@ -55,7 +56,11 @@ function SettingRow({
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const version = Constants.expoConfig?.version ?? "1.0.0";
+  const nativeVersion = Application.nativeApplicationVersion;
+  const nativeBuild = Application.nativeBuildVersion;
+  const expoVersion = Constants.expoConfig?.version;
+  const version = nativeVersion || expoVersion || "unknown";
+  const versionLabel = nativeBuild ? `${version} (${nativeBuild})` : version;
   const [deleting, setDeleting] = useState(false);
 
   const handleDeleteAccount = () => {
@@ -139,7 +144,7 @@ export default function SettingsScreen() {
           <SettingRow
             icon="information-circle-outline"
             label="App Version"
-            value={version}
+            value={versionLabel}
           />
           <SettingRow
             icon="document-text-outline"

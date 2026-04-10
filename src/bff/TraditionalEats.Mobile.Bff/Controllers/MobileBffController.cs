@@ -1137,7 +1137,44 @@ public class MobileBffController : ControllerBase
     [AllowAnonymous]
     public IActionResult GoogleOAuthBrowserCallback()
     {
-        const string html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"/><title>Sign in</title></head><body><p>Sign-in complete. You can return to the app.</p></body></html>";
+        const string html = """
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; color: #111827; }
+    a { color: #0d99ff; }
+    .muted { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <p>Finishing sign-in and returning to the app…</p>
+  <p id="manual" class="muted" style="display:none;">
+    If the app does not open automatically,
+    <a id="fallback" href="#">tap here to return to Kram</a>.
+  </p>
+  <script>
+    (function () {
+      var appUrl = "com.kram.mobile:/oauthredirect" + window.location.search + window.location.hash;
+      try {
+        window.location.replace(appUrl);
+      } catch (e) {
+        // ignore and show manual link below
+      }
+      window.setTimeout(function () {
+        var fallback = document.getElementById("fallback");
+        var manual = document.getElementById("manual");
+        if (fallback) fallback.href = appUrl;
+        if (manual) manual.style.display = "block";
+      }, 1200);
+    })();
+  </script>
+</body>
+</html>
+""";
         return Content(html, "text/html", System.Text.Encoding.UTF8);
     }
 
