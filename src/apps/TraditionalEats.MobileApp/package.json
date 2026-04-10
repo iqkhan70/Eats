@@ -3,15 +3,17 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "clean": "rm -rf android/build android/app/build android/.cxx android/app/.cxx node_modules/.cache .expo",
+    "clean": "rm -rf android/build android/app/build android/.cxx android/app/.cxx ios/build ios/Pods/build node_modules/.cache .expo dist",
     "start": "expo start",
     "android": "expo run:android",
+    "android:clean-install": "adb uninstall com.kram.mobile 2>/dev/null || true; expo run:android",
     "android:aab:release": "cd android && NODE_ENV=production ./gradlew bundleRelease",
     "build:aab:local-eas": "npx eas-cli build --platform android --profile production --local",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "create-assets": "node scripts/create-assets.js",
-    "doctor": "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=true npx expo-doctor"
+    "doctor": "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=true npx expo-doctor",
+    "google:apk-sha1": "node scripts/print-apk-signing-sha.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

@@ -25,14 +25,11 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import { makeRedirectUri } from "expo-auth-session";
 import { useIdTokenAuthRequest } from "expo-auth-session/providers/google";
 import {
-  GoogleSignin,
-  statusCodes,
-} from "@react-native-google-signin/google-signin";
-import {
   authService,
   LoginCredentials,
   RegisterCredentials,
 } from "../services/auth";
+import { APP_CONFIG } from "../config/api.config";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -44,7 +41,47 @@ function googleAndroidInstalledAppRedirectUri(
   if (!id) return undefined;
   const m = id.match(/^([a-zA-Z0-9._-]+)\.apps\.googleusercontent\.com$/);
   if (!m) return undefined;
-  return `com.googleusercontent.apps.${m[1]}:/oauthredirect`;
+  // Google’s newer Android / Play Services flows often use /oauth2redirect (see Google Sign-In docs).
+  return `com.googleusercontent.apps.${m[1]}:/oauth2redirect`;
+}
+
+/**
+ * Redirect URIs that must appear on the **Web application** OAuth client (the same ID as
+ * EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID). Native Android Sign-In still calls requestIdToken(webClientId),
+ * which can trigger Google’s Web-client + custom-scheme checks on Play even though you are not using
+ * expo-auth-session in a store build.
+ *
+ * Include both /oauthredirect (Expo / older samples) and /oauth2redirect (Google’s Android docs)—if
+ * the console is missing the path Google actually uses, you will still see “custom URI / Web client”.
+ */
+function googleWebClientAuthorizedRedirectUris(
+  webClientId: string,
+  applicationId: string,
+  extraAndroidClientIds: readonly string[],
+): string[] {
+  const out: string[] = [];
+  const push = (s: string) => {
+    if (!s || out.includes(s)) return;
+    out.push(s);
+  };
+  const pushFromClientId = (clientId: string) => {
+    const m = clientId
+      .trim()
+      .match(/^([a-zA-Z0-9._-]+)\.apps\.googleusercontent\.com$/);
+    if (!m) return;
+    const scheme = `com.googleusercontent.apps.${m[1]}`;
+    push(`${scheme}:/oauthredirect`);
+    push(`${scheme}:/oauth2redirect`);
+  };
+  pushFromClientId(webClientId);
+  if (applicationId.trim()) {
+    push(`${applicationId}:/oauthredirect`);
+    push(`${applicationId}:/oauth2redirect`);
+  }
+  for (const id of extraAndroidClientIds) {
+    if (id?.trim()) pushFromClientId(id);
+  }
+  return out;
 }
 
 // Figma-inspired design tokens from figma.com
@@ -113,16 +150,132 @@ export default function LoginScreen() {
       .toLowerCase() === "true" ||
     (process.env.EXPO_PUBLIC_GOOGLE_ANDROID_USE_WEB_CLIENT || "").trim() === "1";
 
+  /** If set (https only), Android dev/release builds use in-app browser OAuth with this redirect — avoids native custom-scheme / Web client errors on Play. */
+  const androidBrowserOAuthRedirect = (
+    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_BROWSER_REDIRECT_URI || ""
+  ).trim();
+
   const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-  // Android dev/release: native Google Sign-In (Play Services) — no Custom Tabs / deep link.
+  /** Expo proxy URLs must be https://auth.expo.io/@account/slug — not …/account/slug (missing @). */
+  const normalizeAuthExpoRedirect = React.useCallback((raw: string) => {
+    const t = raw.trim();
+    if (!/^https:\/\/auth\.expo\.io\//i.test(t)) return t;
+    try {
+      const u = new URL(t);
+      if (u.pathname.includes("@")) return t.replace(/\/$/, "");
+      const seg = u.pathname.split("/").filter(Boolean);
+      if (seg.length >= 2) {
+        u.pathname = `/@${seg[0]}/${seg.slice(1).join("/")}`;
+        return u.toString().replace(/\/$/, "");
+      }
+    } catch {
+      return t;
+    }
+    return t;
+  }, []);
+
+  /**
+   * Expo Go + browser Google OAuth must use an https redirect (e.g. auth.expo.io) with the Web client.
+   * Custom schemes (com.kram.mobile:/…) with a Web client id trigger “Custom URI scheme not allowed for Web client”.
+   * Dev build / emulator uses native @react-native-google-signin instead — no browser redirect.
+   */
+  const expoGoogleAuthProxyRedirect = React.useMemo(() => {
+    const explicitRaw = (process.env.EXPO_PUBLIC_GOOGLE_AUTH_EXPO_REDIRECT_URI || "").trim();
+    if (explicitRaw) return normalizeAuthExpoRedirect(explicitRaw);
+
+    const slug = (Constants.expoConfig?.slug || "kram-mobile").trim();
+    const accFromEnv = (process.env.EXPO_PUBLIC_EXPO_ACCOUNT || "").trim();
+    const ownerFromAppJson = (Constants.expoConfig?.owner || "").trim();
+    const acc = accFromEnv || ownerFromAppJson;
+    const full = Constants.expoConfig?.originalFullName;
+    const isAnonymousProject =
+      typeof full === "string" && full.startsWith("@anonymous/");
+
+    // Prefer stable @owner/slug from app.json or env when Expo reports @anonymous/… (not logged into Expo CLI),
+    // so Google Cloud "Authorized redirect URIs" can stay https://auth.expo.io/@yourname/slug.
+    if (acc) {
+      const fromOwner = normalizeAuthExpoRedirect(
+        `https://auth.expo.io/@${acc.replace(/^@/, "")}/${slug}`,
+      );
+      if (isAnonymousProject) return fromOwner;
+    }
+
+    if (typeof full === "string" && full.length > 0) {
+      const trimmed = full.replace(/^\//, "");
+      return normalizeAuthExpoRedirect(`https://auth.expo.io/${trimmed}`);
+    }
+
+    if (acc) {
+      return normalizeAuthExpoRedirect(
+        `https://auth.expo.io/@${acc.replace(/^@/, "")}/${slug}`,
+      );
+    }
+    return undefined;
+  }, [normalizeAuthExpoRedirect]);
+
+  const googleWebClientRedirectUriConsoleHint = React.useMemo(() => {
+    if (!googleWebClientId.trim()) return "";
+    const pkg = Application.applicationId || "com.kram.mobile";
+    const uris = googleWebClientAuthorizedRedirectUris(googleWebClientId, pkg, [
+      googleAndroidClientIdDebug,
+      googleAndroidClientIdRelease,
+    ]);
+    const lines = uris.map((u) => `• ${u}`).join("\n");
+    const expo =
+      typeof expoGoogleAuthProxyRedirect === "string" &&
+      expoGoogleAuthProxyRedirect.length > 0
+        ? `• ${expoGoogleAuthProxyRedirect} (Expo Go)\n`
+        : "";
+    const httpsLine =
+      androidBrowserOAuthRedirect.length > 0
+        ? `\n• ${androidBrowserOAuthRedirect} (Android browser flow — **required** when EXPO_PUBLIC_GOOGLE_ANDROID_BROWSER_REDIRECT_URI is set)\n`
+        : "";
+    return `\n\nGoogle Cloud → APIs & Services → Credentials → **Web application** client (your EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) → **Authorized redirect URIs** → add **every** line below (path matters: both /oauthredirect and /oauth2redirect):\n${httpsLine}${lines}\n${expo}\nSave and wait 5–15 minutes.\n\nThen open **each** OAuth client of type **Android** (debug + release) → **Advanced** → enable **Custom URI scheme** (Google turned this off by default for new apps; without it, Play often fails even if the Web client is correct).\n\nIf you use **EXPO_PUBLIC_GOOGLE_ANDROID_BROWSER_REDIRECT_URI** (https), the app uses **browser** Google Sign-In on Android and does not rely on native custom schemes.`;
+  }, [
+    googleWebClientId,
+    googleAndroidClientIdDebug,
+    googleAndroidClientIdRelease,
+    expoGoogleAuthProxyRedirect,
+    androidBrowserOAuthRedirect,
+  ]);
+
   useEffect(() => {
-    if (Platform.OS !== "android" || isExpoGo) return;
-    if (!googleWebClientId) return;
-    GoogleSignin.configure({
-      webClientId: googleWebClientId,
-      offlineAccess: false,
-    });
+    if (!__DEV__ || Platform.OS !== "android" || !isExpoGo || !googleWebClientId) return;
+    if (expoGoogleAuthProxyRedirect) return;
+    console.warn(
+      "[Google] Expo Go: set EXPO_PUBLIC_EXPO_ACCOUNT to your Expo username (or EXPO_PUBLIC_GOOGLE_AUTH_EXPO_REDIRECT_URI) so Google OAuth uses https://auth.expo.io/… Add that URL to the Web OAuth client Authorized redirect URIs.",
+    );
+  }, [isExpoGo, expoGoogleAuthProxyRedirect, googleWebClientId]);
+
+  useEffect(() => {
+    if (!__DEV__ || !isExpoGo || !googleWebClientId || !expoGoogleAuthProxyRedirect) return;
+    const full = Constants.expoConfig?.originalFullName;
+    if (typeof full === "string" && full.startsWith("@anonymous/")) {
+      console.warn(
+        `[Google] Expo Go: manifest originalFullName is ${full}. If Google opens auth.expo.io then shows "Something went wrong trying to finish signing in", run "npx expo login" so the proxy matches your registered redirect, or set EXPO_PUBLIC_GOOGLE_AUTH_EXPO_REDIRECT_URI to the exact URI in Google Cloud (e.g. ${expoGoogleAuthProxyRedirect}). For a reliable flow use a dev build (native Google Sign-In).`,
+      );
+    }
+  }, [isExpoGo, googleWebClientId, expoGoogleAuthProxyRedirect]);
+
+  // Android dev/release only — @react-native-google-signin is not in Expo Go; dynamic import avoids crashing StoreClient.
+  useEffect(() => {
+    if (Platform.OS !== "android" || isExpoGo || !googleWebClientId) return;
+    let cancelled = false;
+    void import("@react-native-google-signin/google-signin")
+      .then(({ GoogleSignin }) => {
+        if (cancelled) return;
+        GoogleSignin.configure({
+          webClientId: googleWebClientId,
+          offlineAccess: false,
+        });
+      })
+      .catch(() => {
+        /* dev build without native module linked */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [googleWebClientId, isExpoGo]);
 
   const effectiveIos = googleIosClientId || googleWebClientId;
@@ -178,16 +331,25 @@ export default function LoginScreen() {
   }, [oauthAndroidReturnUrl]);
 
   const googleAuthRequestConfig =
-    Platform.OS === "android" && isExpoGo
+    Platform.OS === "android" && !isExpoGo && androidBrowserOAuthRedirect
       ? {
           webClientId: effectiveWeb || fallback,
           clientId: googleWebClientId || effectiveWeb || fallback,
+          redirectUri: androidBrowserOAuthRedirect,
+        }
+      : Platform.OS === "android" && isExpoGo
+      ? {
+          webClientId: effectiveWeb || fallback,
+          clientId: googleWebClientId || effectiveWeb || fallback,
+          ...(expoGoogleAuthProxyRedirect
+            ? { redirectUri: expoGoogleAuthProxyRedirect }
+            : {}),
         }
       : Platform.OS === "android" && androidOAuthUseWebClient && googleWebClientId
         ? {
             webClientId: effectiveWeb || fallback,
             clientId: googleWebClientId || effectiveWeb || fallback,
-            redirectUri: packageRedirectUri,
+            redirectUri: expoGoogleAuthProxyRedirect ?? packageRedirectUri,
           }
         : Platform.OS === "android" && googleAndroidClientId && !androidOAuthUseWebClient
           ? {
@@ -212,38 +374,6 @@ export default function LoginScreen() {
   const [googleAuthRequest, googleResponse, googlePromptAsync] =
     useIdTokenAuthRequest(googleAuthRequestConfig);
 
-  useEffect(() => {
-    if (!__DEV__ || Platform.OS !== "android") return;
-    const clip = (s: string) => (s ? `${s.slice(0, 28)}…` : "(empty)");
-    console.log(
-      "[Google] Expo Go:",
-      isExpoGo,
-      "| Android OAuth via Web client:",
-      androidOAuthUseWebClient,
-      "| resolved Android client:",
-      clip(googleAndroidClientId),
-      "| DEBUG:",
-      clip(googleAndroidClientIdDebug),
-      "| RELEASE:",
-      clip(googleAndroidClientIdRelease),
-      "| WEB:",
-      clip(googleWebClientId),
-      "| redirect (auth):",
-      isExpoGo ? "(Expo Go → Web client + auth.expo.io)" : oauthAndroidReturnUrl,
-      "| installedRedirect:",
-      androidInstalledRedirectUri ?? "(none)",
-    );
-  }, [
-    oauthAndroidReturnUrl,
-    androidInstalledRedirectUri,
-    androidOAuthUseWebClient,
-    googleAndroidClientId,
-    googleAndroidClientIdDebug,
-    googleAndroidClientIdRelease,
-    googleWebClientId,
-    isExpoGo,
-  ]);
-
   // id_token arrives asynchronously after code exchange; use response state
   const googleSignInPending = React.useRef(false);
   useEffect(() => {
@@ -260,16 +390,26 @@ export default function LoginScreen() {
       const errCode = p?.error ?? "unknown_error";
       const errDesc = p?.error_description?.trim() ?? "";
       const d = errDesc.toLowerCase();
-      const androidCustomSchemeHint =
+      const mentionsWebClientOrScheme =
+        d.includes("web client") ||
+        d.includes("custom scheme") ||
+        d.includes("custom uri") ||
+        d.includes("redirect_uri") ||
+        errCode === "redirect_uri_mismatch";
+      const webClientRedirectHint =
+        Platform.OS === "android" && mentionsWebClientOrScheme
+          ? googleWebClientRedirectUriConsoleHint
+          : "";
+      const androidAdvancedHint =
         Platform.OS === "android" &&
         (d.includes("custom uri scheme") || d.includes("not enabled for your android client"))
-          ? "\n\nFix: Google Cloud → Credentials → this Android OAuth client → Advanced → enable “Custom URI scheme” → Save. Wait a few minutes."
+          ? "\n\nAlso: Android OAuth client → Advanced → enable “Custom URI scheme” if Google asks for it."
           : "";
       Alert.alert(
         "Google Sign-In failed",
         errDesc
-          ? `${errCode}\n\n${errDesc}${androidCustomSchemeHint}`
-          : `${errCode}\n\nIf this is Android: add SHA-1 to the Android OAuth client for package com.kram.mobile, or enable Custom URI scheme (Advanced) if you see that error.`,
+          ? `${errCode}\n\n${errDesc}${webClientRedirectHint}${androidAdvancedHint}`
+          : `${errCode}\n\nIf this is Android: add SHA-1 to the Android OAuth client for package com.kram.mobile, or enable Custom URI scheme (Advanced) if you see that error.${webClientRedirectHint}`,
       );
       return;
     }
@@ -298,9 +438,25 @@ export default function LoginScreen() {
         Alert.alert("Sign In Failed", err.message || "Could not sign in with Google");
       })
       .finally(() => setSocialLoading(false));
-  }, [googleResponse]);
+  }, [googleResponse, googleWebClientRedirectUriConsoleHint]);
 
   const handleContinueWithGoogle = async () => {
+    if (__DEV__) {
+      const mode =
+        Platform.OS === "android"
+          ? isExpoGo
+            ? "android+ExpoGo"
+            : "android+native"
+          : Platform.OS === "ios"
+            ? "ios"
+            : Platform.OS;
+      console.log("[Google] Continue with Google pressed", `(${mode})`);
+      if (Platform.OS === "android" && isExpoGo) {
+        console.warn(
+          "[Google] Expo Go uses browser OAuth (Custom Tabs). “Web client / custom scheme” errors = add Authorized redirect URIs on the Web OAuth client, or use a dev build (expo run:android) for native Google Sign-In like the emulator.",
+        );
+      }
+    }
     const hasConfig =
       Platform.OS === "ios"
         ? Boolean(googleWebClientId || googleIosClientId)
@@ -330,8 +486,21 @@ export default function LoginScreen() {
       return;
     }
 
-    // Android (dev / release build): native SDK — avoids Custom Tabs + redirect never returning to the app.
-    if (Platform.OS === "android" && !isExpoGo) {
+    // Android (dev / release): native SDK unless HTTPS browser redirect is configured (Play-friendly, no custom URI scheme).
+    if (Platform.OS === "android" && !isExpoGo && !androidBrowserOAuthRedirect) {
+      let GoogleSignin: typeof import("@react-native-google-signin/google-signin").GoogleSignin;
+      let statusCodes: typeof import("@react-native-google-signin/google-signin").statusCodes;
+      try {
+        ({ GoogleSignin, statusCodes } = await import(
+          "@react-native-google-signin/google-signin"
+        ));
+      } catch {
+        Alert.alert(
+          "Google Sign-In unavailable",
+          "This build does not include the native Google Sign-In module. Use Expo Go with browser Google, or rebuild: npx expo run:android",
+        );
+        return;
+      }
       try {
         setSocialLoading(true);
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -342,21 +511,67 @@ export default function LoginScreen() {
         const tokens = await GoogleSignin.getTokens();
         const idToken = tokens.idToken;
         if (!idToken) {
-          throw new Error(
+          if (__DEV__) {
+            console.warn(
+              "[Google Android] getTokens returned no idToken — check EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (Web client) in .env",
+            );
+          }
+          Alert.alert(
+            "Sign In Failed",
             "No ID token from Google. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (Web client) in .env for server-verifiable tokens.",
           );
+          return;
         }
-        await authService.loginWithExternalToken("google", idToken);
-        router.replace("/(tabs)");
+        if (__DEV__) {
+          console.log(
+            "[Google Android] calling BFF:",
+            `${APP_CONFIG.API_BASE_URL}/MobileBff/auth/google`,
+          );
+        }
+        try {
+          await authService.loginWithExternalToken("google", idToken);
+          router.replace("/(tabs)");
+        } catch (apiError: unknown) {
+          const msg =
+            apiError instanceof Error ? apiError.message : "Could not complete sign in";
+          if (__DEV__) {
+            console.warn("[Google Android] backend rejected token (Google OK, API failed):", apiError);
+          }
+          Alert.alert(
+            "Sign In Failed",
+            `Your Google account was accepted, but login with our servers failed.\n\n${msg}`,
+          );
+        }
       } catch (error: unknown) {
-        const err = error as { code?: string; message?: string };
+        const err = error as { code?: string | number; message?: string };
         if (err.code === statusCodes.SIGN_IN_CANCELLED) {
           return;
         }
-        Alert.alert(
-          "Sign In Failed",
-          err.message || "Could not sign in with Google",
-        );
+        if (__DEV__) {
+          console.warn(
+            "[Google Android] failed before BFF call (hasPlayServices, signIn, or getTokens):",
+            error,
+          );
+        }
+        const rawMsg = err.message || "Could not sign in with Google";
+        const codeNum = Number(err.code);
+        const isDeveloperError =
+          codeNum === 10 ||
+          /DEVELOPER_ERROR|developer error/i.test(rawMsg);
+        const mentionsCustomWebClient =
+          /custom uri scheme|not allowed for.*web|web client/i.test(rawMsg);
+        const playSigningHint = !__DEV__
+          ? "\n\nPlay Store installs are signed with Google’s app signing key (not your upload key). In Play Console → Test / release → App integrity → App signing: copy the App signing key certificate SHA-1 and add it to the Android OAuth client that matches EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_RELEASE (package com.kram.mobile). Enable Advanced → Custom URI scheme on that Android client if Google asks."
+          : "";
+        const gcpWebRedirectHint = mentionsCustomWebClient
+          ? googleWebClientRedirectUriConsoleHint
+          : "";
+        const devHint = isDeveloperError
+          ? __DEV__
+            ? "\n\nGoogle “Developer Error” = your app signature is not registered for this Android OAuth client. In Google Cloud Console → APIs & Services → Credentials, open the Android client whose ID matches EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_DEBUG. Set package name com.kram.mobile and add the SHA-1 from your debug keystore:\nkeytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android\n(EAS/local release builds use a different keystore — add that SHA-1 to the release Android client.) Save, wait a few minutes, try again."
+            : `\n\nGoogle “Developer Error” on a release/Play build: open the Android OAuth client matching EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_RELEASE, set package com.kram.mobile, and add the correct SHA-1 (EAS/upload keystore for sideload; Play App signing certificate SHA-1 for Play installs).${playSigningHint}`
+          : "";
+        Alert.alert("Sign In Failed", `${rawMsg}${gcpWebRedirectHint}${devHint}`);
       } finally {
         setSocialLoading(false);
       }
@@ -410,7 +625,7 @@ export default function LoginScreen() {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      identityToken = credential.identityToken;
+      identityToken = credential.identityToken ?? undefined;
       if (!identityToken) {
         throw new Error("No identity token received from Apple");
       }

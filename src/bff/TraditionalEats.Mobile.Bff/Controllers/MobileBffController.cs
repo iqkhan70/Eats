@@ -1129,6 +1129,18 @@ public class MobileBffController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// OAuth 2.0 redirect URI for Android when using the Web client with an https:// callback (no custom URI scheme).
+    /// Register this exact URL on the Google Cloud Web OAuth client. The in-app browser lands here with ?code=; Expo closes the session when the URL matches.
+    /// </summary>
+    [HttpGet("oauth/google-callback")]
+    [AllowAnonymous]
+    public IActionResult GoogleOAuthBrowserCallback()
+    {
+        const string html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"/><title>Sign in</title></head><body><p>Sign-in complete. You can return to the app.</p></body></html>";
+        return Content(html, "text/html", System.Text.Encoding.UTF8);
+    }
+
     [HttpPost("auth/apple")]
     public async Task<IActionResult> LoginWithApple([FromBody] AppleLoginRequest request)
     {

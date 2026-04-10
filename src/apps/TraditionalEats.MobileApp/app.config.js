@@ -1,5 +1,5 @@
 // Merges app.json with extra URL schemes so deep links (including OAuth) can open the app.
-// Primary OAuth redirect from expo-auth-session: com.<android.package>:/oauthredirect (see login.tsx).
+// OAuth redirects: com.<package>:/oauthredirect (Expo) and com.googleusercontent.apps.*:/oauth2redirect (Google native); see login.tsx.
 // Optional: schemes derived from Android OAuth client IDs (harmless if unused).
 const appJson = require("./app.json");
 
