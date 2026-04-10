@@ -27,6 +27,9 @@ module.exports = () => {
       ? [expo.scheme]
       : [];
   const set = new Set(base);
+  const pkg = "com.kram.mobile";
+  // Always register the package-style scheme because Android browser OAuth returns to com.<package>:/oauthredirect.
+  set.add(pkg);
   for (const id of [
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_DEBUG,
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID_RELEASE,
@@ -36,7 +39,6 @@ module.exports = () => {
     if (s) set.add(s);
   }
   const list = [...set];
-  const pkg = "com.kram.mobile";
   const rest = list.filter((s) => s !== pkg);
   // Put package scheme first so OAuth / Linking prefer com.<package>:/… (see expo-auth-session Android redirect).
   expo.scheme = list.includes(pkg) ? [pkg, ...rest] : list;

@@ -1148,26 +1148,39 @@ public class MobileBffController : ControllerBase
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; color: #111827; }
     a { color: #0d99ff; }
     .muted { color: #6b7280; }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      background: #0d99ff;
+      color: white;
+      font: inherit;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
   <p>Finishing sign-in and returning to the app…</p>
-  <p id="manual" class="muted" style="display:none;">
-    If the app does not open automatically,
-    <a id="fallback" href="#">tap here to return to Kram</a>.
-  </p>
+  <div id="manual" style="display:none;">
+    <p class="muted">If Kram does not open automatically, continue below.</p>
+    <button id="fallback" type="button">Continue to Kram</button>
+  </div>
   <script>
     (function () {
       var appUrl = "com.kram.mobile:/oauthredirect" + window.location.search + window.location.hash;
+      var openApp = function () {
+        window.location.href = appUrl;
+      };
       try {
-        window.location.replace(appUrl);
+        openApp();
       } catch (e) {
         // ignore and show manual link below
       }
       window.setTimeout(function () {
         var fallback = document.getElementById("fallback");
         var manual = document.getElementById("manual");
-        if (fallback) fallback.href = appUrl;
+        if (fallback) fallback.onclick = openApp;
         if (manual) manual.style.display = "block";
       }, 1200);
     })();
