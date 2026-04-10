@@ -50,6 +50,8 @@
         ]
       },
       "infoPlist": {
+        "CFBundleDisplayName": "Kram",
+        "CFBundleName": "Kram",
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
         "ITSAppUsesNonExemptEncryption": false
