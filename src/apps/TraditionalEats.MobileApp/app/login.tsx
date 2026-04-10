@@ -22,9 +22,9 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import * as Application from "expo-application";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import { exchangeCodeAsync, makeRedirectUri } from "expo-auth-session";
+import { makeRedirectUri, ResponseType } from "expo-auth-session";
 import {
-  discovery as googleDiscovery,
+  useAuthRequest as useGoogleAuthRequest,
   useIdTokenAuthRequest,
 } from "expo-auth-session/providers/google";
 import {
@@ -296,6 +296,14 @@ export default function LoginScreen() {
       }),
     [],
   );
+  // Browser OAuth can return to a real app route to avoid Expo Router's temporary "page not found" flash.
+  const androidBrowserReturnUrl = React.useMemo(
+    () =>
+      makeRedirectUri({
+        native: `${Application.applicationId}:/login`,
+      }),
+    [],
+  );
 
   const androidInstalledRedirectUri = React.useMemo(
     () => googleAndroidInstalledAppRedirectUri(googleAndroidClientId),
@@ -305,10 +313,11 @@ export default function LoginScreen() {
   /** Must match Google’s redirect and openAuthSessionAsync returnUrl (Android: event.url.startsWith(returnUrl)). */
   const oauthAndroidReturnUrl = React.useMemo(() => {
     if (Platform.OS !== "android") return packageRedirectUri;
-    if (androidBrowserOAuthRedirect) return packageRedirectUri;
+    if (androidBrowserOAuthRedirect) return androidBrowserReturnUrl;
     if (isExpoGo || androidOAuthUseWebClient) return packageRedirectUri;
     return androidInstalledRedirectUri ?? packageRedirectUri;
   }, [
+    androidBrowserReturnUrl,
     androidInstalledRedirectUri,
     androidOAuthUseWebClient,
     isExpoGo,
@@ -334,14 +343,26 @@ export default function LoginScreen() {
     return () => sub.remove();
   }, [oauthAndroidReturnUrl]);
 
+  const browserGoogleAuthRequestConfig = React.useMemo(
+    () => ({
+      webClientId: effectiveWeb || fallback,
+      clientId: googleWebClientId || effectiveWeb || fallback,
+      redirectUri: androidBrowserOAuthRedirect || packageRedirectUri,
+      responseType: ResponseType.IdToken,
+    }),
+    [
+      androidBrowserOAuthRedirect,
+      effectiveWeb,
+      fallback,
+      googleWebClientId,
+      packageRedirectUri,
+    ],
+  );
+  const [browserGoogleAuthRequest] =
+    useGoogleAuthRequest(browserGoogleAuthRequestConfig);
+
   const googleAuthRequestConfig =
-    Platform.OS === "android" && !isExpoGo && androidBrowserOAuthRedirect
-      ? {
-          webClientId: effectiveWeb || fallback,
-          clientId: googleWebClientId || effectiveWeb || fallback,
-          redirectUri: androidBrowserOAuthRedirect,
-        }
-      : Platform.OS === "android" && isExpoGo
+    Platform.OS === "android" && isExpoGo
       ? {
           webClientId: effectiveWeb || fallback,
           clientId: googleWebClientId || effectiveWeb || fallback,
@@ -492,7 +513,7 @@ export default function LoginScreen() {
     }
 
     if (Platform.OS === "android" && !isExpoGo && androidBrowserOAuthRedirect) {
-      if (!googleAuthRequest?.url) {
+        if (!browserGoogleAuthRequest?.url) {
         Alert.alert(
           "Google Sign-In unavailable",
           "Google sign-in is still loading. Please try again in a moment.",
@@ -505,8 +526,8 @@ export default function LoginScreen() {
         googleOAuthSessionActiveRef.current = true;
 
         const result = await WebBrowser.openAuthSessionAsync(
-          googleAuthRequest.url,
-          packageRedirectUri,
+          browserGoogleAuthRequest.url,
+          androidBrowserReturnUrl,
         );
 
         if (result.type === "cancel" || result.type === "dismiss") {
@@ -518,39 +539,28 @@ export default function LoginScreen() {
           return;
         }
 
-        const parsed = googleAuthRequest.parseReturnUrl(result.url);
-        if (parsed.type !== "success" || !parsed.params.code) {
+        const parsed = browserGoogleAuthRequest.parseReturnUrl(result.url);
+        const idToken =
+          parsed.params?.id_token ?? parsed.authentication?.idToken;
+        if (parsed.type === "success" && idToken) {
+          await authService.loginWithExternalToken("google", idToken);
+          router.replace("/(tabs)");
+          return;
+        }
+
+        if (parsed.type !== "success") {
           const errMessage =
-            parsed.type === "error"
-              ? parsed.error?.description || parsed.error?.message
-              : "Could not complete Google sign-in.";
+            parsed.error?.description ||
+            parsed.error?.message ||
+            "Could not complete Google sign-in.";
           Alert.alert("Sign In Failed", errMessage);
           return;
         }
 
-        const tokenResponse = await exchangeCodeAsync(
-          {
-            clientId: googleWebClientId || effectiveWeb || fallback,
-            code: parsed.params.code,
-            redirectUri: androidBrowserOAuthRedirect,
-            extraParams: {
-              code_verifier: googleAuthRequest.codeVerifier || "",
-            },
-          },
-          googleDiscovery,
+        Alert.alert(
+          "Sign In Failed",
+          "Google sign-in completed but no ID token was returned.",
         );
-
-        const idToken = tokenResponse.idToken;
-        if (!idToken) {
-          Alert.alert(
-            "Sign In Failed",
-            "Google sign-in completed but no ID token was returned.",
-          );
-          return;
-        }
-
-        await authService.loginWithExternalToken("google", idToken);
-        router.replace("/(tabs)");
       } catch (error: any) {
         Alert.alert(
           "Sign In Failed",

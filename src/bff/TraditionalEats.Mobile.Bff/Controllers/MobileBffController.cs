@@ -1168,7 +1168,7 @@ public class MobileBffController : ControllerBase
   </div>
   <script>
     (function () {
-      var appUrl = "com.kram.mobile:/oauthredirect" + window.location.search + window.location.hash;
+      var appUrl = "com.kram.mobile:/login" + window.location.search + window.location.hash;
       var openApp = function () {
         window.location.href = appUrl;
       };
