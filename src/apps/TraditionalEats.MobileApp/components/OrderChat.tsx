@@ -9,10 +9,11 @@ import {
   ActivityIndicator,
   ScrollView,
   Keyboard,
-  InteractionManager,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getOrderChatMessages,
   connectChatHub,
@@ -63,12 +64,15 @@ interface OrderChatProps {
 
 export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const androidInputBottomInset =
+    Platform.OS === "android" ? Math.max(insets.bottom - 10, 0) : 0;
 
   const scrollRef = useRef<ScrollView | null>(null);
   const hasRedirectedRef = useRef(false);
@@ -101,16 +105,6 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
     });
   }, []);
 
-  const settleAndScrollToBottom = useCallback((animated = true) => {
-    InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollRef.current?.scrollToEnd({ animated });
-        });
-      });
-    });
-  }, []);
-
   useEffect(() => {
     // scroll on new messages / first load
     const t = setTimeout(() => scrollToBottom(true), 50);
@@ -119,12 +113,15 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
 
   useEffect(() => {
     const handleKeyboardShow = () => {
-      setTimeout(() => settleAndScrollToBottom(true), 120);
-      setTimeout(() => settleAndScrollToBottom(true), 260);
+      requestAnimationFrame(() => {
+        scrollToBottom(true);
+      });
     };
 
     const handleKeyboardHide = () => {
-      setTimeout(() => settleAndScrollToBottom(true), 60);
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+      });
     };
 
     const showSubscription = Keyboard.addListener(
@@ -140,7 +137,7 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [settleAndScrollToBottom]);
+  }, [scrollToBottom]);
 
   useEffect(() => {
     let mounted = true;
@@ -341,7 +338,14 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
       </View>
 
       {/* Input row: stays above keyboard because screen wraps with KeyboardAvoidingView */}
-      <View style={styles.inputRow}>
+      <View
+        style={[
+          styles.inputRow,
+          androidInputBottomInset > 0
+            ? { paddingBottom: androidInputBottomInset }
+            : null,
+        ]}
+      >
         <TextInput
           style={styles.input}
           placeholder={
@@ -355,7 +359,7 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
           editable={true}
           multiline
           maxLength={2000}
-          onFocus={() => setTimeout(() => settleAndScrollToBottom(true), 160)}
+          onFocus={() => requestAnimationFrame(() => scrollToBottom(true))}
         />
         <TouchableOpacity
           style={[

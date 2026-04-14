@@ -12,11 +12,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  InteractionManager,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authService } from "../services/auth";
 import {
   connectVendorChatHub,
@@ -133,6 +133,7 @@ export default function VendorChat({
   vendorName?: string;
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const SKEW_MS = 2 * 60 * 1000;
   const [messages, setMessages] = useState<VendorChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +147,8 @@ export default function VendorChat({
   const [paymentDescription, setPaymentDescription] = useState("");
   const [sendingPaymentRequest, setSendingPaymentRequest] = useState(false);
   const canRequestCustomPayment = viewerRole !== "Customer";
+  const androidInputBottomInset =
+    Platform.OS === "android" ? Math.max(insets.bottom - 10, 0) : 0;
 
   const scrollRef = useRef<ScrollView | null>(null);
   const hasRedirectedRef = useRef(false);
@@ -193,16 +196,6 @@ export default function VendorChat({
     });
   }, []);
 
-  const settleAndScrollToBottom = useCallback((animated = true) => {
-    InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollRef.current?.scrollToEnd({ animated });
-        });
-      });
-    });
-  }, []);
-
   useEffect(() => {
     const t = setTimeout(() => scrollToBottom(true), 50);
     return () => clearTimeout(t);
@@ -210,12 +203,15 @@ export default function VendorChat({
 
   useEffect(() => {
     const handleKeyboardShow = () => {
-      setTimeout(() => settleAndScrollToBottom(true), 120);
-      setTimeout(() => settleAndScrollToBottom(true), 260);
+      requestAnimationFrame(() => {
+        scrollToBottom(true);
+      });
     };
 
     const handleKeyboardHide = () => {
-      setTimeout(() => settleAndScrollToBottom(true), 60);
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+      });
     };
 
     const showSubscription = Keyboard.addListener(
@@ -231,7 +227,7 @@ export default function VendorChat({
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [settleAndScrollToBottom]);
+  }, [scrollToBottom]);
 
   useEffect(() => {
     let mounted = true;
@@ -582,7 +578,14 @@ export default function VendorChat({
         )}
       </View>
 
-      <View style={styles.inputRow}>
+      <View
+        style={[
+          styles.inputRow,
+          androidInputBottomInset > 0
+            ? { paddingBottom: androidInputBottomInset }
+            : null,
+        ]}
+      >
         {canRequestCustomPayment ? (
           <TouchableOpacity
             style={[
@@ -609,7 +612,7 @@ export default function VendorChat({
           editable={true}
           multiline
           maxLength={2000}
-          onFocus={() => setTimeout(() => settleAndScrollToBottom(true), 160)}
+          onFocus={() => requestAnimationFrame(() => scrollToBottom(true))}
         />
         <TouchableOpacity
           style={[
