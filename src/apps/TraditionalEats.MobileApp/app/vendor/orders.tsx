@@ -28,6 +28,7 @@ import { api } from "../../services/api";
 import BottomSearchBar from "../../components/BottomSearchBar";
 import AppHeader from "../../components/AppHeader";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { formatLocalOrderDateTime } from "../../config/dateTime";
 
 interface Restaurant {
   restaurantId: string;
@@ -717,7 +718,7 @@ export default function VendorOrdersScreen() {
                             Order #{order.orderId.substring(0, 8)}
                           </Text>
                           <Text style={styles.orderDate}>
-                            {new Date(order.createdAt).toLocaleString()}
+                            {formatLocalOrderDateTime(order.createdAt)}
                           </Text>
                           {!!(
                             restaurantNameById.get(order.restaurantId) ?? ""

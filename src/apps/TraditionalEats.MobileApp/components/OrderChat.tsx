@@ -22,6 +22,7 @@ import {
   type ChatMessage,
 } from "../services/chat";
 import { isPaymentRequest, parsePaymentRequest, type PaymentRequestMetadata } from "../types/paymentRequest";
+import { formatLocalChatTimestamp } from "../config/dateTime";
 
 function isAuthError(message: string): boolean {
   const lower = (message || "").toLowerCase();
@@ -49,15 +50,7 @@ function getSenderLabel(msg: ChatMessage): string {
 }
 
 function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
+  return formatLocalChatTimestamp(iso);
 }
 
 interface OrderChatProps {

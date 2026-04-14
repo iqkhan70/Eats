@@ -14,6 +14,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { authService } from "../../services/auth";
 import { api } from "../../services/api";
 import AppHeader from "../../components/AppHeader";
+import { formatLocalOrderDateTime } from "../../config/dateTime";
 
 interface VendorApprovalDto {
   id: string;
@@ -143,13 +144,7 @@ export default function AdminVendorApprovalsScreen() {
                   <Text style={styles.email}>{item.userEmail}</Text>
                   <Text style={styles.date}>
                     Requested:{" "}
-                    {new Date(item.requestedAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatLocalOrderDateTime(item.requestedAt)}
                   </Text>
                 </View>
                 <TouchableOpacity

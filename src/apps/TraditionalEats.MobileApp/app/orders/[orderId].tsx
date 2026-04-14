@@ -19,6 +19,7 @@ import ReviewForm from "../../components/ReviewForm";
 import ReviewDisplay, { Review } from "../../components/ReviewDisplay";
 import { authService } from "../../services/auth";
 import AppHeader from "../../components/AppHeader";
+import { formatLocalOrderDateTime } from "../../config/dateTime";
 
 interface RestaurantLight {
   restaurantId: string;
@@ -517,13 +518,7 @@ export default function OrderDetailsScreen() {
                   )}
                   <Text style={styles.orderDate}>
                     Placed on{" "}
-                    {new Date(order.createdAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatLocalOrderDateTime(order.createdAt)}
                   </Text>
                 </View>
                 <View
@@ -603,15 +598,7 @@ export default function OrderDetailsScreen() {
                   <Ionicons name="time-outline" size={20} color="#666" />
                   <Text style={styles.infoText}>
                     Estimated delivery:{" "}
-                    {new Date(order.estimatedDeliveryAt).toLocaleDateString(
-                      "en-US",
-                      {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      },
-                    )}
+                    {formatLocalOrderDateTime(order.estimatedDeliveryAt)}
                   </Text>
                 </View>
               )}
@@ -667,15 +654,7 @@ export default function OrderDetailsScreen() {
                           {statusEntry.status}
                         </Text>
                         <Text style={styles.timelineDate}>
-                          {new Date(statusEntry.changedAt).toLocaleDateString(
-                            "en-US",
-                            {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            },
-                          )}
+                          {formatLocalOrderDateTime(statusEntry.changedAt)}
                         </Text>
                         {statusEntry.notes && (
                           <Text style={styles.timelineNotes}>

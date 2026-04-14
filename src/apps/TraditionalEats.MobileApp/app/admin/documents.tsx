@@ -16,6 +16,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import AppHeader from "../../components/AppHeader";
+import { formatLocalOrderDateTime } from "../../config/dateTime";
 
 interface Document {
   documentId: string;
@@ -194,8 +195,7 @@ export default function AdminDocumentsScreen() {
   };
 
   const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return formatLocalOrderDateTime(dateString);
   };
 
   if (loading && !refreshing) {

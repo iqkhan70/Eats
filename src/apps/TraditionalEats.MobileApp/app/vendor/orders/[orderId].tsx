@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { api } from "../../../services/api";
 import AppHeader from "../../../components/AppHeader";
+import { formatLocalOrderDateTime } from "../../../config/dateTime";
 
 const statusOptions = [
   "Pending",
@@ -383,7 +384,7 @@ export default function VendorOrderDetailsScreen() {
                 Vendor: {restaurantName?.trim() ? restaurantName : restaurantId}
               </Text>
               <Text style={styles.muted}>
-                Created: {new Date(order.createdAt).toLocaleString()}
+                Created: {formatLocalOrderDateTime(order.createdAt)}
               </Text>
             </View>
           )}
@@ -468,7 +469,7 @@ export default function VendorOrderDetailsScreen() {
               {order.statusHistory.map((h) => (
                 <View key={h.id} style={styles.historyRow}>
                   <Text style={styles.body}>
-                    {new Date(h.changedAt).toLocaleString()} — {h.status}
+                    {formatLocalOrderDateTime(h.changedAt)} — {h.status}
                   </Text>
                   {!!h.notes && <Text style={styles.muted}>{h.notes}</Text>}
                 </View>

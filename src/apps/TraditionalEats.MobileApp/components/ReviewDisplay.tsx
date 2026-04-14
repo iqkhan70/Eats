@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ReviewRating from "./ReviewRating";
+import { formatLocalDate } from "../config/dateTime";
 
 export interface Review {
   reviewId: string;
@@ -53,12 +54,7 @@ export default function ReviewDisplay({ reviews }: ReviewDisplayProps) {
 
 function ReviewCard({ review }: { review: Review }) {
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    return formatLocalDate(dateString);
   };
 
   return (

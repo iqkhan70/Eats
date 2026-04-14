@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../services/api";
 import { authService } from "../../services/auth";
 import BottomSearchBar from "../../components/BottomSearchBar";
+import { formatLocalOrderDateTime } from "../../config/dateTime";
 
 interface RestaurantLight {
   restaurantId: string;
@@ -610,13 +611,7 @@ export default function OrdersScreen() {
                       Order #{item.orderId.substring(0, 8)}
                     </Text>
                     <Text style={styles.orderDate}>
-                      {new Date(item.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatLocalOrderDateTime(item.createdAt)}
                     </Text>
                   </View>
 

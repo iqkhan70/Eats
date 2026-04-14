@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { api } from "../../../../services/api";
+import { formatLocalDate } from "../../../../config/dateTime";
 
 interface StaffMember {
   userId: string;
@@ -200,7 +201,7 @@ export default function ManageStaffScreen() {
                     <Text style={styles.staffEmail}>{member.email}</Text>
                   )}
                   <Text style={styles.staffDate}>
-                    Added {new Date(member.createdAt).toLocaleDateString()}
+                    Added {formatLocalDate(member.createdAt)}
                   </Text>
                 </View>
               </View>

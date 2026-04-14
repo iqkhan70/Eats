@@ -36,6 +36,7 @@ import {
   parseOrderPlaced,
   type OrderPlacedMetadata,
 } from "../types/orderPlaced";
+import { formatLocalChatTimestamp } from "../config/dateTime";
 
 function isAuthError(message: string): boolean {
   const lower = (message || "").toLowerCase();
@@ -96,15 +97,7 @@ function getSenderLabel(
 }
 
 function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
+  return formatLocalChatTimestamp(iso);
 }
 
 export default function VendorChat({
