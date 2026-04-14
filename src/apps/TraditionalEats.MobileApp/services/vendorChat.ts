@@ -151,7 +151,6 @@ export async function connectVendorChatHub(
         metadataJson: (raw?.metadataJson ?? raw?.MetadataJson) as string | undefined,
       };
       if (msg.message != null || msg.metadataJson != null) {
-        onMessage(msg);
         broadcastMessage(msg);
       }
     } catch (e) {

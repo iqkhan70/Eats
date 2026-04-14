@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Keyboard,
+  InteractionManager,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -99,11 +101,46 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
     });
   }, []);
 
+  const settleAndScrollToBottom = useCallback((animated = true) => {
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollToEnd({ animated });
+        });
+      });
+    });
+  }, []);
+
   useEffect(() => {
     // scroll on new messages / first load
     const t = setTimeout(() => scrollToBottom(true), 50);
     return () => clearTimeout(t);
   }, [messages.length, scrollToBottom]);
+
+  useEffect(() => {
+    const handleKeyboardShow = () => {
+      setTimeout(() => settleAndScrollToBottom(true), 120);
+      setTimeout(() => settleAndScrollToBottom(true), 260);
+    };
+
+    const handleKeyboardHide = () => {
+      setTimeout(() => settleAndScrollToBottom(true), 60);
+    };
+
+    const showSubscription = Keyboard.addListener(
+      "keyboardDidShow",
+      handleKeyboardShow,
+    );
+    const hideSubscription = Keyboard.addListener(
+      "keyboardDidHide",
+      handleKeyboardHide,
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [settleAndScrollToBottom]);
 
   useEffect(() => {
     let mounted = true;
@@ -318,7 +355,7 @@ export default function OrderChat({ orderId, fullScreen }: OrderChatProps) {
           editable={true}
           multiline
           maxLength={2000}
-          onFocus={() => setTimeout(() => scrollToBottom(true), 60)}
+          onFocus={() => setTimeout(() => settleAndScrollToBottom(true), 160)}
         />
         <TouchableOpacity
           style={[

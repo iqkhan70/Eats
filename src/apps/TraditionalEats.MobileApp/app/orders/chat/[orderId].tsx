@@ -6,12 +6,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  Keyboard,
-  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useHeaderHeight } from "@react-navigation/elements";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import OrderChat from "../../../components/OrderChat";
 import AppHeader from "../../../components/AppHeader";
@@ -28,10 +25,6 @@ export default function OrderChatScreen() {
   const orderId = params.orderId ?? "";
   const restaurantName =
     typeof params.restaurantName === "string" ? params.restaurantName : "";
-
-  // ✅ This returns the real navigation header height (even if you aren't rendering one,
-  // it still helps set a correct keyboard offset on iOS)
-  const headerHeight = useHeaderHeight();
 
   if (!orderId) return null;
 
@@ -109,9 +102,6 @@ export default function OrderChatScreen() {
       <KeyboardAvoidingView
         style={styles.kb}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        // ✅ IMPORTANT: iOS needs an offset so input sits ABOVE the keyboard.
-        // If you use a custom header (like you do), this still works well.
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
         <AppHeader
           title={
@@ -120,12 +110,9 @@ export default function OrderChatScreen() {
               : `Order #${orderId.substring(0, 8)} – Chat`
           }
         />
-
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.chatWrapper}>
-            <OrderChat orderId={orderId} fullScreen />
-          </View>
-        </TouchableWithoutFeedback>
+        <View style={styles.chatWrapper}>
+          <OrderChat orderId={orderId} fullScreen />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

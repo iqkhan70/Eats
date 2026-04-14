@@ -9,12 +9,9 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Keyboard,
-  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useHeaderHeight } from "@react-navigation/elements";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import VendorChat from "../../../components/VendorChat";
 import { authService } from "../../../services/auth";
@@ -28,8 +25,6 @@ export default function RestaurantChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ restaurantId?: string }>();
   const restaurantId = params.restaurantId ?? "";
-
-  const headerHeight = useHeaderHeight();
 
   const [loading, setLoading] = useState(true);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -142,48 +137,45 @@ export default function RestaurantChatScreen() {
       <KeyboardAvoidingView
         style={styles.kb}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.kbInner}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="chevron-back" size={28} color="#333" />
-            <Text style={styles.backLabel}>Back</Text>
-          </TouchableOpacity>
+        <View style={styles.kbInner}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="chevron-back" size={28} color="#333" />
+              <Text style={styles.backLabel}>Back</Text>
+            </TouchableOpacity>
 
-          <Text style={styles.title} numberOfLines={1}>
-            {vendorName.trim() ? `${vendorName} – Chat` : "Vendor Chat"}
-          </Text>
+            <Text style={styles.title} numberOfLines={1}>
+              {vendorName.trim() ? `${vendorName} – Chat` : "Vendor Chat"}
+            </Text>
 
-          <View style={styles.backButton} />
-        </View>
-
-        <View style={styles.chatWrapper}>
-          {loading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color="#6200ee" />
-              <Text style={styles.loadingText}>Starting chat...</Text>
-            </View>
-          ) : conversationId ? (
-            <VendorChat
-              conversationId={conversationId}
-              viewerRole="Customer"
-              restaurantId={restaurantId}
-              vendorName={vendorName}
-            />
-          ) : (
-            <View style={styles.center}>
-              <Text style={styles.errorText}>Could not start chat.</Text>
-            </View>
-          )}
-        </View>
+            <View style={styles.backButton} />
           </View>
-        </TouchableWithoutFeedback>
+
+          <View style={styles.chatWrapper}>
+            {loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator size="large" color="#6200ee" />
+                <Text style={styles.loadingText}>Starting chat...</Text>
+              </View>
+            ) : conversationId ? (
+              <VendorChat
+                conversationId={conversationId}
+                viewerRole="Customer"
+                restaurantId={restaurantId}
+                vendorName={vendorName}
+              />
+            ) : (
+              <View style={styles.center}>
+                <Text style={styles.errorText}>Could not start chat.</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

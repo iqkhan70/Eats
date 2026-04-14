@@ -5,12 +5,9 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Keyboard,
-  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useHeaderHeight } from "@react-navigation/elements";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getVendorConversationMessages } from "../../../services/vendorChat";
 import VendorChat from "../../../components/VendorChat";
@@ -29,8 +26,6 @@ export default function VendorMessageThreadScreen() {
     typeof params.restaurantId === "string" ? params.restaurantId : "";
   const vendorName =
     typeof params.vendorName === "string" ? params.vendorName : "";
-
-  const headerHeight = useHeaderHeight();
 
   useEffect(() => {
     if (!conversationId) return;
@@ -75,23 +70,20 @@ export default function VendorMessageThreadScreen() {
       <KeyboardAvoidingView
         style={styles.kb}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.kbInner}>
-            <AppHeader
-              title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
-            />
-            <View style={styles.chatWrapper}>
-              <VendorChat
-            conversationId={conversationId}
-            viewerRole="Vendor"
-            restaurantId={restaurantId || undefined}
-            vendorName={vendorName || undefined}
+        <View style={styles.kbInner}>
+          <AppHeader
+            title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
           />
-            </View>
+          <View style={styles.chatWrapper}>
+            <VendorChat
+              conversationId={conversationId}
+              viewerRole="Vendor"
+              restaurantId={restaurantId || undefined}
+              vendorName={vendorName || undefined}
+            />
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

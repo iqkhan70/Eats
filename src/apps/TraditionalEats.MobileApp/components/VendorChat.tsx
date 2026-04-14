@@ -11,6 +11,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  InteractionManager,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -100,6 +102,23 @@ function formatTime(iso: string): string {
   return formatLocalChatTimestamp(iso);
 }
 
+function isSameVendorMessage(
+  left: VendorChatMessage,
+  right: VendorChatMessage,
+): boolean {
+  if (left.messageId && right.messageId) {
+    return left.messageId === right.messageId;
+  }
+
+  return (
+    left.conversationId === right.conversationId &&
+    left.senderId === right.senderId &&
+    left.sentAt === right.sentAt &&
+    left.message === right.message &&
+    (left.metadataJson ?? "") === (right.metadataJson ?? "")
+  );
+}
+
 export default function VendorChat({
   conversationId,
   viewerRole = "Customer",
@@ -126,6 +145,7 @@ export default function VendorChat({
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
   const [sendingPaymentRequest, setSendingPaymentRequest] = useState(false);
+  const canRequestCustomPayment = viewerRole !== "Customer";
 
   const scrollRef = useRef<ScrollView | null>(null);
   const hasRedirectedRef = useRef(false);
@@ -173,17 +193,56 @@ export default function VendorChat({
     });
   }, []);
 
+  const settleAndScrollToBottom = useCallback((animated = true) => {
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollToEnd({ animated });
+        });
+      });
+    });
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => scrollToBottom(true), 50);
     return () => clearTimeout(t);
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
+    const handleKeyboardShow = () => {
+      setTimeout(() => settleAndScrollToBottom(true), 120);
+      setTimeout(() => settleAndScrollToBottom(true), 260);
+    };
+
+    const handleKeyboardHide = () => {
+      setTimeout(() => settleAndScrollToBottom(true), 60);
+    };
+
+    const showSubscription = Keyboard.addListener(
+      "keyboardDidShow",
+      handleKeyboardShow,
+    );
+    const hideSubscription = Keyboard.addListener(
+      "keyboardDidHide",
+      handleKeyboardHide,
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [settleAndScrollToBottom]);
+
+  useEffect(() => {
     let mounted = true;
 
     const onMessage = (msg: VendorChatMessage) => {
       if (mounted && msg.conversationId === conversationId) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) =>
+          prev.some((existing) => isSameVendorMessage(existing, msg))
+            ? prev
+            : [...prev, msg],
+        );
       }
     };
 
@@ -229,6 +288,8 @@ export default function VendorChat({
   }, [conversationId, router]);
 
   const handleSendPaymentRequest = async () => {
+    if (!canRequestCustomPayment) return;
+
     if (!paymentAmount.trim()) {
       Alert.alert("Error", "Please enter an amount");
       return;
@@ -522,16 +583,18 @@ export default function VendorChat({
       </View>
 
       <View style={styles.inputRow}>
-        <TouchableOpacity
-          style={[
-            styles.paymentButton,
-            !connected && styles.sendButtonDisabled,
-          ]}
-          onPress={() => setShowPaymentModal(true)}
-          disabled={!connected}
-        >
-          <Ionicons name="cash" size={20} color="#fff" />
-        </TouchableOpacity>
+        {canRequestCustomPayment ? (
+          <TouchableOpacity
+            style={[
+              styles.paymentButton,
+              !connected && styles.sendButtonDisabled,
+            ]}
+            onPress={() => setShowPaymentModal(true)}
+            disabled={!connected}
+          >
+            <Ionicons name="cash" size={20} color="#fff" />
+          </TouchableOpacity>
+        ) : null}
 
         <TextInput
           style={styles.input}
@@ -546,7 +609,7 @@ export default function VendorChat({
           editable={true}
           multiline
           maxLength={2000}
-          onFocus={() => setTimeout(() => scrollToBottom(true), 60)}
+          onFocus={() => setTimeout(() => settleAndScrollToBottom(true), 160)}
         />
         <TouchableOpacity
           style={[
@@ -566,72 +629,74 @@ export default function VendorChat({
       </View>
 
       {/* Payment Request Modal */}
-      <Modal
-        visible={showPaymentModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
+      {canRequestCustomPayment ? (
+        <Modal
+          visible={showPaymentModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPaymentModal(false)}
         >
-          <ScrollView
-            style={styles.modalScrollView}
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={true}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.modalOverlay}
           >
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Request Custom Payment</Text>
-                <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                  <Ionicons name="close" size={24} color="#333" />
+            <ScrollView
+              style={styles.modalScrollView}
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+            >
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Request Custom Payment</Text>
+                  <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
+                    <Ionicons name="close" size={24} color="#333" />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.modalLabel}>Amount ($)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g., 25.00"
+                  keyboardType="decimal-pad"
+                  value={paymentAmount}
+                  onChangeText={setPaymentAmount}
+                  editable={!sendingPaymentRequest}
+                />
+
+                <Text style={styles.modalLabel}>Description (optional)</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.modalInputLarge]}
+                  placeholder="e.g., Custom dessert platter"
+                  value={paymentDescription}
+                  onChangeText={setPaymentDescription}
+                  multiline
+                  maxLength={200}
+                  editable={!sendingPaymentRequest}
+                />
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    (!paymentAmount.trim() || sendingPaymentRequest) &&
+                      styles.modalButtonDisabled,
+                  ]}
+                  onPress={handleSendPaymentRequest}
+                  disabled={!paymentAmount.trim() || sendingPaymentRequest}
+                >
+                  {sendingPaymentRequest ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.modalButtonText}>
+                      Send Payment Request
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
-
-              <Text style={styles.modalLabel}>Amount ($)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="e.g., 25.00"
-                keyboardType="decimal-pad"
-                value={paymentAmount}
-                onChangeText={setPaymentAmount}
-                editable={!sendingPaymentRequest}
-              />
-
-              <Text style={styles.modalLabel}>Description (optional)</Text>
-              <TextInput
-                style={[styles.modalInput, styles.modalInputLarge]}
-                placeholder="e.g., Custom dessert platter"
-                value={paymentDescription}
-                onChangeText={setPaymentDescription}
-                multiline
-                maxLength={200}
-                editable={!sendingPaymentRequest}
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  (!paymentAmount.trim() || sendingPaymentRequest) &&
-                    styles.modalButtonDisabled,
-                ]}
-                onPress={handleSendPaymentRequest}
-                disabled={!paymentAmount.trim() || sendingPaymentRequest}
-              >
-                {sendingPaymentRequest ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.modalButtonText}>
-                    Send Payment Request
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Modal>
+      ) : null}
     </View>
   );
 }

@@ -5,11 +5,8 @@ import {
   SafeAreaView,
   StyleSheet,
   View,
-  Keyboard,
-  TouchableWithoutFeedback,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useHeaderHeight } from "@react-navigation/elements";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import VendorChat from "../../components/VendorChat";
 import AppHeader from "../../components/AppHeader";
@@ -28,8 +25,6 @@ export default function MessageThreadScreen() {
     typeof params.restaurantId === "string" ? params.restaurantId : "";
   const vendorName =
     typeof params.vendorName === "string" ? params.vendorName : "";
-
-  const headerHeight = useHeaderHeight();
 
   useEffect(() => {
     if (!conversationId) return;
@@ -70,23 +65,20 @@ export default function MessageThreadScreen() {
       <KeyboardAvoidingView
         style={styles.kb}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.kbInner}>
-            <AppHeader
-              title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
-            />
-            <View style={styles.chatWrapper}>
-              <VendorChat
+        <View style={styles.kbInner}>
+          <AppHeader
+            title={vendorName.trim() ? `${vendorName} – Chat` : "Chat"}
+          />
+          <View style={styles.chatWrapper}>
+            <VendorChat
               conversationId={conversationId}
               viewerRole="Customer"
               restaurantId={restaurantId || undefined}
-            vendorName={vendorName || undefined}
-          />
-            </View>
+              vendorName={vendorName || undefined}
+            />
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
