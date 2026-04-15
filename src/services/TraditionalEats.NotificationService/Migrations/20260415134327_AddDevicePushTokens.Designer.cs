@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TraditionalEats.NotificationService.Data;
 
@@ -11,9 +12,11 @@ using TraditionalEats.NotificationService.Data;
 namespace TraditionalEats.NotificationService.Migrations
 {
     [DbContext(typeof(NotificationDbContext))]
-    partial class NotificationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260415134327_AddDevicePushTokens")]
+    partial class AddDevicePushTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -223,51 +226,6 @@ namespace TraditionalEats.NotificationService.Migrations
                     b.HasIndex("Type");
 
                     b.ToTable("Templates");
-                });
-
-            modelBuilder.Entity("TraditionalEats.NotificationService.Entities.OrderReminderSchedule", b =>
-                {
-                    b.Property<Guid>("OrderReminderScheduleId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(36)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("IntervalMinutes")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<int>("MaxReminders")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("NextReminderAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<Guid>("OrderId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<int>("ReminderCountSent")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("RestaurantId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("OrderReminderScheduleId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("NextReminderAt");
-
-                    b.HasIndex("OrderId")
-                        .IsUnique();
-
-                    b.ToTable("OrderReminderSchedules");
                 });
 #pragma warning restore 612, 618
         }

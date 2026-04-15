@@ -174,6 +174,57 @@ public class MobileBffController : ControllerBase
         };
 
     // ----------------------------
+    // Push notifications
+    // ----------------------------
+
+    [HttpPost("notifications/push-tokens")]
+    [Authorize]
+    public async Task<IActionResult> RegisterPushToken([FromBody] RegisterPushTokenRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PushToken))
+            return BadRequest(new { message = "pushToken is required" });
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("NotificationService");
+            ForwardBearerToken(client);
+            var response = await client.PostAsJsonAsync("/api/notification/push-tokens", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(string.IsNullOrWhiteSpace(content) ? "{}" : content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error registering push token");
+            return StatusCode(500, new { message = "Failed to register push token" });
+        }
+    }
+
+    [HttpDelete("notifications/push-tokens")]
+    [Authorize]
+    public async Task<IActionResult> UnregisterPushToken([FromBody] UnregisterPushTokenRequest request)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("NotificationService");
+            ForwardBearerToken(client);
+
+            using var message = new HttpRequestMessage(HttpMethod.Delete, "/api/notification/push-tokens")
+            {
+                Content = JsonContent.Create(request)
+            };
+
+            var response = await client.SendAsync(message);
+            var content = await response.Content.ReadAsStringAsync();
+            return JsonString(string.IsNullOrWhiteSpace(content) ? "{}" : content, (int)response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error unregistering push token");
+            return StatusCode(500, new { message = "Failed to unregister push token" });
+        }
+    }
+
+    // ----------------------------
     // Geocode ZIP (for restaurant search by zip + radius)
     // ----------------------------
 
@@ -3427,6 +3478,8 @@ public record ResetPasswordRequest(string Token, string Email, string NewPasswor
 public record UpdateOrderStatusRequest(string Status, string? Notes);
 public record BroadcastVendorChatRequest(string? Message);
 public record CreateReviewRequest(Guid OrderId, Guid RestaurantId, CreateReviewDto Review);
+public record RegisterPushTokenRequest(string PushToken, string? DeviceId, string? Platform, string? DeviceName);
+public record UnregisterPushTokenRequest(string? PushToken, string? DeviceId);
 public record CreateReviewDto(int Rating, string? Comment, List<string>? Tags);
 public record UpdateReviewDto(int? Rating, string? Comment, List<string>? Tags);
 public record AddResponseRequest(string Response);

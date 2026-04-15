@@ -446,6 +446,25 @@ public class RestaurantController : ControllerBase
             return StatusCode(500, new { message = "Failed to remove staff links" });
         }
     }
+
+    [HttpGet("{restaurantId}/notification-recipients")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetNotificationRecipients(Guid restaurantId)
+    {
+        try
+        {
+            var recipients = await _restaurantService.GetRestaurantNotificationRecipientsAsync(restaurantId);
+            if (recipients == null)
+                return NotFound(new { message = "Restaurant not found" });
+
+            return Ok(recipients);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get notification recipients for restaurant {RestaurantId}", restaurantId);
+            return StatusCode(500, new { message = "Failed to get notification recipients" });
+        }
+    }
 }
 
 public record ToggleStatusRequest(bool IsActive);

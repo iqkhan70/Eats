@@ -95,6 +95,8 @@ builder.Services.AddHttpClient<IRestaurantServiceClient, RestaurantServiceClient
 
 // Background service for handling order status events
 builder.Services.AddHostedService<OrderStatusEventHandler>();
+builder.Services.AddHostedService<OrderPlacedEventHandler>();
+builder.Services.AddHostedService<OrderReminderBackgroundService>();
 
 var app = builder.Build();
 

@@ -32,6 +32,14 @@
       ],
       "expo-web-browser",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo.png",
+          "color": "#f97316",
+          "defaultChannel": "orders"
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Allow Kram to access your photos so you can upload images for your vendor listings."

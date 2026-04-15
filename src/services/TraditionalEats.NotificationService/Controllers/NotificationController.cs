@@ -166,6 +166,40 @@ public class NotificationController : ControllerBase
             return StatusCode(500, new { message = "Failed to get notification preferences" });
         }
     }
+
+    [HttpPost("push-tokens")]
+    [Authorize]
+    public async Task<IActionResult> RegisterPushToken([FromBody] RegisterPushTokenDto dto)
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            await _notificationService.RegisterPushTokenAsync(userId, dto);
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to register push token");
+            return StatusCode(500, new { message = "Failed to register push token" });
+        }
+    }
+
+    [HttpDelete("push-tokens")]
+    [Authorize]
+    public async Task<IActionResult> UnregisterPushToken([FromBody] UnregisterPushTokenDto dto)
+    {
+        try
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            await _notificationService.UnregisterPushTokenAsync(userId, dto);
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to unregister push token");
+            return StatusCode(500, new { message = "Failed to unregister push token" });
+        }
+    }
 }
 
 public record SendEmailRequest(string To, string? Subject, string? Body);

@@ -19,6 +19,9 @@ public interface INotificationService
     Task<List<NotificationDto>> GetUserNotificationsAsync(Guid userId, int skip = 0, int take = 20);
     Task<bool> SetNotificationPreferenceAsync(Guid userId, SetNotificationPreferenceDto dto);
     Task<List<NotificationPreferenceDto>> GetNotificationPreferencesAsync(Guid userId);
+    Task RegisterPushTokenAsync(Guid userId, RegisterPushTokenDto dto);
+    Task UnregisterPushTokenAsync(Guid userId, UnregisterPushTokenDto dto);
+    Task<int> SendPushToUsersAsync(IEnumerable<Guid> userIds, string type, string title, string body, Dictionary<string, string>? data = null);
 }
 
 public class NotificationService : INotificationService
@@ -133,7 +136,7 @@ public class NotificationService : INotificationService
                     sent = await SendSmsAsync(dto.Recipient!, dto.Body);
                     break;
                 case "push":
-                    sent = await SendPushNotificationAsync(dto.Recipient!, dto.Subject, dto.Body);
+                    sent = await SendPushNotificationAsync(dto.Recipient!, dto.Subject, dto.Body, dto.Data);
                     break;
             }
 
@@ -218,6 +221,116 @@ public class NotificationService : INotificationService
             NotificationType = p.NotificationType,
             IsEnabled = p.IsEnabled
         }).ToList();
+    }
+
+    public async Task RegisterPushTokenAsync(Guid userId, RegisterPushTokenDto dto)
+    {
+        var pushToken = dto.PushToken.Trim();
+        if (string.IsNullOrWhiteSpace(pushToken))
+            throw new InvalidOperationException("Push token is required.");
+
+        var deviceId = string.IsNullOrWhiteSpace(dto.DeviceId)
+            ? pushToken
+            : dto.DeviceId.Trim();
+
+        var token = await _context.DevicePushTokens
+            .FirstOrDefaultAsync(t => t.PushToken == pushToken);
+
+        if (token == null)
+        {
+            token = new DevicePushToken
+            {
+                DevicePushTokenId = Guid.NewGuid(),
+                UserId = userId,
+                PushToken = pushToken,
+                DeviceId = deviceId,
+                Platform = string.IsNullOrWhiteSpace(dto.Platform) ? "unknown" : dto.Platform.Trim(),
+                DeviceName = string.IsNullOrWhiteSpace(dto.DeviceName) ? null : dto.DeviceName.Trim(),
+                IsActive = true,
+                LastRegisteredAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _context.DevicePushTokens.Add(token);
+        }
+        else
+        {
+            token.UserId = userId;
+            token.DeviceId = deviceId;
+            token.Platform = string.IsNullOrWhiteSpace(dto.Platform) ? token.Platform : dto.Platform.Trim();
+            token.DeviceName = string.IsNullOrWhiteSpace(dto.DeviceName) ? token.DeviceName : dto.DeviceName.Trim();
+            token.IsActive = true;
+            token.LastRegisteredAt = DateTime.UtcNow;
+            token.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UnregisterPushTokenAsync(Guid userId, UnregisterPushTokenDto dto)
+    {
+        var query = _context.DevicePushTokens.Where(t => t.UserId == userId);
+
+        if (!string.IsNullOrWhiteSpace(dto.PushToken))
+            query = query.Where(t => t.PushToken == dto.PushToken);
+
+        if (!string.IsNullOrWhiteSpace(dto.DeviceId))
+            query = query.Where(t => t.DeviceId == dto.DeviceId);
+
+        var tokens = await query.ToListAsync();
+        if (tokens.Count == 0)
+            return;
+
+        foreach (var token in tokens)
+        {
+            token.IsActive = false;
+            token.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<int> SendPushToUsersAsync(
+        IEnumerable<Guid> userIds,
+        string type,
+        string title,
+        string body,
+        Dictionary<string, string>? data = null)
+    {
+        var distinctUserIds = userIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (distinctUserIds.Count == 0)
+            return 0;
+
+        var enabledUsers = await GetPushEnabledUsersAsync(distinctUserIds, type);
+        if (enabledUsers.Count == 0)
+            return 0;
+
+        var tokens = await _context.DevicePushTokens
+            .Where(t => enabledUsers.Contains(t.UserId) && t.IsActive)
+            .ToListAsync();
+
+        var sentCount = 0;
+        foreach (var token in tokens)
+        {
+            var sent = await SendNotificationAsync(new SendNotificationDto(
+                token.UserId,
+                "push",
+                type,
+                title,
+                body,
+                token.PushToken,
+                null,
+                data));
+
+            if (sent)
+                sentCount++;
+        }
+
+        return sentCount;
     }
 
     private async Task<bool> SendEmailAsync(string recipient, string subject, string body)
@@ -442,12 +555,72 @@ public class NotificationService : INotificationService
         }
     }
 
-    private async Task<bool> SendPushNotificationAsync(string recipient, string title, string body)
+    private async Task<bool> SendPushNotificationAsync(
+        string recipient,
+        string title,
+        string body,
+        Dictionary<string, string>? data)
     {
-        // TODO: Implement push notification sending (Firebase, APNs, etc.)
-        _logger.LogInformation("Sending push notification to {Recipient} with title {Title}", recipient, title);
-        await Task.Delay(100); // Simulate async operation
-        return true;
+        if (string.IsNullOrWhiteSpace(recipient))
+            return false;
+
+        try
+        {
+            using var httpClient = _httpClientFactory.CreateClient();
+            var payload = new
+            {
+                to = recipient,
+                title,
+                body,
+                sound = "default",
+                priority = "high",
+                channelId = "orders",
+                data
+            };
+
+            var response = await httpClient.PostAsync(
+                "https://exp.host/--/api/v2/push/send",
+                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"));
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Expo push send failed: Status={StatusCode}, Response={Response}", response.StatusCode, responseContent);
+                return false;
+            }
+
+            using var doc = JsonDocument.Parse(responseContent);
+            if (!doc.RootElement.TryGetProperty("data", out var dataElement))
+                return true;
+
+            if (dataElement.ValueKind == JsonValueKind.Object &&
+                dataElement.TryGetProperty("status", out var status))
+            {
+                return string.Equals(status.GetString(), "ok", StringComparison.OrdinalIgnoreCase);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending Expo push notification to {Recipient}", recipient);
+            return false;
+        }
+    }
+
+    private async Task<HashSet<Guid>> GetPushEnabledUsersAsync(IEnumerable<Guid> userIds, string notificationType)
+    {
+        var users = userIds.Distinct().ToList();
+        var disabledUsers = await _context.Preferences
+            .Where(p =>
+                users.Contains(p.UserId) &&
+                p.Channel == "push" &&
+                p.NotificationType == notificationType &&
+                !p.IsEnabled)
+            .Select(p => p.UserId)
+            .ToListAsync();
+
+        return users.Except(disabledUsers).ToHashSet();
     }
 
     private NotificationTemplateDto MapToDto(NotificationTemplate template)
@@ -514,7 +687,8 @@ public record SendNotificationDto(
     string Subject,
     string Body,
     string? Recipient,
-    Guid? TemplateId);
+    Guid? TemplateId,
+    Dictionary<string, string>? Data = null);
 
 public record NotificationDto
 {
@@ -544,3 +718,13 @@ public record NotificationPreferenceDto
     public string NotificationType { get; set; } = string.Empty;
     public bool IsEnabled { get; set; }
 }
+
+public record RegisterPushTokenDto(
+    string PushToken,
+    string? DeviceId,
+    string? Platform,
+    string? DeviceName);
+
+public record UnregisterPushTokenDto(
+    string? PushToken,
+    string? DeviceId);

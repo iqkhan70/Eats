@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from './api';
+import { syncPushTokenAsync, unregisterPushTokenAsync } from './pushNotifications';
 
 export interface LoginCredentials {
   email: string;
@@ -104,6 +105,7 @@ class AuthService {
 
   async logout(): Promise<void> {
     try {
+      await unregisterPushTokenAsync();
       const refreshToken = await AsyncStorage.getItem(this.REFRESH_TOKEN_KEY);
       if (refreshToken) {
         await api.post('/MobileBff/auth/logout', { refreshToken });
@@ -357,6 +359,10 @@ class AuthService {
   private async storeTokens(accessToken: string, refreshToken: string): Promise<void> {
     await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, accessToken);
     await AsyncStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
+    const roles = await this.getUserRoles();
+    if (roles.includes('Vendor') || roles.includes('Staff') || roles.includes('Admin')) {
+      await syncPushTokenAsync();
+    }
   }
 
   private async clearTokens(): Promise<void> {

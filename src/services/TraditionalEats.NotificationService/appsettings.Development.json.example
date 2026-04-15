@@ -7,6 +7,10 @@
     "OrderService": "http://localhost:5002",
     "OrderService:InternalApiKey": ""
   },
+  "Notifications": {
+    "OrderReminderIntervalMinutes": 10,
+    "OrderReminderMaxCount": 5
+  },
   "Vonage": {
     "Enabled": true,
     "ApiKey": "YOUR_VONAGE_API_KEY",

@@ -41,6 +41,7 @@ public interface IRestaurantService
     
     // Internal endpoints (called by other services)
     Task<bool> UpdateEloRatingAsync(Guid restaurantId, decimal eloRating);
+    Task<RestaurantNotificationRecipientsDto?> GetRestaurantNotificationRecipientsAsync(Guid restaurantId);
 }
 
 public class RestaurantService : IRestaurantService
@@ -786,6 +787,31 @@ public class RestaurantService : IRestaurantService
         await _context.SaveChangesAsync();
         return links.Count;
     }
+
+    public async Task<RestaurantNotificationRecipientsDto?> GetRestaurantNotificationRecipientsAsync(Guid restaurantId)
+    {
+        var restaurant = await _context.Restaurants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
+
+        if (restaurant == null)
+            return null;
+
+        var staffUserIds = await _context.RestaurantStaff
+            .AsNoTracking()
+            .Where(s => s.RestaurantId == restaurantId)
+            .Select(s => s.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        return new RestaurantNotificationRecipientsDto
+        {
+            RestaurantId = restaurant.RestaurantId,
+            RestaurantName = restaurant.Name,
+            OwnerUserId = restaurant.OwnerId,
+            StaffUserIds = staffUserIds
+        };
+    }
 }
 
 // DTOs
@@ -876,4 +902,12 @@ public record RestaurantStaffDto
     public Guid UserId { get; set; }
     public Guid RestaurantId { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public record RestaurantNotificationRecipientsDto
+{
+    public Guid RestaurantId { get; set; }
+    public string RestaurantName { get; set; } = string.Empty;
+    public Guid OwnerUserId { get; set; }
+    public List<Guid> StaffUserIds { get; set; } = new();
 }
