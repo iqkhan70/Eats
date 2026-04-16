@@ -241,6 +241,7 @@ services:
       RabbitMQ__Password: ${RABBITMQ_PASSWORD}
       Services__CustomerService: "http://customer-service:5001"
       Services__OrderService: "http://order-service:5002"
+      Services__RestaurantService: "http://restaurant-service:5007"
       Services__OrderService__InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
       Notifications__OrderReminderIntervalMinutes: ${NOTIFICATIONS_ORDER_REMINDER_INTERVAL_MINUTES:-10}
       Notifications__OrderReminderMaxCount: ${NOTIFICATIONS_ORDER_REMINDER_MAX_COUNT:-5}
