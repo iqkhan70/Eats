@@ -243,8 +243,8 @@ services:
       Services__OrderService: "http://order-service:5002"
       Services__RestaurantService: "http://restaurant-service:5007"
       Services__OrderService__InternalApiKey: ${ORDER_SERVICE_INTERNAL_API_KEY:-}
-      Notifications__OrderReminderIntervalMinutes: ${NOTIFICATIONS_ORDER_REMINDER_INTERVAL_MINUTES:-10}
-      Notifications__OrderReminderMaxCount: ${NOTIFICATIONS_ORDER_REMINDER_MAX_COUNT:-5}
+      Notifications__OrderReminderIntervalMinutes: ${NOTIFICATIONS_ORDER_REMINDER_INTERVAL_MINUTES:-5}
+      Notifications__OrderReminderMaxCount: ${NOTIFICATIONS_ORDER_REMINDER_MAX_COUNT:-3}
       Email__Enabled: ${EMAIL_ENABLED:-true}
       Email__Provider: ${EMAIL_PROVIDER:-Mailgun}
       Email__MailgunApiKey: ${EMAIL_MAILGUN_API_KEY:-}

@@ -127,6 +127,7 @@ public class NotificationService : INotificationService
         {
             // Send notification based on channel
             bool sent = false;
+            string? errorMessage = null;
             switch (dto.Channel.ToLower())
             {
                 case "email":
@@ -136,7 +137,9 @@ public class NotificationService : INotificationService
                     sent = await SendSmsAsync(dto.Recipient!, dto.Body);
                     break;
                 case "push":
-                    sent = await SendPushNotificationAsync(dto.Recipient!, dto.Subject, dto.Body, dto.Data);
+                    var pushResult = await SendPushNotificationAsync(dto.Recipient!, dto.Subject, dto.Body, dto.Data);
+                    sent = pushResult.Success;
+                    errorMessage = pushResult.ErrorMessage;
                     break;
             }
 
@@ -144,13 +147,13 @@ public class NotificationService : INotificationService
             notification.SentAt = sent ? DateTime.UtcNow : null;
             if (!sent)
             {
-                notification.ErrorMessage = "Failed to send notification";
+                notification.ErrorMessage = TruncateNotificationError(errorMessage ?? "Failed to send notification");
             }
         }
         catch (Exception ex)
         {
             notification.Status = "Failed";
-            notification.ErrorMessage = ex.Message;
+            notification.ErrorMessage = TruncateNotificationError(ex.Message);
             _logger.LogError(ex, "Failed to send notification {NotificationId}", notificationId);
         }
 
@@ -555,14 +558,14 @@ public class NotificationService : INotificationService
         }
     }
 
-    private async Task<bool> SendPushNotificationAsync(
+    private async Task<(bool Success, string? ErrorMessage)> SendPushNotificationAsync(
         string recipient,
         string title,
         string body,
         Dictionary<string, string>? data)
     {
         if (string.IsNullOrWhiteSpace(recipient))
-            return false;
+            return (false, "Missing Expo push recipient");
 
         try
         {
@@ -586,26 +589,97 @@ public class NotificationService : INotificationService
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Expo push send failed: Status={StatusCode}, Response={Response}", response.StatusCode, responseContent);
-                return false;
+                return (false, BuildExpoPushErrorMessage(responseContent));
             }
 
             using var doc = JsonDocument.Parse(responseContent);
             if (!doc.RootElement.TryGetProperty("data", out var dataElement))
-                return true;
+                return (true, null);
 
             if (dataElement.ValueKind == JsonValueKind.Object &&
                 dataElement.TryGetProperty("status", out var status))
             {
-                return string.Equals(status.GetString(), "ok", StringComparison.OrdinalIgnoreCase);
+                var isOk = string.Equals(status.GetString(), "ok", StringComparison.OrdinalIgnoreCase);
+                return isOk
+                    ? (true, null)
+                    : (false, BuildExpoPushErrorMessage(responseContent));
             }
 
-            return true;
+            return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending Expo push notification to {Recipient}", recipient);
-            return false;
+            return (false, ex.Message);
         }
+    }
+
+    private static string TruncateNotificationError(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+            return "Failed to send notification";
+
+        return errorMessage.Length <= 2000
+            ? errorMessage
+            : errorMessage[..2000];
+    }
+
+    private static string BuildExpoPushErrorMessage(string? responseContent)
+    {
+        if (string.IsNullOrWhiteSpace(responseContent))
+            return "Expo push send failed";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(responseContent);
+            if (!doc.RootElement.TryGetProperty("data", out var dataElement))
+                return TruncateNotificationError(responseContent);
+
+            if (dataElement.ValueKind == JsonValueKind.Object)
+                return BuildExpoPushErrorMessageFromData(dataElement) ?? TruncateNotificationError(responseContent);
+
+            if (dataElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in dataElement.EnumerateArray())
+                {
+                    var message = BuildExpoPushErrorMessageFromData(item);
+                    if (!string.IsNullOrWhiteSpace(message))
+                        return message;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall back to the raw response when Expo returns non-JSON content.
+        }
+
+        return TruncateNotificationError(responseContent);
+    }
+
+    private static string? BuildExpoPushErrorMessageFromData(JsonElement dataElement)
+    {
+        if (!dataElement.TryGetProperty("status", out var statusElement) ||
+            !string.Equals(statusElement.GetString(), "error", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var message = dataElement.TryGetProperty("message", out var messageElement)
+            ? messageElement.GetString()
+            : null;
+        string? detail = null;
+
+        if (dataElement.TryGetProperty("details", out var detailsElement) &&
+            detailsElement.ValueKind == JsonValueKind.Object &&
+            detailsElement.TryGetProperty("error", out var detailElement))
+        {
+            detail = detailElement.GetString();
+        }
+
+        if (!string.IsNullOrWhiteSpace(message) && !string.IsNullOrWhiteSpace(detail))
+            return TruncateNotificationError($"{message} ({detail})");
+
+        return TruncateNotificationError(message ?? detail);
     }
 
     private async Task<HashSet<Guid>> GetPushEnabledUsersAsync(IEnumerable<Guid> userIds, string notificationType)
