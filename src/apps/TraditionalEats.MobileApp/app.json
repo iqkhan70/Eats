@@ -62,6 +62,7 @@
         "CFBundleName": "Kram",
         "NSLocationWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Kram needs your location to show nearby vendors.",
+        "NSPushNotificationsUsageDescription": "We use notifications to alert you about new orders.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -76,7 +77,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "extra": {
