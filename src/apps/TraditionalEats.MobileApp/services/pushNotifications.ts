@@ -129,7 +129,14 @@ function getNotificationUrl(
   } | null | undefined,
 ): string | null {
   const data = response?.notification.request.content.data;
+  const orderId = typeof data?.orderId === "string" ? data.orderId.trim() : "";
+  const restaurantId =
+    typeof data?.restaurantId === "string" ? data.restaurantId.trim() : "";
   const urlValue = data?.url;
+  if (orderId && restaurantId) {
+    return `/vendor/orders/${encodeURIComponent(orderId)}?restaurantId=${encodeURIComponent(restaurantId)}`;
+  }
+
   return typeof urlValue === "string" && urlValue.trim() ? urlValue : null;
 }
 
