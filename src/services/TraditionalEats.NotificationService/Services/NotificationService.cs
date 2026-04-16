@@ -310,11 +310,25 @@ public class NotificationService : INotificationService
 
         var enabledUsers = await GetPushEnabledUsersAsync(distinctUserIds, type);
         if (enabledUsers.Count == 0)
+        {
+            _logger.LogInformation(
+                "Skipping push notification type {Type}: no users are enabled for push notifications.",
+                type);
             return 0;
+        }
 
         var tokens = await _context.DevicePushTokens
             .Where(t => enabledUsers.Contains(t.UserId) && t.IsActive)
             .ToListAsync();
+
+        if (tokens.Count == 0)
+        {
+            _logger.LogWarning(
+                "Skipping push notification type {Type}: no active device push tokens were found for users {UserIds}.",
+                type,
+                string.Join(", ", enabledUsers));
+            return 0;
+        }
 
         var sentCount = 0;
         foreach (var token in tokens)

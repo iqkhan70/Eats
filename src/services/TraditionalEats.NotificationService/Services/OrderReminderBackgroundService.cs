@@ -126,23 +126,30 @@ public class OrderReminderBackgroundService : BackgroundService
             ["reminderNumber"] = reminderNumber.ToString()
         };
 
-        await notificationService.SendPushToUsersAsync(
+        var sentCount = await notificationService.SendPushToUsersAsync(
             userIds,
             "order_placed_reminder",
             title,
             body,
             data);
 
-        schedule.ReminderCountSent = reminderNumber;
         schedule.UpdatedAt = DateTime.UtcNow;
+        schedule.NextReminderAt = DateTime.UtcNow.AddMinutes(schedule.IntervalMinutes);
+
+        if (sentCount <= 0)
+        {
+            _logger.LogWarning(
+                "Order reminder push was not delivered for OrderId={OrderId}. Schedule will retry at {NextReminderAt} without incrementing the reminder count.",
+                schedule.OrderId,
+                schedule.NextReminderAt);
+            return;
+        }
+
+        schedule.ReminderCountSent = reminderNumber;
 
         if (schedule.ReminderCountSent >= schedule.MaxReminders)
         {
             schedule.IsActive = false;
-        }
-        else
-        {
-            schedule.NextReminderAt = DateTime.UtcNow.AddMinutes(schedule.IntervalMinutes);
         }
     }
 

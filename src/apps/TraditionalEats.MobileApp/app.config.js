@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 // Merges app.json with extra URL schemes so deep links (including OAuth) can open the app.
 // OAuth redirects: com.<package>:/oauthredirect (Expo) and com.googleusercontent.apps.*:/oauth2redirect (Google native); see login.tsx.
 // Optional: schemes derived from Android OAuth client IDs (harmless if unused).
@@ -17,6 +19,25 @@ function googleSignInIosUrlSchemeFromWebClientId(webClientId) {
   const m = webClientId.trim().match(/^([a-zA-Z0-9._-]+)\.apps\.googleusercontent\.com$/);
   if (!m) return null;
   return `com.googleusercontent.apps.${m[1]}`;
+}
+
+function resolveGoogleServicesFile(configPath) {
+  const candidates = [];
+  if (configPath && typeof configPath === "string" && configPath.trim()) {
+    candidates.push(configPath.trim());
+  }
+  candidates.push("./google-services.json", "./android/app/google-services.json");
+
+  for (const candidate of candidates) {
+    const resolved = path.isAbsolute(candidate)
+      ? candidate
+      : path.resolve(__dirname, candidate);
+    if (fs.existsSync(resolved)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 module.exports = () => {
@@ -54,6 +75,16 @@ module.exports = () => {
     ]);
   }
   expo.plugins = plugins;
+
+  const googleServicesFile = resolveGoogleServicesFile(
+    process.env.GOOGLE_SERVICES_JSON,
+  );
+  if (googleServicesFile) {
+    expo.android = {
+      ...(expo.android || {}),
+      googleServicesFile,
+    };
+  }
 
   return { expo };
 };

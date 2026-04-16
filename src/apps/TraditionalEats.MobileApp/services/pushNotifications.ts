@@ -83,7 +83,15 @@ export async function syncPushTokenAsync(): Promise<void> {
 
     await AsyncStorage.setItem(LAST_PUSH_TOKEN_KEY, pushToken);
   } catch (error) {
-    console.warn("Push notification sync failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (Platform.OS === "android") {
+      console.warn(
+        "Push notification sync failed on Android. Verify Firebase/FCM is configured and app config points to google-services.json.",
+        message,
+      );
+    } else {
+      console.warn("Push notification sync failed:", message);
+    }
   }
 }
 
