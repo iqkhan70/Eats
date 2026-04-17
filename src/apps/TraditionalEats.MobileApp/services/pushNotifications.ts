@@ -162,12 +162,33 @@ function getNotificationUrl(
 export function observeNotificationResponses(
   onUrl: (url: string) => void,
 ): () => void {
-  let lastHandledUrl: string | null = null;
+  let lastHandledNotificationKey: string | null = null;
   let subscription: { remove: () => void } | null = null;
 
-  const maybeHandleUrl = (url: string | null) => {
-    if (!url || url === lastHandledUrl) return;
-    lastHandledUrl = url;
+  const maybeHandleResponse = (
+    response: {
+      notification?: {
+        request?: {
+          identifier?: string;
+          content?: {
+            data?: Record<string, unknown>;
+          };
+        };
+      };
+    } | null | undefined,
+  ) => {
+    const url = getNotificationUrl(response);
+    if (!url) return;
+
+    const identifier =
+      typeof response?.notification?.request?.identifier === "string"
+        ? response.notification.request.identifier.trim()
+        : "";
+    const notificationKey = identifier || url;
+
+    if (!notificationKey || notificationKey === lastHandledNotificationKey) return;
+
+    lastHandledNotificationKey = notificationKey;
     onUrl(url);
   };
 
@@ -175,12 +196,12 @@ export function observeNotificationResponses(
     if (!Notifications) return;
 
     void Notifications.getLastNotificationResponseAsync().then((response) => {
-      maybeHandleUrl(getNotificationUrl(response));
+      maybeHandleResponse(response);
     });
 
     subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        maybeHandleUrl(getNotificationUrl(response));
+        maybeHandleResponse(response);
       },
     );
   });
