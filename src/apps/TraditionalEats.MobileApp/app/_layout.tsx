@@ -12,10 +12,21 @@ import {
 } from "../services/pushNotifications";
 import { useRootNavigationState, useRouter } from "expo-router";
 
+const NOTIFICATION_NAVIGATION_DELAY_MS = 500;
+
 function PushNotificationsBootstrap() {
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
   const [pendingNotificationUrl, setPendingNotificationUrl] = useState<string | null>(null);
+
+  const replaceWithDelay = useCallback(
+    (url: string) => {
+      setTimeout(() => {
+        router.replace(url as never);
+      }, NOTIFICATION_NAVIGATION_DELAY_MS);
+    },
+    [router],
+  );
 
   const canOpenNotificationUrl = useCallback(async (url: string) => {
     if (!url.startsWith("/vendor/")) return true;
@@ -43,7 +54,7 @@ function PushNotificationsBootstrap() {
       if (!isAuthenticated) {
         await setPendingNotificationUrlAsync(url);
         requestAnimationFrame(() => {
-          router.replace("/login");
+          replaceWithDelay("/login");
         });
         return;
       }
@@ -52,16 +63,16 @@ function PushNotificationsBootstrap() {
       if (!canOpenUrl) {
         await setPendingNotificationUrlAsync(null);
         requestAnimationFrame(() => {
-          router.replace("/(tabs)");
+          replaceWithDelay("/(tabs)");
         });
         return;
       }
 
       requestAnimationFrame(() => {
-        router.replace(url as never);
+        replaceWithDelay(url);
       });
     },
-    [canOpenNotificationUrl, rootNavigationState?.key, router],
+    [canOpenNotificationUrl, replaceWithDelay, rootNavigationState?.key],
   );
 
   useEffect(() => {
@@ -102,16 +113,16 @@ function PushNotificationsBootstrap() {
       const canOpenUrl = await canOpenNotificationUrl(pendingUrl);
       if (!canOpenUrl) {
         requestAnimationFrame(() => {
-          router.replace("/(tabs)");
+          replaceWithDelay("/(tabs)");
         });
         return;
       }
 
       requestAnimationFrame(() => {
-        router.replace(pendingUrl as never);
+        replaceWithDelay(pendingUrl);
       });
     });
-  }, [canOpenNotificationUrl, rootNavigationState?.key, router]);
+  }, [canOpenNotificationUrl, replaceWithDelay, rootNavigationState?.key]);
 
   return null;
 }
