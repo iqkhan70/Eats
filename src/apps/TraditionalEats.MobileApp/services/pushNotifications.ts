@@ -7,6 +7,7 @@ import { api } from "./api";
 
 const PUSH_DEVICE_ID_KEY = "push_device_id";
 const LAST_PUSH_TOKEN_KEY = "last_push_token";
+const PENDING_NOTIFICATION_URL_KEY = "pending_notification_url";
 let notificationsConfigured = false;
 
 type NotificationsModule = Awaited<typeof import("expo-notifications")>;
@@ -115,6 +116,24 @@ export async function unregisterPushTokenAsync(): Promise<void> {
   } catch (error) {
     console.warn("Push notification unregister failed:", error);
   }
+}
+
+export async function setPendingNotificationUrlAsync(
+  url: string | null | undefined,
+): Promise<void> {
+  const normalizedUrl = typeof url === "string" ? url.trim() : "";
+  if (!normalizedUrl) {
+    await AsyncStorage.removeItem(PENDING_NOTIFICATION_URL_KEY);
+    return;
+  }
+
+  await AsyncStorage.setItem(PENDING_NOTIFICATION_URL_KEY, normalizedUrl);
+}
+
+export async function consumePendingNotificationUrlAsync(): Promise<string | null> {
+  const url = await AsyncStorage.getItem(PENDING_NOTIFICATION_URL_KEY);
+  await AsyncStorage.removeItem(PENDING_NOTIFICATION_URL_KEY);
+  return url?.trim() || null;
 }
 
 function getNotificationUrl(

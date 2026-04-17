@@ -33,6 +33,7 @@ import {
   RegisterCredentials,
 } from "../services/auth";
 import { APP_CONFIG } from "../config/api.config";
+import { consumePendingNotificationUrlAsync } from "../services/pushNotifications";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -99,6 +100,21 @@ type Tab = "signin" | "signup";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const redirectAfterAuth = React.useCallback(async () => {
+    const pendingUrl = await consumePendingNotificationUrlAsync();
+    if (pendingUrl?.startsWith("/vendor/")) {
+      const roles = await authService.getUserRoles();
+      const canOpenVendorRoute =
+        roles.includes("Vendor") ||
+        roles.includes("Staff") ||
+        roles.includes("Admin");
+
+      router.replace((canOpenVendorRoute ? pendingUrl : "/(tabs)") as never);
+      return;
+    }
+
+    router.replace((pendingUrl || "/(tabs)") as never);
+  }, [router]);
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [activeTab, setActiveTab] = useState<Tab>(
     tab === "signup" ? "signup" : "signin",
@@ -458,12 +474,12 @@ export default function LoginScreen() {
     googleSignInPending.current = false;
     authService
       .loginWithExternalToken("google", idToken)
-      .then(() => router.replace("/(tabs)"))
+      .then(() => redirectAfterAuth())
       .catch((err: Error) => {
         Alert.alert("Sign In Failed", err.message || "Could not sign in with Google");
       })
       .finally(() => setSocialLoading(false));
-  }, [googleResponse, googleWebClientRedirectUriConsoleHint]);
+  }, [googleResponse, googleWebClientRedirectUriConsoleHint, redirectAfterAuth]);
 
   const handleContinueWithGoogle = async () => {
     if (__DEV__) {
@@ -544,7 +560,7 @@ export default function LoginScreen() {
           parsed.params?.id_token ?? parsed.authentication?.idToken;
         if (parsed.type === "success" && idToken) {
           await authService.loginWithExternalToken("google", idToken);
-          router.replace("/(tabs)");
+          await redirectAfterAuth();
           return;
         }
 
@@ -617,7 +633,7 @@ export default function LoginScreen() {
         }
         try {
           await authService.loginWithExternalToken("google", idToken);
-          router.replace("/(tabs)");
+          await redirectAfterAuth();
         } catch (apiError: unknown) {
           const msg =
             apiError instanceof Error ? apiError.message : "Could not complete sign in";
@@ -727,7 +743,7 @@ export default function LoginScreen() {
         credential.email ?? undefined,
         fullName,
       );
-      router.replace("/(tabs)");
+      await redirectAfterAuth();
     } catch (error: any) {
       if (error?.code === "ERR_REQUEST_CANCELED") {
         return;
@@ -763,7 +779,7 @@ export default function LoginScreen() {
       setShowAppleEmailModal(false);
       setAppleEmailRecovery(null);
       setAppleRecoveryEmail("");
-      router.replace("/(tabs)");
+      await redirectAfterAuth();
     } catch (error: any) {
       Alert.alert("Sign In Failed", error?.message || "Could not link account");
     } finally {
@@ -781,7 +797,7 @@ export default function LoginScreen() {
       setLoading(true);
       const credentials: LoginCredentials = { email, password };
       await authService.login(credentials);
-      router.replace("/(tabs)");
+      await redirectAfterAuth();
     } catch (error: any) {
       Alert.alert("Login Failed", error.message || "Invalid credentials");
     } finally {
@@ -829,7 +845,7 @@ export default function LoginScreen() {
       };
       try {
         await authService.login(loginCreds);
-        router.replace("/(tabs)");
+        await redirectAfterAuth();
       } catch {
         setActiveTab("signin");
       }

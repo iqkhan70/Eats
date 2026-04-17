@@ -1,17 +1,68 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { authService } from "../services/auth";
 import {
+  consumePendingNotificationUrlAsync,
   configurePushNotificationsAsync,
   observeNotificationResponses,
+  setPendingNotificationUrlAsync,
   syncPushTokenAsync,
 } from "../services/pushNotifications";
-import { useRouter } from "expo-router";
+import { useRootNavigationState, useRouter } from "expo-router";
 
 function PushNotificationsBootstrap() {
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+  const [pendingNotificationUrl, setPendingNotificationUrl] = useState<string | null>(null);
+
+  const canOpenNotificationUrl = useCallback(async (url: string) => {
+    if (!url.startsWith("/vendor/")) return true;
+
+    const roles = await authService.getUserRoles();
+    return (
+      roles.includes("Vendor") ||
+      roles.includes("Staff") ||
+      roles.includes("Admin")
+    );
+  }, []);
+
+  const navigateToNotificationUrl = useCallback(
+    async (url: string) => {
+      if (!url) return;
+
+      if (!rootNavigationState?.key) {
+        setPendingNotificationUrl(url);
+        return;
+      }
+
+      setPendingNotificationUrl((currentUrl) => (currentUrl === url ? null : currentUrl));
+
+      const isAuthenticated = await authService.isAuthenticated();
+      if (!isAuthenticated) {
+        await setPendingNotificationUrlAsync(url);
+        requestAnimationFrame(() => {
+          router.replace("/login");
+        });
+        return;
+      }
+
+      const canOpenUrl = await canOpenNotificationUrl(url);
+      if (!canOpenUrl) {
+        await setPendingNotificationUrlAsync(null);
+        requestAnimationFrame(() => {
+          router.replace("/(tabs)");
+        });
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        router.replace(url as never);
+      });
+    },
+    [canOpenNotificationUrl, rootNavigationState?.key, router],
+  );
 
   useEffect(() => {
     void configurePushNotificationsAsync();
@@ -27,9 +78,40 @@ function PushNotificationsBootstrap() {
     });
 
     return observeNotificationResponses((url) => {
-      router.push(url as never);
+      void navigateToNotificationUrl(url);
     });
-  }, [router]);
+  }, [navigateToNotificationUrl]);
+
+  useEffect(() => {
+    if (!rootNavigationState?.key || !pendingNotificationUrl) return;
+
+    const url = pendingNotificationUrl;
+    setPendingNotificationUrl(null);
+    void navigateToNotificationUrl(url);
+  }, [navigateToNotificationUrl, pendingNotificationUrl, rootNavigationState?.key]);
+
+  useEffect(() => {
+    if (!rootNavigationState?.key) return;
+
+    void authService.isAuthenticated().then(async (isAuthenticated) => {
+      if (!isAuthenticated) return;
+
+      const pendingUrl = await consumePendingNotificationUrlAsync();
+      if (!pendingUrl) return;
+
+      const canOpenUrl = await canOpenNotificationUrl(pendingUrl);
+      if (!canOpenUrl) {
+        requestAnimationFrame(() => {
+          router.replace("/(tabs)");
+        });
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        router.replace(pendingUrl as never);
+      });
+    });
+  }, [canOpenNotificationUrl, rootNavigationState?.key, router]);
 
   return null;
 }
