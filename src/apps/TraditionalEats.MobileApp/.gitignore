@@ -63,6 +63,7 @@ web-build/
 *.p12
 *.key
 *.mobileprovision
+service-account.json
 
 # Metro
 .metro-health-check*
