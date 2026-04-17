@@ -207,6 +207,15 @@ export default function VendorOrderDetailsScreen() {
     return `Order #${orderId.slice(0, 8)}`;
   }, [orderId]);
 
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace("/vendor/orders");
+  }, [router]);
+
   useEffect(() => {
     if (!orderId || !restaurantId) {
       setError(
@@ -223,7 +232,7 @@ export default function VendorOrderDetailsScreen() {
       <AppHeader
         title={title}
         showBack
-        onBack={() => router.back()}
+        onBack={handleBack}
         right={
           <TouchableOpacity
             onPress={() =>
@@ -255,7 +264,7 @@ export default function VendorOrderDetailsScreen() {
           <Text style={styles.errorTitle}>Could not load order</Text>
           <Text style={styles.errorBody}>{error}</Text>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleBack}
             style={styles.primaryBtn}
           >
             <Text style={styles.primaryBtnText}>Go Back</Text>
@@ -265,7 +274,7 @@ export default function VendorOrderDetailsScreen() {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Order not found</Text>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleBack}
             style={styles.primaryBtn}
           >
             <Text style={styles.primaryBtnText}>Go Back</Text>
