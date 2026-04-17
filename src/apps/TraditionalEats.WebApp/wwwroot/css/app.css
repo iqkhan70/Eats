@@ -141,6 +141,31 @@ body {
     .rz-sidebar {
         max-width: 280px !important;
     }
+
+    .app-sidebar,
+    .rz-sidebar.app-sidebar,
+    .rz-layout > .app-sidebar {
+        left: 0 !important;
+        right: auto !important;
+        inset-inline-start: 0 !important;
+        inset-inline-end: auto !important;
+    }
+
+    .rz-layout:has(> .rz-sidebar-collapsed + .rz-sidebar-expanded) {
+        justify-content: start !important;
+    }
+
+    .rz-layout:has(> .rz-sidebar-collapsed + .rz-sidebar-expanded) .rz-header,
+    .rz-layout:has(> .rz-sidebar-collapsed + .rz-sidebar-expanded) .rz-footer {
+        margin-inline-start: 0 !important;
+        margin-inline-end: 0 !important;
+    }
+
+    .mobile-menu-btn {
+        display: block !important;
+        margin-left: 0 !important;
+        margin-right: 0.25rem !important;
+    }
     
     /* Fix form fields */
     .rz-form-field,

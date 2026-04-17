@@ -14,6 +14,8 @@
         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
             AlignItems="AlignItems.Center" Gap="0px" Style="width: 100%; padding: 0.75rem 1rem;"
             Class="header-container">
+            <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small"
+                Class="mobile-menu-btn" Style="display: none;" />
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center"
                 Class="logo-container">
                 <img src="images/logo.png" alt="Kram Logo" style="height: 40px; width: auto;" />
@@ -71,10 +73,46 @@
                     }
                 </RadzenStack>
             </div>
-            <RadzenButton Icon="menu" Click="@(() => ToggleSidebar())" Variant="Variant.Flat" Size="ButtonSize.Small"
-                Class="mobile-menu-btn" Style="display: none;" />
         </RadzenStack>
     </RadzenHeader>
+    @if (sidebarExpanded)
+    {
+        <div class="mobile-drawer-overlay" @onclick="CloseSidebar"></div>
+    }
+    <aside class="mobile-drawer @(sidebarExpanded ? "open" : null)">
+        <div class="mobile-drawer-header">
+            <img src="images/logo.png" alt="Kram Logo" style="height: 32px; width: auto;" />
+            <RadzenText TextStyle="TextStyle.H5" Style="font-weight: 700;">Kram</RadzenText>
+        </div>
+        <div class="mobile-drawer-links">
+            <RadzenButton Text="Home" Icon="home" Click="@(() => NavigateAndClose("/"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+            <RadzenButton Text="Vendors" Icon="restaurant" Click="@(() => NavigateAndClose("/restaurants"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+            <RadzenButton Text="Cart" Icon="shopping_cart" Click="@(() => NavigateAndClose("/cart"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+            @if (isAuthenticated)
+            {
+                <RadzenButton Text="Orders" Icon="receipt" Click="@(() => NavigateAndClose("/orders"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+                @if (isVendor || isAdmin)
+                {
+                    <RadzenButton Text="Vendor Dashboard" Icon="storefront" Click="@(() => NavigateAndClose("/vendor"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+                }
+                @if (isAdmin)
+                {
+                    <RadzenButton Text="Admin" Icon="admin_panel_settings" Click="@(() => NavigateAndClose("/admin"))" Variant="Variant.Text" Class="mobile-drawer-link admin-link" />
+                }
+                else if (isCoordinator)
+                {
+                    <RadzenButton Text="Vendor Approvals" Icon="fact_check" Click="@(() => NavigateAndClose("/admin/vendor-approvals"))" Variant="Variant.Text" Class="mobile-drawer-link coordinator-link" />
+                }
+                <RadzenButton Text="Profile" Icon="account_circle" Click="@(() => NavigateAndClose("/profile"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+                <RadzenButton Text="Logout" Icon="logout" Click="@HandleMobileLogout" Variant="Variant.Text" Class="mobile-drawer-link" />
+            }
+            else
+            {
+                <RadzenButton Text="Login" Icon="login" Click="@(() => NavigateAndClose("/login"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+                <RadzenButton Text="Register" Icon="person_add" Click="@(() => NavigateAndClose("/register"))" Variant="Variant.Text" Class="mobile-drawer-link" />
+            }
+        </div>
+    </aside>
     <RadzenBody>
         <RadzenStack Orientation="Orientation.Vertical" Style="min-height: 100%;">
             <RadzenContentContainer Name="main" Style="width: 100%; max-width: 100vw; padding: 0; flex: 1;">
@@ -89,7 +127,7 @@
             </footer>
         </RadzenStack>
     </RadzenBody>
-    <RadzenSidebar @bind-Expanded="@sidebarExpanded">
+    <RadzenSidebar @bind-Expanded="@sidebarExpanded" Class="app-sidebar">
         <RadzenPanelMenu>
             <RadzenPanelMenuItem Text="Home" Icon="home" Path="/" />
             <RadzenPanelMenuItem Text="Vendors" Icon="restaurant" Path="/restaurants" />
@@ -132,6 +170,7 @@
     private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         // Refresh cart count when navigating
+        sidebarExpanded = false;
         await LoadCartCount();
         await InvokeAsync(StateHasChanged);
     }
@@ -182,6 +221,7 @@
 
     private async Task HandleLogout()
     {
+        sidebarExpanded = false;
         await AuthService.ClearTokensAsync();
         isAuthenticated = false;
         isAdmin = false;
@@ -195,5 +235,22 @@
     private void ToggleSidebar()
     {
         sidebarExpanded = !sidebarExpanded;
+    }
+
+    private void CloseSidebar()
+    {
+        sidebarExpanded = false;
+    }
+
+    private void NavigateAndClose(string path)
+    {
+        sidebarExpanded = false;
+        NavigationManager.NavigateTo(path);
+    }
+
+    private async Task HandleMobileLogout()
+    {
+        sidebarExpanded = false;
+        await HandleLogout();
     }
 }
