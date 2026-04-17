@@ -153,7 +153,7 @@ function getNotificationUrl(
     typeof data?.restaurantId === "string" ? data.restaurantId.trim() : "";
   const urlValue = data?.url;
   if (orderId && restaurantId) {
-    return `/vendor/orders/${encodeURIComponent(orderId)}?restaurantId=${encodeURIComponent(restaurantId)}`;
+    return `/vendor/orders/${encodeURIComponent(orderId)}?restaurantId=${encodeURIComponent(restaurantId)}&source=notification`;
   }
 
   return typeof urlValue === "string" && urlValue.trim() ? urlValue : null;

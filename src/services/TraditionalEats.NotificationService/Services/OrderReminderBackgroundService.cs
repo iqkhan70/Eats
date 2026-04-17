@@ -119,7 +119,7 @@ public class OrderReminderBackgroundService : BackgroundService
         var body = $"{recipients.RestaurantName}: Order #{orderShort} is still waiting for action";
         var data = new Dictionary<string, string>
         {
-            ["url"] = $"/vendor/orders/{schedule.OrderId}?restaurantId={schedule.RestaurantId}",
+            ["url"] = $"/vendor/orders/{schedule.OrderId}?restaurantId={schedule.RestaurantId}&source=notification",
             ["orderId"] = schedule.OrderId.ToString(),
             ["restaurantId"] = schedule.RestaurantId.ToString(),
             ["type"] = "order_placed_reminder",

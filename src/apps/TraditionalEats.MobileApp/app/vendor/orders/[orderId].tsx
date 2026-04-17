@@ -98,6 +98,7 @@ export default function VendorOrderDetailsScreen() {
     orderId?: string;
     restaurantId?: string;
     restaurantName?: string;
+    source?: string;
   }>();
 
   const orderId = typeof params.orderId === "string" ? params.orderId : "";
@@ -105,6 +106,9 @@ export default function VendorOrderDetailsScreen() {
     typeof params.restaurantId === "string" ? params.restaurantId : "";
   const restaurantName =
     typeof params.restaurantName === "string" ? params.restaurantName : "";
+  const openedFromNotification =
+    typeof params.source === "string" &&
+    params.source.toLowerCase() === "notification";
 
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -208,13 +212,18 @@ export default function VendorOrderDetailsScreen() {
   }, [orderId]);
 
   const handleBack = useCallback(() => {
+    if (openedFromNotification) {
+      router.replace("/vendor/orders");
+      return;
+    }
+
     if (router.canGoBack()) {
       router.back();
       return;
     }
 
     router.replace("/vendor/orders");
-  }, [router]);
+  }, [openedFromNotification, router]);
 
   useEffect(() => {
     if (!orderId || !restaurantId) {

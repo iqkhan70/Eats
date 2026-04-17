@@ -143,7 +143,7 @@ public class OrderPlacedEventHandler : BackgroundService
             var body = $"{recipients.RestaurantName}: Order #{orderShort} for ${evt.TotalAmount:F2}";
             var data = new Dictionary<string, string>
             {
-                ["url"] = $"/vendor/orders/{evt.OrderId}?restaurantId={evt.RestaurantId}",
+                ["url"] = $"/vendor/orders/{evt.OrderId}?restaurantId={evt.RestaurantId}&source=notification",
                 ["orderId"] = evt.OrderId.ToString(),
                 ["restaurantId"] = evt.RestaurantId.ToString(),
                 ["type"] = "order_placed"
